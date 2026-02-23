@@ -1,7 +1,11 @@
 import { loadState, addPosition, updatePosition, deletePosition, generateId, replacePositions } from '../utils/storage';
 import { formatUSD } from '../utils/calculator';
 import { formatISODateLocal, parseISODateLocal } from '../utils/date';
-import { calculatePositionMetrics } from '../utils/market';
+import {
+  type AssetPriceSnapshot,
+  calculatePositionMetricsFromSnapshot,
+  getAssetPriceSnapshot,
+} from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
 import { normalizeTime } from '../utils/dual-yield';
@@ -9,8 +13,12 @@ import { iconPlus, iconPencil, iconUpload } from '../utils/icons';
 import { parseBinancePositions as parseBinancePositionsFromText, DEFAULT_ASSET_POOL } from './positions.parser';
 import { formatTimeHHMM, renderPositionGroup, updateRemainingTimesInPlace } from './positions.table';
 import type { DualPosition, Direction } from '../types';
-import { ONE_SECOND_MS, MARKET_POLL_INTERVAL_MS } from '../utils/constants';
+import { ONE_SECOND_MS } from '../utils/constants';
+import { subscribeToMarketTicks } from '../utils/market-poller';
 import { skeletonSpan } from '../utils/ui-helpers';
+import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
+import { createAssetMonogram, resolveAssetLogoSources } from '../utils/asset-logos';
+import { bindModalEvents, openModal, closeModal } from '../utils/modal-manager';
 
 // ── Duration presets in days ──
 
@@ -27,6 +35,235 @@ const DURATION_PRESETS = [
 const ASSET_POOL: string[] = [...DEFAULT_ASSET_POOL];
 const SUBSCRIPTION_ASSETS = [...ASSET_POOL];
 const ALLOWED_ASSETS = new Set<string>(ASSET_POOL);
+const RESULT_NUMBER_ANIM_MS = 560;
+const valueAnimationByElement = new WeakMap<HTMLElement, number>();
+const textAnimationByElement = new WeakMap<HTMLElement, number>();
+const spotStripValueAnimationByElement = new WeakMap<HTMLElement, number>();
+
+interface SpotAssetData {
+  asset: string;
+  exposureUsd: number;
+  spotPrice: number;
+}
+
+function uniqueAssetsFromPositions(positions: DualPosition[]): string[] {
+  return Array.from(new Set(
+    positions
+      .map((position) => position.asset.toUpperCase().trim())
+      .filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b));
+}
+
+function setStatText(el: HTMLElement | null, text: string, animate: boolean): void {
+  if (!el) return;
+  stopValueAnimation(valueAnimationByElement, el);
+  delete el.dataset.numericValue;
+  setAnimatedText(textAnimationByElement, el, text, {
+    enabled: animate,
+    mode: 'fade',
+    className: 'text-swap',
+  });
+}
+
+function setStatCurrency(el: HTMLElement | null, value: number, animate: boolean): void {
+  if (!el) return;
+  stopValueAnimation(textAnimationByElement, el);
+  setAnimatedNumber(
+    valueAnimationByElement,
+    el,
+    value,
+    (next) => formatUSD(next),
+    { enabled: animate, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
+  );
+}
+
+function setStatPercent(el: HTMLElement | null, value: number, animate: boolean): void {
+  if (!el) return;
+  stopValueAnimation(textAnimationByElement, el);
+  setAnimatedNumber(
+    valueAnimationByElement,
+    el,
+    value,
+    (next) => `${next.toFixed(2)}%`,
+    { enabled: animate, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
+  );
+}
+
+function setSpotValue(el: HTMLElement | null, value: number): void {
+  if (!el) return;
+  if (!Number.isFinite(value) || value <= 0) {
+    stopValueAnimation(spotStripValueAnimationByElement, el);
+    delete el.dataset.numericValue;
+    el.textContent = 'N/D';
+    el.classList.add('text-muted');
+    return;
+  }
+
+  el.classList.remove('text-muted');
+  setAnimatedNumber(
+    spotStripValueAnimationByElement,
+    el,
+    value,
+    (next) => formatUSD(next),
+    { enabled: true, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
+  );
+}
+
+function setSpotLoading(el: HTMLElement | null): void {
+  if (!el) return;
+  stopValueAnimation(spotStripValueAnimationByElement, el);
+  delete el.dataset.numericValue;
+  el.classList.remove('text-muted');
+  el.innerHTML = skeletonSpan('58px');
+}
+
+function buildSpotAssetData(
+  positions: DualPosition[],
+  snapshot: AssetPriceSnapshot,
+  usdByPositionId: Record<string, number>,
+): SpotAssetData[] {
+  const byAsset = new Map<string, SpotAssetData>();
+  positions.forEach((position) => {
+    const asset = position.asset.toUpperCase().trim();
+    if (!asset) return;
+    const exposureUsd = usdByPositionId[position.id] ?? 0;
+    const previous = byAsset.get(asset);
+    if (previous) {
+      previous.exposureUsd += exposureUsd;
+      return;
+    }
+    byAsset.set(asset, {
+      asset,
+      exposureUsd,
+      spotPrice: snapshot.priceByAsset[asset] ?? 0,
+    });
+  });
+
+  return [...byAsset.values()].sort((a, b) => {
+    if (b.exposureUsd !== a.exposureUsd) return b.exposureUsd - a.exposureUsd;
+    return a.asset.localeCompare(b.asset);
+  });
+}
+
+function bindSpotCardLogo(cardEl: HTMLElement, asset: string): void {
+  const logoEl = cardEl.querySelector('.positions-spot-logo') as HTMLImageElement | null;
+  const fallbackEl = cardEl.querySelector('.positions-spot-fallback') as HTMLElement | null;
+  if (!logoEl || !fallbackEl) return;
+
+  const sources = resolveAssetLogoSources(asset);
+  const monogram = createAssetMonogram(asset);
+  fallbackEl.textContent = monogram;
+  fallbackEl.style.display = 'none';
+  logoEl.style.display = '';
+  logoEl.alt = sources.alt;
+
+  let fallbackTried = false;
+  logoEl.onerror = () => {
+    if (!fallbackTried && sources.fallbackSrc) {
+      fallbackTried = true;
+      logoEl.src = sources.fallbackSrc;
+      return;
+    }
+    logoEl.style.display = 'none';
+    fallbackEl.style.display = 'inline-flex';
+  };
+  logoEl.onload = () => {
+    logoEl.style.display = '';
+    fallbackEl.style.display = 'none';
+  };
+  logoEl.src = sources.primarySrc;
+}
+
+function createSpotCard(asset: string): HTMLElement {
+  const card = document.createElement('article');
+  card.className = 'positions-spot-card';
+  card.id = `positions-spot-${asset}`;
+  card.innerHTML = `
+    <span class="positions-spot-logo-wrap">
+      <img class="positions-spot-logo" loading="lazy" decoding="async">
+      <span class="positions-spot-fallback mono"></span>
+    </span>
+    <span class="positions-spot-meta">
+      <span class="positions-spot-symbol mono">${asset}</span>
+      <span class="positions-spot-value mono" id="positions-spot-value-${asset}">${skeletonSpan('58px')}</span>
+    </span>
+  `;
+  bindSpotCardLogo(card, asset);
+  return card;
+}
+
+function updateSpotStrip(
+  container: HTMLElement,
+  positions: DualPosition[],
+  snapshot: AssetPriceSnapshot | null,
+  usdByPositionId: Record<string, number> = {},
+): void {
+  const stripEl = container.querySelector('#positions-spot-strip') as HTMLElement | null;
+  if (!stripEl) return;
+
+  if (positions.length === 0) {
+    stripEl.replaceChildren();
+    stripEl.style.display = 'none';
+    return;
+  }
+
+  const loadingAssets = uniqueAssetsFromPositions(positions);
+  if (!snapshot && loadingAssets.length === 0) {
+    stripEl.replaceChildren();
+    stripEl.style.display = 'none';
+    return;
+  }
+
+  const hydratedAssets = snapshot
+    ? buildSpotAssetData(positions, snapshot, usdByPositionId)
+    : [];
+  if (snapshot && hydratedAssets.length === 0) {
+    stripEl.replaceChildren();
+    stripEl.style.display = 'none';
+    return;
+  }
+
+  stripEl.style.display = 'flex';
+  const fragment = document.createDocumentFragment();
+
+  if (snapshot) {
+    hydratedAssets.forEach(({ asset, spotPrice }) => {
+      const existing = stripEl.querySelector(`#positions-spot-${asset}`) as HTMLElement | null;
+      const card = existing ?? createSpotCard(asset);
+      const valueEl = card.querySelector(`#positions-spot-value-${asset}`) as HTMLElement | null;
+      setSpotValue(valueEl, spotPrice);
+      fragment.appendChild(card);
+    });
+  } else {
+    loadingAssets.forEach((asset) => {
+      const existing = stripEl.querySelector(`#positions-spot-${asset}`) as HTMLElement | null;
+      const card = existing ?? createSpotCard(asset);
+      const valueEl = card.querySelector(`#positions-spot-value-${asset}`) as HTMLElement | null;
+      setSpotLoading(valueEl);
+      fragment.appendChild(card);
+    });
+  }
+
+  stripEl.replaceChildren(fragment);
+}
+
+function createUnavailableSpotSnapshot(positions: DualPosition[]): AssetPriceSnapshot {
+  const assets = uniqueAssetsFromPositions(positions);
+  const priceByAsset: Record<string, number> = {};
+  const sourceByAsset: Record<string, 'unavailable'> = {};
+  assets.forEach((asset) => {
+    priceByAsset[asset] = 0;
+    sourceByAsset[asset] = 'unavailable';
+  });
+
+  return {
+    priceByAsset,
+    sourceByAsset,
+    marketLastUpdatedAt: null,
+    hasStalePrices: false,
+    hasUnavailablePrices: assets.length > 0,
+  };
+}
 
 export function renderPositions(container: HTMLElement, onStateChange: () => void): () => void {
   const state = loadState();
@@ -73,6 +310,9 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
           <div class="stat-value lg">${activeCount}</div>
         </div>
       </div>
+
+      <!-- Spot prices -->
+      <div class="positions-spot-strip" id="positions-spot-strip" style="display:none"></div>
 
       <!-- Positions table -->
       ${positions.length > 0 ? `
@@ -182,9 +422,9 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   `;
 
   bindPositionEvents(container, onStateChange);
+  updateSpotStrip(container, positions, null);
 
   let disposed = false;
-  let isHydrating = false;
   let latestKnownPositions = positions;
   let remainingTicker: ReturnType<typeof setInterval> | null = null;
 
@@ -207,27 +447,17 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
     remainingTicker = null;
   };
 
-  const hydrateMarketData = async (forceRefresh = false): Promise<void> => {
-    if (disposed || isHydrating || !container.isConnected) return;
-    isHydrating = true;
-    try {
-      const { positions: latestPositions } = loadState();
-      latestKnownPositions = latestPositions;
-      const hasSubMinuteCountdown = await hydratePositionMarketData(container, latestPositions, forceRefresh);
-      syncRemainingTicker(hasSubMinuteCountdown);
-    } finally {
-      isHydrating = false;
-    }
-  };
-
-  void hydrateMarketData();
-  const pollTimer = setInterval(() => {
-    void hydrateMarketData(true);
-  }, MARKET_POLL_INTERVAL_MS);
+  const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
+    if (disposed || !container.isConnected) return;
+    const { positions: latestPositions } = loadState();
+    latestKnownPositions = latestPositions;
+    const hasSubMinuteCountdown = await hydratePositionMarketData(container, latestPositions, forceRefresh);
+    syncRemainingTicker(hasSubMinuteCountdown);
+  });
 
   return () => {
     disposed = true;
-    clearInterval(pollTimer);
+    unsubscribeMarket();
     if (remainingTicker) clearInterval(remainingTicker);
   };
 }
@@ -243,44 +473,62 @@ async function hydratePositionMarketData(
   if (!aprEl || !capitalEl || !dailyEl) return false;
 
   if (positions.length === 0) {
-    aprEl.textContent = '---';
-    capitalEl.textContent = '---';
-    dailyEl.textContent = '---';
+    setStatText(aprEl, '---', true);
+    setStatText(capitalEl, '---', true);
+    setStatText(dailyEl, '---', true);
+    updateSpotStrip(container, positions, null);
     return false;
   }
 
   const hasSubMinuteCountdown = updateRemainingTimesInPlace(container, positions);
 
   try {
-    const metrics = await calculatePositionMetrics(positions, { forceRefresh });
-    registerApiLastUpdatedAt(metrics.marketLastUpdatedAt);
+    const assetUniverse = Array.from(new Set(
+      positions
+        .flatMap((position) => [position.subscriptionAsset, position.asset])
+        .map((asset) => asset.toUpperCase().trim())
+        .filter(Boolean),
+    ));
+    const snapshot = await getAssetPriceSnapshot(assetUniverse, { forceRefresh });
+    const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);
+    registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
 
-    aprEl.classList.add('fade-in');
-    capitalEl.classList.add('fade-in');
-    dailyEl.classList.add('fade-in');
-
-    aprEl.textContent = metrics.weightedApr > 0 ? `${metrics.weightedApr.toFixed(2)}%` : '---';
     aprEl.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
+    if (metrics.weightedApr > 0) {
+      setStatPercent(aprEl, metrics.weightedApr, true);
+    } else {
+      setStatText(aprEl, '---', true);
+    }
 
-    capitalEl.textContent = metrics.totalUsd > 0 ? formatUSD(metrics.totalUsd) : '---';
+    if (metrics.totalUsd > 0) {
+      setStatCurrency(capitalEl, metrics.totalUsd, true);
+    } else {
+      setStatText(capitalEl, '---', true);
+    }
 
-    dailyEl.textContent = metrics.dailyEarningsUsd > 0 ? formatUSD(metrics.dailyEarningsUsd) : '---';
     dailyEl.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
-    if (metrics.hasStalePrices || metrics.hasUnavailablePrices) {
+    if (metrics.dailyEarningsUsd > 0) {
+      setStatCurrency(dailyEl, metrics.dailyEarningsUsd, true);
+    } else {
+      setStatText(dailyEl, '---', true);
+    }
+    if (snapshot.hasStalePrices || snapshot.hasUnavailablePrices) {
       registerApiFailure();
       showApiErrorBanner('No se pudo actualizar precios de mercado.');
     }
+
+    updateSpotStrip(container, positions, snapshot, metrics.usdByPositionId);
 
     positions.forEach((position) => {
       const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;
       if (!rowEl) return;
       const usdValue = metrics.usdByPositionId[position.id] ?? 0;
-      rowEl.classList.add('fade-in');
       rowEl.textContent = usdValue > 0 ? formatUSD(usdValue) : 'N/D';
     });
   } catch {
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
+    updateSpotStrip(container, positions, createUnavailableSpotSnapshot(positions));
   }
 
   return hasSubMinuteCountdown;
@@ -369,7 +617,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     settlementInput.value = pos.settlementDate;
     settlementTimeInput.value = pos.settlementTime ?? '';
 
-    modal.style.display = 'flex';
+    openModal(modal);
   };
 
   // ── Open add modal ──
@@ -380,12 +628,12 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     entryInput.value = today;
     entryTimeInput.value = formatTimeHHMM(new Date());
     settlementTimeInput.value = '03:00';
-    modal.style.display = 'flex';
+    openModal(modal);
   });
 
   container.querySelector('#btn-bulk-import')?.addEventListener('click', () => {
     bulkImportInput.value = '';
-    bulkImportModal.style.display = 'flex';
+    openModal(bulkImportModal);
     bulkImportInput.focus();
   });
 
@@ -410,22 +658,9 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     });
   });
 
-  // ── Cancel ──
-  container.querySelector('#btn-cancel-position')?.addEventListener('click', () => {
-    modal.style.display = 'none';
-  });
-
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.style.display = 'none';
-  });
-
-  container.querySelector('#btn-cancel-bulk-import')?.addEventListener('click', () => {
-    bulkImportModal.style.display = 'none';
-  });
-
-  bulkImportModal.addEventListener('click', (e) => {
-    if (e.target === bulkImportModal) bulkImportModal.style.display = 'none';
-  });
+  // ── Cancel mappings ──
+  bindModalEvents(modal, [container.querySelector('#btn-cancel-position') as HTMLElement]);
+  bindModalEvents(bulkImportModal, [container.querySelector('#btn-cancel-bulk-import') as HTMLElement]);
 
   container.querySelector('#btn-apply-bulk-import')?.addEventListener('click', () => {
     const parsed = parseBinancePositions(bulkImportInput.value);
@@ -438,7 +673,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     }
 
     replacePositions(parsed);
-    bulkImportModal.style.display = 'none';
+    closeModal(bulkImportModal);
     onStateChange();
   });
 
@@ -485,7 +720,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
       addPosition(data);
     }
 
-    modal.style.display = 'none';
+    closeModal(modal);
     onStateChange();
   });
 }

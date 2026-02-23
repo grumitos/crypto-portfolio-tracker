@@ -4,66 +4,40 @@ import { sanitizeISODate, todayISODateLocal } from './date';
 export const STORAGE_KEY = 'crypto-portfolio-tracker';
 export const CALC_KEY = 'crypto-calculadora';
 export const SIMULATOR_VIEW_KEY = 'crypto-simulator-view';
+export const DASHBOARD_VIEW_KEY = 'crypto-dashboard-view';
 export const API_LAST_UPDATED_KEY = 'crypto-api-last-updated-at';
 const HHMM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function getDefaultPortfolio(): PortfolioData {
   const today = todayISODateLocal();
   return {
-    totalInvested: 61640.27,
-    currentBalance: 36077.00,
-    savings: 36077.00,
-    goalAmount: 61640.27,
+    totalInvested: 0,
+    currentBalance: 0,
+    savings: 0,
+    goalAmount: 0,
     lastUpdated: today,
     balanceHistory: [
-      { date: today, balance: 36077.00 }
+      { date: today, balance: 0 }
     ],
   };
 }
 
 function getDefaultPositions(): DualPosition[] {
-  return [
-    {
-      id: 'init_1',
-      asset: 'ETH',
-      direction: 'buy-low',
-      subscriptionAsset: 'USDC',
-      amount: 166.4,
-      targetPrice: 1925,
-      entryDate: '2026-02-18',
-      entryTime: '09:10',
-      settlementDate: '2026-02-19',
-      settlementTime: '03:00',
-      apr: 121.01,
-    },
-    {
-      id: 'init_2',
-      asset: 'ETH',
-      direction: 'buy-low',
-      subscriptionAsset: 'USDT',
-      amount: 6788.6,
-      targetPrice: 1950,
-      entryDate: '2026-02-18',
-      entryTime: '09:25',
-      settlementDate: '2026-02-19',
-      settlementTime: '03:00',
-      apr: 206.71,
-    },
-    {
-      id: 'init_3',
-      asset: 'SOL',
-      direction: 'sell-high',
-      subscriptionAsset: 'SOL',
-      amount: 359.105,
-      targetPrice: 90,
-      entryDate: '2026-02-13',
-      entryTime: '12:02',
-      settlementDate: '2026-02-20',
-      settlementTime: '03:00',
-      apr: 60.89,
-    },
-  ];
+  return [];
 }
+
+const DEFAULT_POSITION_TEMPLATE: Omit<DualPosition, 'id'> = {
+  asset: 'ETH',
+  direction: 'buy-low',
+  subscriptionAsset: 'USDT',
+  amount: 0,
+  targetPrice: 0,
+  entryDate: todayISODateLocal(),
+  entryTime: undefined,
+  settlementDate: todayISODateLocal(),
+  settlementTime: undefined,
+  apr: 0,
+};
 
 function getDefaultState(): AppState {
   return {
@@ -168,7 +142,7 @@ function sanitizePortfolio(rawPortfolio: unknown): PortfolioData {
 }
 
 function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
-  const defaults = getDefaultPositions()[0];
+  const defaults = DEFAULT_POSITION_TEMPLATE;
   const record = isRecord(rawPosition) ? rawPosition : {};
   const id = sanitizeId(record.id, `position_${index + 1}`);
   const { entryDate, settlementDate } = sanitizeDateRange(record.entryDate, record.settlementDate);

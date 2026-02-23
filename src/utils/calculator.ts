@@ -4,7 +4,7 @@ import { formatISODateLocal } from './date';
 /**
  * Returns the number of compounding periods per year.
  */
-export function periodsPerYear(freq: CompoundFrequency): number {
+function periodsPerYear(freq: CompoundFrequency): number {
   switch (freq) {
     case 'daily': return 365;
     case 'weekly': return 52;
@@ -108,13 +108,6 @@ export function weightedAverageAPR(positions: DualPosition[]): number {
   const weightedSum = positions.reduce((sum, p) => sum + p.apr * p.amount, 0);
 
   return totalAmount > 0 ? weightedSum / totalAmount : 0;
-}
-
-/**
- * Calculate total active position amount.
- */
-export function totalActiveAmount(positions: DualPosition[]): number {
-  return positions.reduce((sum, p) => sum + p.amount, 0);
 }
 
 /**

@@ -4,11 +4,18 @@ import { dailyEarnings as calculateDailyEarnings } from './calculator';
 const STABLE_ASSETS = new Set(['USD', 'USDT', 'USDC', 'FDUSD', 'BUSD']);
 const priceCache = new Map<string, { value: number; ts: number }>();
 const CACHE_TTL_MS = 60_000;
-const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/price';
+const BINANCE_FETCH_TIMEOUT_MS = 6000;
+const DEFAULT_RATE_LIMIT_BLOCK_MS = 60_000;
+const BINANCE_TICKER_ENDPOINTS = [
+  'https://api.binance.com/api/v3/ticker/price',
+  'https://api.binance.us/api/v3/ticker/price',
+] as const;
+const endpointBlockedUntilByUrl = new Map<string, number>();
+let preferredEndpointIndex = 0;
 const tickerInFlight = new Map<string, Promise<number | null>>();
 const tickerBatchInFlight = new Map<string, Promise<Map<string, number>>>();
 
-type PriceSource = 'stable' | 'cache-fresh' | 'live' | 'cache-stale' | 'unavailable';
+export type PriceSource = 'stable' | 'cache-fresh' | 'live' | 'cache-stale' | 'unavailable';
 
 interface ResolvedAssetPrice {
   value: number;
@@ -17,6 +24,30 @@ interface ResolvedAssetPrice {
 }
 
 interface ResolveAssetsOptions {
+  forceRefresh?: boolean;
+}
+
+export interface AssetPriceSnapshot {
+  priceByAsset: Record<string, number>;
+  sourceByAsset: Record<string, PriceSource>;
+  marketLastUpdatedAt: number | null;
+  hasStalePrices: boolean;
+  hasUnavailablePrices: boolean;
+}
+
+export interface PositionMetrics {
+  totalUsd: number;
+  weightedApr: number;
+  dailyEarningsUsd: number;
+  usdByPositionId: Record<string, number>;
+  priceByAsset: Record<string, number>;
+  marketLastUpdatedAt: number | null;
+  hasStalePrices: boolean;
+  hasUnavailablePrices: boolean;
+  priceSourceByAsset: Record<string, PriceSource>;
+}
+
+export interface PositionMetricsOptions {
   forceRefresh?: boolean;
 }
 
@@ -50,6 +81,96 @@ function parseTickerRows(payload: unknown): Map<string, number> {
   return result;
 }
 
+function parseRetryAfterMs(response: Response, now: number): number {
+  const rawValue = response.headers?.get?.('Retry-After') ?? null;
+  if (!rawValue) return DEFAULT_RATE_LIMIT_BLOCK_MS;
+
+  const seconds = Number(rawValue);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.max(1, Math.round(seconds * 1000));
+  }
+
+  const dateMs = Date.parse(rawValue);
+  if (Number.isFinite(dateMs) && dateMs > now) {
+    return dateMs - now;
+  }
+
+  return DEFAULT_RATE_LIMIT_BLOCK_MS;
+}
+
+function isRateLimited(response: Response): boolean {
+  return response.status === 429 || response.status === 418;
+}
+
+function endpointOrder(now: number): number[] {
+  const preferred = preferredEndpointIndex >= 0 && preferredEndpointIndex < BINANCE_TICKER_ENDPOINTS.length
+    ? preferredEndpointIndex
+    : 0;
+  const ordered = [
+    preferred,
+    ...BINANCE_TICKER_ENDPOINTS.map((_, index) => index).filter((index) => index !== preferred),
+  ];
+
+  return ordered.filter((index) => {
+    const baseUrl = BINANCE_TICKER_ENDPOINTS[index];
+    const blockedUntil = endpointBlockedUntilByUrl.get(baseUrl) ?? 0;
+    return blockedUntil <= now;
+  });
+}
+
+function blockEndpoint(baseUrl: string, response: Response): void {
+  const now = Date.now();
+  const blockMs = parseRetryAfterMs(response, now);
+  endpointBlockedUntilByUrl.set(baseUrl, now + blockMs);
+}
+
+function markEndpointHealthy(index: number): void {
+  preferredEndpointIndex = index;
+  endpointBlockedUntilByUrl.delete(BINANCE_TICKER_ENDPOINTS[index]);
+}
+
+async function fetchWithTimeout(url: string): Promise<Response | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BINANCE_FETCH_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fetchTickerRowsWithFallback(query: string): Promise<Map<string, number>> {
+  const now = Date.now();
+  const order = endpointOrder(now);
+  if (order.length === 0) return new Map();
+
+  for (const index of order) {
+    const baseUrl = BINANCE_TICKER_ENDPOINTS[index];
+    const response = await fetchWithTimeout(`${baseUrl}?${query}`);
+    if (!response) continue;
+
+    if (!response.ok) {
+      if (isRateLimited(response)) {
+        blockEndpoint(baseUrl, response);
+      }
+      continue;
+    }
+
+    try {
+      const rows = parseTickerRows(await response.json());
+      markEndpointHealthy(index);
+      return rows;
+    } catch {
+      continue;
+    }
+  }
+
+  return new Map();
+}
+
 async function fetchTicker(symbol: string): Promise<number | null> {
   const normalized = symbol.toUpperCase().trim();
   if (!normalized) return null;
@@ -58,16 +179,9 @@ async function fetchTicker(symbol: string): Promise<number | null> {
   if (inflight) return inflight;
 
   const request = (async (): Promise<number | null> => {
-    try {
-      const url = `${BINANCE_TICKER_URL}?symbol=${encodeURIComponent(normalized)}`;
-      const res = await fetch(url);
-      if (!res.ok) return null;
-
-      const rows = parseTickerRows(await res.json());
-      return rows.get(normalized) ?? null;
-    } catch {
-      return null;
-    }
+    const query = `symbol=${encodeURIComponent(normalized)}`;
+    const rows = await fetchTickerRowsWithFallback(query);
+    return rows.get(normalized) ?? null;
   })();
 
   tickerInFlight.set(normalized, request);
@@ -79,7 +193,7 @@ async function fetchTicker(symbol: string): Promise<number | null> {
 }
 
 async function fetchTickersBatch(symbols: string[]): Promise<Map<string, number>> {
-  const normalized = Array.from(new Set(symbols.map((s) => s.toUpperCase().trim()).filter(Boolean))).sort();
+  const normalized = Array.from(new Set(symbols.map((symbol) => symbol.toUpperCase().trim()).filter(Boolean))).sort();
   if (normalized.length === 0) return new Map();
 
   const batchKey = normalized.join('|');
@@ -87,17 +201,10 @@ async function fetchTickersBatch(symbols: string[]): Promise<Map<string, number>
   if (inflight) return inflight;
 
   const request = (async (): Promise<Map<string, number>> => {
-    try {
-      const query = normalized.length === 1
-        ? `symbol=${encodeURIComponent(normalized[0])}`
-        : `symbols=${encodeURIComponent(JSON.stringify(normalized))}`;
-      const res = await fetch(`${BINANCE_TICKER_URL}?${query}`);
-      if (!res.ok) return new Map();
-
-      return parseTickerRows(await res.json());
-    } catch {
-      return new Map();
-    }
+    const query = normalized.length === 1
+      ? `symbol=${encodeURIComponent(normalized[0])}`
+      : `symbols=${encodeURIComponent(JSON.stringify(normalized))}`;
+    return fetchTickerRowsWithFallback(query);
   })();
 
   tickerBatchInFlight.set(batchKey, request);
@@ -180,7 +287,6 @@ async function resolveAssetsUSD(
 
   if (stillUnresolved.length === 0) return resolved;
 
-  // Partial fallback path when batch responses are incomplete.
   const btcUsdtFallback = isValidPrice(btcUsdt) ? btcUsdt : await fetchTicker('BTCUSDT');
   for (const asset of stillUnresolved) {
     const direct = await fetchTicker(`${asset}USDT`);
@@ -201,57 +307,46 @@ async function resolveAssetsUSD(
   return resolved;
 }
 
-export async function getAssetPriceUSD(asset: string): Promise<number> {
-  const normalized = normalizeAsset(asset);
-  if (!normalized) return 0;
-  const resolved = await resolveAssetsUSD([normalized]);
-  return resolved[normalized]?.value ?? 0;
-}
-
-export async function getPriceMap(assets: string[]): Promise<Record<string, number>> {
-  const resolved = await resolveAssetsUSD(assets);
-  const entries = Object.entries(resolved).map(([asset, info]) => [asset, info.value] as const);
-  return Object.fromEntries(entries);
-}
-
-export interface PositionMetrics {
-  totalUsd: number;
-  weightedApr: number;
-  dailyEarningsUsd: number;
-  usdByPositionId: Record<string, number>;
-  priceByAsset: Record<string, number>;
-  marketLastUpdatedAt: number | null;
-  hasStalePrices: boolean;
-  hasUnavailablePrices: boolean;
-  priceSourceByAsset: Record<string, PriceSource>;
-}
-
-export interface PositionMetricsOptions {
-  forceRefresh?: boolean;
-}
-
-export async function calculatePositionMetrics(
-  positions: DualPosition[],
-  options: PositionMetricsOptions = {},
-): Promise<PositionMetrics> {
-  const resolvedByAsset = await resolveAssetsUSD(positions.map((p) => p.subscriptionAsset), options);
+export async function getAssetPriceSnapshot(
+  assets: string[],
+  options: ResolveAssetsOptions = {},
+): Promise<AssetPriceSnapshot> {
+  const resolvedByAsset = await resolveAssetsUSD(assets, options);
   const priceByAsset = Object.fromEntries(
     Object.entries(resolvedByAsset).map(([asset, info]) => [asset, info.value] as const),
   );
-  const priceSourceByAsset = Object.fromEntries(
+  const sourceByAsset = Object.fromEntries(
     Object.entries(resolvedByAsset).map(([asset, info]) => [asset, info.source] as const),
   );
   const marketTimestamps = Object.values(resolvedByAsset)
     .map((entry) => entry.ts)
     .filter((ts): ts is number => typeof ts === 'number');
+
+  return {
+    priceByAsset,
+    sourceByAsset,
+    marketLastUpdatedAt: marketTimestamps.length > 0 ? Math.max(...marketTimestamps) : null,
+    hasStalePrices: Object.values(resolvedByAsset).some((entry) => entry.source === 'cache-stale'),
+    hasUnavailablePrices: Object.values(resolvedByAsset).some((entry) => entry.source === 'unavailable'),
+  };
+}
+
+export function calculatePositionMetricsFromSnapshot(
+  positions: DualPosition[],
+  snapshot: AssetPriceSnapshot,
+): PositionMetrics {
   const usdByPositionId: Record<string, number> = {};
+  const subscriptionAssets = new Set<string>();
 
   let totalUsd = 0;
   let weightedAprNumerator = 0;
   let dailyEarningsUsd = 0;
 
   for (const position of positions) {
-    const unitPrice = priceByAsset[position.subscriptionAsset.toUpperCase()] ?? 0;
+    const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
+    subscriptionAssets.add(subscriptionAsset);
+
+    const unitPrice = snapshot.priceByAsset[subscriptionAsset] ?? 0;
     const usdValue = position.amount * unitPrice;
     usdByPositionId[position.id] = usdValue;
 
@@ -260,15 +355,46 @@ export async function calculatePositionMetrics(
     dailyEarningsUsd += calculateDailyEarnings(usdValue, position.apr);
   }
 
+  const priceByAsset: Record<string, number> = {};
+  const priceSourceByAsset: Record<string, PriceSource> = {};
+  subscriptionAssets.forEach((asset) => {
+    priceByAsset[asset] = snapshot.priceByAsset[asset] ?? 0;
+    priceSourceByAsset[asset] = snapshot.sourceByAsset[asset] ?? 'unavailable';
+  });
+
+  const sources = Object.values(priceSourceByAsset);
   return {
     totalUsd,
     weightedApr: totalUsd > 0 ? weightedAprNumerator / totalUsd : 0,
     dailyEarningsUsd,
     usdByPositionId,
     priceByAsset,
-    marketLastUpdatedAt: marketTimestamps.length > 0 ? Math.max(...marketTimestamps) : null,
-    hasStalePrices: Object.values(resolvedByAsset).some((entry) => entry.source === 'cache-stale'),
-    hasUnavailablePrices: Object.values(resolvedByAsset).some((entry) => entry.source === 'unavailable'),
+    marketLastUpdatedAt: snapshot.marketLastUpdatedAt,
+    hasStalePrices: sources.some((source) => source === 'cache-stale'),
+    hasUnavailablePrices: sources.some((source) => source === 'unavailable'),
     priceSourceByAsset,
   };
+}
+
+export async function getAssetPriceUSD(asset: string): Promise<number> {
+  const normalized = normalizeAsset(asset);
+  if (!normalized) return 0;
+  const snapshot = await getAssetPriceSnapshot([normalized]);
+  return snapshot.priceByAsset[normalized] ?? 0;
+}
+
+export async function getPriceMap(assets: string[]): Promise<Record<string, number>> {
+  const snapshot = await getAssetPriceSnapshot(assets);
+  return snapshot.priceByAsset;
+}
+
+export async function calculatePositionMetrics(
+  positions: DualPosition[],
+  options: PositionMetricsOptions = {},
+): Promise<PositionMetrics> {
+  const snapshot = await getAssetPriceSnapshot(
+    positions.map((position) => position.subscriptionAsset),
+    options,
+  );
+  return calculatePositionMetricsFromSnapshot(positions, snapshot);
 }

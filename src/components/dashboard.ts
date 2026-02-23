@@ -1,5 +1,5 @@
-import { loadState, updateBalance, SIMULATOR_VIEW_KEY } from '../utils/storage';
-import { formatUSD, formatPct, formatDateLatin, weightedAverageAPR } from '../utils/calculator';
+import { loadState, updateBalance, updatePortfolio, SIMULATOR_VIEW_KEY } from '../utils/storage';
+import { formatUSD, formatPct, formatDateLatin } from '../utils/calculator';
 import { calculatePositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
@@ -12,13 +12,19 @@ import {
   toggleDashboardLegend,
 } from '../utils/dashboard-goal';
 import { buildProjectionSnapshot } from '../utils/projection-milestones';
-import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
+import { subscribeToMarketTicks } from '../utils/market-poller';
 import {
+  setAnimatedNumber,
+  setAnimatedText,
   stopValueAnimation,
-  getElementNumericValue,
 } from '../utils/animation';
 import { skeletonSpan } from '../utils/ui-helpers';
 import { sanitizeFrequency } from './simulator.state';
+import {
+  clearDashboardLegendState,
+  loadDashboardLegendState,
+  saveDashboardLegendState,
+} from './dashboard.state';
 import type { AppState, CompoundFrequency, DashboardGoalMode, DashboardLegendState } from '../types';
 
 const AUTO_BALANCE_SYNC_COOLDOWN_MS = 5000;
@@ -27,8 +33,10 @@ let lastAutoBalanceSyncAt = 0;
 let dashboardLegendState: DashboardLegendState = sanitizeDashboardLegendState(undefined);
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const daysAnimationByElement = new WeakMap<HTMLElement, number>();
+const textAnimationByElement = new WeakMap<HTMLElement, number>();
 
 export function resetDashboardLegendStateForTests(): void {
+  clearDashboardLegendState();
   dashboardLegendState = sanitizeDashboardLegendState(undefined);
 }
 
@@ -110,46 +118,62 @@ function progressMarkerPct(target: number, scaleTarget: number): number {
   return clampProgress(progressPct(target, scaleTarget));
 }
 
-function animateValue(el: HTMLElement | null, end: number, isCurrency: boolean, durationMs = 800): void {
+function setCurrencyOutput(el: HTMLElement | null, value: number, animate: boolean, durationMs = 800): void {
   if (!el) return;
-  stopValueAnimation(valueAnimationByElement, el);
-  let startTimestamp: number | null = null;
-  const start = getElementNumericValue(el, end);
+  stopValueAnimation(textAnimationByElement, el);
+  setAnimatedNumber(
+    valueAnimationByElement,
+    el,
+    value,
+    (next) => formatUSD(next),
+    { enabled: animate, durationMs, allowRememberedStart: false },
+  );
+}
 
-  const step = (timestamp: number) => {
-    if (!startTimestamp) startTimestamp = timestamp;
-    const progress = Math.min((timestamp - startTimestamp) / durationMs, 1);
-    const easeOut = 1 - Math.pow(1 - progress, 3);
-    const current = start + easeOut * (end - start);
-
-    el.dataset.numericValue = String(current);
-    el.textContent = isCurrency ? formatUSD(current) : current.toFixed(2) + '%';
-
-    if (progress < 1) {
-      const nextFrame = window.requestAnimationFrame(step);
-      valueAnimationByElement.set(el, nextFrame);
-    } else {
-      el.dataset.numericValue = String(end);
-      el.textContent = isCurrency ? formatUSD(end) : end.toFixed(2) + '%';
-      valueAnimationByElement.delete(el);
-    }
-  };
-
-  const animationId = window.requestAnimationFrame(step);
-  valueAnimationByElement.set(el, animationId);
+function setPercentOutput(
+  el: HTMLElement | null,
+  value: number,
+  animate: boolean,
+  signed = false,
+  durationMs = 800,
+): void {
+  if (!el) return;
+  stopValueAnimation(textAnimationByElement, el);
+  setAnimatedNumber(
+    valueAnimationByElement,
+    el,
+    value,
+    (next) => (signed ? formatPct(next) : `${next.toFixed(2)}%`),
+    { enabled: animate, durationMs, allowRememberedStart: false },
+  );
 }
 
 function animateTextSwap(el: HTMLElement | null, text: string, enabled: boolean): void {
   if (!el) return;
-  if (!enabled || el.textContent === text) {
-    el.textContent = text;
-    return;
-  }
+  setAnimatedText(
+    textAnimationByElement,
+    el,
+    text,
+    { enabled, mode: 'fade', className: 'text-swap' },
+  );
+}
 
+function animateTextScramble(el: HTMLElement | null, text: string, enabled: boolean): void {
+  if (!el) return;
+  setAnimatedText(
+    textAnimationByElement,
+    el,
+    text,
+    { enabled, mode: 'scramble', className: 'text-swap', durationMs: 260 },
+  );
+}
+
+function setStaticTextOutput(el: HTMLElement | null, text: string): void {
+  if (!el) return;
+  stopValueAnimation(valueAnimationByElement, el);
+  stopValueAnimation(textAnimationByElement, el);
+  delete el.dataset.numericValue;
   el.textContent = text;
-  el.classList.remove('goal-text-swap');
-  void el.offsetWidth;
-  el.classList.add('goal-text-swap');
 }
 
 function readSimulatorFrequency(fallback: CompoundFrequency): CompoundFrequency {
@@ -191,7 +215,7 @@ function setDaysLabel(container: HTMLElement, value: string, highlight: boolean,
   if (!daysEl || !daysSepEl) return;
 
   stopValueAnimation(daysAnimationByElement, daysEl);
-  delete daysEl.dataset.daysValue;
+  delete daysEl.dataset.numericValue;
   animateTextSwap(daysEl, value, animate);
   daysEl.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
   daysSepEl.style.display = value ? 'inline' : 'none';
@@ -210,45 +234,18 @@ function setDaysDurationLabel(
   const end = Math.max(0, totalDays);
   daysEl.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
   daysSepEl.style.display = 'inline';
-
-  if (!animate) {
-    stopValueAnimation(daysAnimationByElement, daysEl);
-    daysEl.dataset.daysValue = String(end);
-    daysEl.textContent = formatDashboardDurationLabel(end);
-    return;
-  }
-
-  stopValueAnimation(daysAnimationByElement, daysEl);
-  const startValue = Number(daysEl.dataset.daysValue);
-  const start = Number.isFinite(startValue) ? startValue : end;
-  if (Math.abs(start - end) < 0.01) {
-    daysEl.dataset.daysValue = String(end);
-    daysEl.textContent = formatDashboardDurationLabel(end);
-    return;
-  }
-
-  let startedAt: number | null = null;
-  const step = (timestamp: number) => {
-    if (startedAt === null) startedAt = timestamp;
-    const progress = Math.min((timestamp - startedAt) / GOAL_NUMBER_ANIM_MS, 1);
-    const easeOut = 1 - Math.pow(1 - progress, 3);
-    const current = start + easeOut * (end - start);
-    daysEl.dataset.daysValue = String(current);
-    daysEl.textContent = formatDashboardDurationLabel(current);
-
-    if (progress < 1) {
-      const nextFrame = window.requestAnimationFrame(step);
-      daysAnimationByElement.set(daysEl, nextFrame);
-      return;
-    }
-
-    daysEl.dataset.daysValue = String(end);
-    daysEl.textContent = formatDashboardDurationLabel(end);
-    daysAnimationByElement.delete(daysEl);
-  };
-
-  const animationId = window.requestAnimationFrame(step);
-  daysAnimationByElement.set(daysEl, animationId);
+  setAnimatedNumber(
+    daysAnimationByElement,
+    daysEl,
+    end,
+    (next) => formatDashboardDurationLabel(next),
+    {
+      enabled: animate,
+      durationMs: GOAL_NUMBER_ANIM_MS,
+      epsilon: 0.01,
+      allowRememberedStart: false,
+    },
+  );
 }
 
 function updateLegendButtons(container: HTMLElement): void {
@@ -302,9 +299,11 @@ function updateGoalProgressVisual(
   const solidFirst = container.querySelector('#dash-prog-solid-first') as HTMLElement | null;
   const solidSecond = container.querySelector('#dash-prog-solid-second') as HTMLElement | null;
   const currentEl = container.querySelector('#dash-prog-current') as HTMLElement | null;
-  const targetEl = container.querySelector('#dash-prog-target') as HTMLElement | null;
+  const targetLabelEl = container.querySelector('#dash-prog-target-label') as HTMLElement | null;
+  const targetAmountEl = container.querySelector('#dash-prog-target-amount') as HTMLElement | null;
   const remainingTextEl = container.querySelector('#dash-prog-remaining-text') as HTMLElement | null;
   const remainingAmountEl = container.querySelector('#dash-prog-remaining-amount') as HTMLElement | null;
+  const remainingPrefixEl = container.querySelector('#dash-prog-remaining-prefix') as HTMLElement | null;
   const remainingTargetEl = container.querySelector('#dash-prog-remaining-target') as HTMLElement | null;
 
   if (!bar || !mutedFirst || !mutedSecond || !solidFirst || !solidSecond) return;
@@ -320,35 +319,27 @@ function updateGoalProgressVisual(
   solidSecond.style.left = `${firstMilestonePct}%`;
   solidSecond.style.width = `${secondSolidPct}%`;
 
-  if (animateNumbers) {
-    animateValue(currentEl, uiState.balance, true, GOAL_NUMBER_ANIM_MS);
-  } else if (currentEl) {
-    currentEl.dataset.numericValue = String(uiState.balance);
-    currentEl.textContent = formatUSD(uiState.balance);
-  }
-
-  animateTextSwap(targetEl, `${details.targetLabelShort} ${formatUSD(details.targetAmount)}`, animateText);
+  setCurrencyOutput(currentEl, uiState.balance, animateNumbers, GOAL_NUMBER_ANIM_MS);
+  setCurrencyOutput(targetAmountEl, details.targetAmount, animateNumbers, GOAL_NUMBER_ANIM_MS);
+  animateTextScramble(targetLabelEl, details.targetLabelShort, animateText);
 
   if (details.isReached) {
     animateTextSwap(remainingTextEl, `${details.targetLabelShort} alcanzado`, animateText);
     if (remainingAmountEl) remainingAmountEl.style.display = 'none';
+    if (remainingPrefixEl) remainingPrefixEl.style.display = 'none';
     if (remainingTargetEl) remainingTargetEl.style.display = 'none';
   } else {
     animateTextSwap(remainingTextEl, 'Faltan', animateText);
     if (remainingAmountEl) {
       remainingAmountEl.style.display = 'inline';
-      if (animateNumbers) {
-        animateValue(remainingAmountEl, details.remainingAmount, true, GOAL_NUMBER_ANIM_MS);
-      } else {
-        remainingAmountEl.dataset.numericValue = String(details.remainingAmount);
-        remainingAmountEl.textContent = formatUSD(details.remainingAmount);
-      }
+      setCurrencyOutput(remainingAmountEl, details.remainingAmount, animateNumbers, GOAL_NUMBER_ANIM_MS);
     }
+    if (remainingPrefixEl) remainingPrefixEl.style.display = 'inline';
     if (remainingTargetEl) {
       remainingTargetEl.style.display = 'inline';
-      animateTextSwap(
+      animateTextScramble(
         remainingTargetEl,
-        details.target === 'be' ? 'para breakeven' : 'para la meta',
+        details.target === 'be' ? 'breakeven' : 'la meta',
         animateText,
       );
     }
@@ -366,7 +357,7 @@ function updateGoalProgressVisual(
     );
 
     if (daysRemaining !== null) {
-      setDaysDurationLabel(container, daysRemaining, true, animateText);
+      setDaysDurationLabel(container, daysRemaining, true, animateNumbers);
     } else {
       setDaysLabel(container, '', false, animateText);
     }
@@ -377,14 +368,52 @@ function updateGoalProgressVisual(
   updateLegendButtons(container);
 }
 
-export function renderDashboard(container: HTMLElement, onStateChange: () => void): () => void {
+function updateDashboardSummaryVisual(
+  container: HTMLElement,
+  uiState: DashboardUiState,
+  lastUpdatedIso: string,
+  animate: boolean,
+): void {
+  const loss = uiState.balance - uiState.invested;
+  const lossPct = uiState.invested > 0 ? (loss / uiState.invested) * 100 : 0;
+  const balanceDate = formatDateLatin(lastUpdatedIso);
+
+  const investedEl = container.querySelector('#dash-invested') as HTMLElement | null;
+  const balanceEl = container.querySelector('#dash-balance') as HTMLElement | null;
+  const balanceDateEl = container.querySelector('#dash-balance-date') as HTMLElement | null;
+  const pnlEl = container.querySelector('#dash-pnl') as HTMLElement | null;
+  const pnlPctEl = container.querySelector('#dash-pnl-pct') as HTMLElement | null;
+
+  setCurrencyOutput(investedEl, uiState.invested, animate);
+  setCurrencyOutput(balanceEl, uiState.balance, animate);
+  setStaticTextOutput(balanceDateEl, balanceDate);
+
+  if (pnlEl) {
+    pnlEl.className = `big-number ${loss >= 0 ? 'gain' : 'loss'}`;
+    setCurrencyOutput(pnlEl, loss, animate);
+  }
+
+  if (pnlPctEl) {
+    pnlPctEl.className = `mono ${loss >= 0 ? 'text-gain' : 'text-loss'}`;
+    setPercentOutput(pnlPctEl, lossPct, animate, true);
+  }
+}
+
+function setTextResult(el: HTMLElement | null, text: string, animate: boolean): void {
+  if (!el) return;
+  stopValueAnimation(valueAnimationByElement, el);
+  delete el.dataset.numericValue;
+  animateTextSwap(el, text, animate);
+}
+
+export function renderDashboard(container: HTMLElement): () => void {
   const state = loadState();
   const { portfolio, positions } = state;
+  dashboardLegendState = loadDashboardLegendState(sanitizeDashboardLegendState(undefined));
 
   const displayBalance = portfolio.currentBalance;
   const loss = displayBalance - portfolio.totalInvested;
   const lossPct = (loss / portfolio.totalInvested) * 100;
-  const initialApr = weightedAverageAPR(positions);
   const progressScale = progressScaleTarget(portfolio.totalInvested, portfolio.goalAmount);
   const progressFill = clampProgress(progressPct(displayBalance, progressScale));
   const firstMilestonePct = progressMarkerPct(portfolio.totalInvested, progressScale);
@@ -394,7 +423,7 @@ export function renderDashboard(container: HTMLElement, onStateChange: () => voi
     balance: displayBalance,
     invested: portfolio.totalInvested,
     goal: portfolio.goalAmount,
-    apr: initialApr > 0 ? initialApr : null,
+    apr: null,
     frequency: readSimulatorFrequency('daily'),
   };
 
@@ -435,7 +464,10 @@ export function renderDashboard(container: HTMLElement, onStateChange: () => voi
         <div class="card-title">Progreso: breakeven y meta</div>
         <div class="goal-progress-head">
           <span class="mono goal-progress-value" id="dash-prog-current">${formatUSD(displayBalance)}</span>
-          <span class="mono text-secondary goal-progress-value" id="dash-prog-target">Meta ${formatUSD(portfolio.goalAmount)}</span>
+          <span class="mono text-secondary goal-progress-value goal-progress-target" id="dash-prog-target">
+            <span class="goal-progress-target-label" id="dash-prog-target-label">Meta</span>
+            <span id="dash-prog-target-amount">${formatUSD(portfolio.goalAmount)}</span>
+          </span>
         </div>
         <div class="progress-bar goal-progress-bar mode-both" id="dash-goal-progress-bar">
           <div class="goal-progress-zone-muted breakeven zone-first" id="dash-prog-muted-first" style="width:${firstMilestonePct}%"></div>
@@ -447,7 +479,8 @@ export function renderDashboard(container: HTMLElement, onStateChange: () => voi
           <div class="text-secondary goal-progress-remaining" id="dash-prog-remaining">
             <span id="dash-prog-remaining-text">Faltan</span>
             <span class="mono" id="dash-prog-remaining-amount">${formatUSD(Math.max(0, portfolio.goalAmount - displayBalance))}</span>
-            <span id="dash-prog-remaining-target">para la meta</span>
+            <span id="dash-prog-remaining-prefix">para</span>
+            <span id="dash-prog-remaining-target">la meta</span>
           </div>
           <div class="goal-progress-meta">
             <button type="button" class="goal-progress-legend is-active" id="dashboard-legend-be" data-legend="be" aria-pressed="true">
@@ -524,38 +557,55 @@ export function renderDashboard(container: HTMLElement, onStateChange: () => voi
     </div>
   `;
 
-  bindDashboardEvents(container, onStateChange, parseFlexibleNumber);
+  bindDashboardEvents(container, {
+    onSaveBalance: (savings) => {
+      const before = loadState();
+      const basePositionsValue = before.portfolio.currentBalance - before.portfolio.savings;
+      const nextBalance = Math.max(0, Math.round((basePositionsValue + savings) * 100) / 100);
+      updatePortfolio({ savings });
+      const updatedState = updateBalance(nextBalance);
+
+      uiState.balance = updatedState.portfolio.currentBalance;
+      uiState.invested = updatedState.portfolio.totalInvested;
+      uiState.goal = updatedState.portfolio.goalAmount;
+      uiState.frequency = readSimulatorFrequency(uiState.frequency);
+
+      updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
+      updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+    },
+    onSaveSettings: (invested, goal) => {
+      const updatedState = updatePortfolio({ totalInvested: invested, goalAmount: goal });
+
+      uiState.balance = updatedState.portfolio.currentBalance;
+      uiState.invested = updatedState.portfolio.totalInvested;
+      uiState.goal = updatedState.portfolio.goalAmount;
+      uiState.frequency = readSimulatorFrequency(uiState.frequency);
+
+      updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
+      updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+    },
+  }, parseFlexibleNumber);
   bindGoalLegendEvents(container, uiState);
   updateGoalProgressVisual(container, uiState, { animateNumbers: false, animateText: false });
 
   requestAnimationFrame(() => {
-    animateValue(container.querySelector('#dash-invested') as HTMLElement, portfolio.totalInvested, true);
-    animateValue(container.querySelector('#dash-balance') as HTMLElement, displayBalance, true);
-    animateValue(container.querySelector('#dash-pnl') as HTMLElement, loss, true);
+    updateDashboardSummaryVisual(container, uiState, portfolio.lastUpdated, true);
   });
 
   let disposed = false;
-  let isHydrating = false;
+  let hasFirstMarketHydrationCompleted = false;
 
-  const hydrateMarketData = async (forceRefresh = false): Promise<void> => {
-    if (disposed || isHydrating || !container.isConnected) return;
-    isHydrating = true;
-    try {
-      const { positions: latestPositions } = loadState();
-      await hydrateDashboardMarketStats(container, latestPositions, uiState, forceRefresh);
-    } finally {
-      isHydrating = false;
-    }
-  };
-
-  void hydrateMarketData();
-  const pollTimer = setInterval(() => {
-    void hydrateMarketData(true);
-  }, MARKET_POLL_INTERVAL_MS);
+  const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
+    if (disposed || !container.isConnected) return;
+    const { positions: latestPositions } = loadState();
+    const animateGoalSection = hasFirstMarketHydrationCompleted;
+    await hydrateDashboardMarketStats(container, latestPositions, uiState, forceRefresh, animateGoalSection);
+    hasFirstMarketHydrationCompleted = true;
+  });
 
   return () => {
     disposed = true;
-    clearInterval(pollTimer);
+    unsubscribeMarket();
   };
 }
 
@@ -572,32 +622,7 @@ function updateBalanceInPlace(
   uiState.invested = portfolio.totalInvested;
   uiState.goal = portfolio.goalAmount;
   uiState.frequency = readSimulatorFrequency(uiState.frequency);
-
-  const loss = newBalance - portfolio.totalInvested;
-  const lossPct = (loss / portfolio.totalInvested) * 100;
-
-  const balanceEl = container.querySelector('#dash-balance') as HTMLElement | null;
-  if (balanceEl) balanceEl.textContent = formatUSD(newBalance);
-
-  const balanceDateEl = container.querySelector('#dash-balance-date') as HTMLElement | null;
-  if (balanceDateEl) balanceDateEl.textContent = formatDateLatin(portfolio.lastUpdated);
-
-  const pnlEl = container.querySelector('#dash-pnl') as HTMLElement | null;
-  if (pnlEl) {
-    pnlEl.textContent = formatUSD(loss);
-    pnlEl.className = `big-number ${loss >= 0 ? 'gain' : 'loss'}`;
-  }
-
-  const pnlPctEl = container.querySelector('#dash-pnl-pct') as HTMLElement | null;
-  if (pnlPctEl) {
-    pnlPctEl.textContent = formatPct(lossPct);
-    pnlPctEl.className = `mono ${loss >= 0 ? 'text-gain' : 'text-loss'}`;
-  }
-
-  updateGoalProgressVisual(container, uiState, {
-    animateNumbers: animateGoalSection,
-    animateText: animateGoalSection,
-  });
+  updateDashboardSummaryVisual(container, uiState, portfolio.lastUpdated, animateGoalSection);
 }
 
 async function hydrateDashboardMarketStats(
@@ -605,6 +630,7 @@ async function hydrateDashboardMarketStats(
   positions: AppState['positions'],
   uiState: DashboardUiState,
   forceRefresh = false,
+  animateGoalSection = true,
 ): Promise<void> {
   const aprEl = container.querySelector('#dashboard-apr') as HTMLElement | null;
   const capitalEl = container.querySelector('#dashboard-capital') as HTMLElement | null;
@@ -618,11 +644,14 @@ async function hydrateDashboardMarketStats(
   uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
   if (positions.length === 0) {
-    aprEl.textContent = '---';
-    capitalEl.textContent = '---';
-    dailyEl.textContent = '---';
+    setTextResult(aprEl, '---', true);
+    setTextResult(capitalEl, '---', true);
+    setTextResult(dailyEl, '---', true);
     uiState.apr = null;
-    updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+    updateGoalProgressVisual(container, uiState, {
+      animateNumbers: animateGoalSection,
+      animateText: animateGoalSection,
+    });
     return;
   }
 
@@ -646,17 +675,25 @@ async function hydrateDashboardMarketStats(
       updateBalanceInPlace(container, totalBalance, uiState, false);
     }
 
-    aprEl.classList.add('fade-in');
-    capitalEl.classList.add('fade-in');
-    dailyEl.classList.add('fade-in');
-
-    aprEl.textContent = metrics.weightedApr > 0 ? `${metrics.weightedApr.toFixed(2)}%` : '---';
     aprEl.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
+    if (metrics.weightedApr > 0) {
+      setPercentOutput(aprEl, metrics.weightedApr, true, false);
+    } else {
+      setTextResult(aprEl, '---', true);
+    }
 
-    capitalEl.textContent = metrics.totalUsd > 0 ? formatUSD(metrics.totalUsd) : '---';
+    if (metrics.totalUsd > 0) {
+      setCurrencyOutput(capitalEl, metrics.totalUsd, true);
+    } else {
+      setTextResult(capitalEl, '---', true);
+    }
 
-    dailyEl.textContent = metrics.dailyEarningsUsd > 0 ? formatUSD(metrics.dailyEarningsUsd) : '---';
     dailyEl.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
+    if (metrics.dailyEarningsUsd > 0) {
+      setCurrencyOutput(dailyEl, metrics.dailyEarningsUsd, true);
+    } else {
+      setTextResult(dailyEl, '---', true);
+    }
 
     if (metrics.hasStalePrices || metrics.hasUnavailablePrices) {
       registerApiFailure();
@@ -669,12 +706,18 @@ async function hydrateDashboardMarketStats(
     uiState.apr = metrics.weightedApr > 0 ? metrics.weightedApr : null;
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
-    updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+    updateGoalProgressVisual(container, uiState, {
+      animateNumbers: animateGoalSection,
+      animateText: animateGoalSection,
+    });
   } catch {
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
     uiState.apr = null;
-    updateGoalProgressVisual(container, uiState, { animateNumbers: false, animateText: true });
+    updateGoalProgressVisual(container, uiState, {
+      animateNumbers: false,
+      animateText: animateGoalSection,
+    });
   }
 }
 
@@ -694,6 +737,7 @@ function bindGoalLegendEvents(container: HTMLElement, uiState: DashboardUiState)
       }
 
       dashboardLegendState = sanitizeDashboardLegendState(nextState);
+      saveDashboardLegendState(dashboardLegendState);
       updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
     });
   });

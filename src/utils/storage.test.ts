@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   exportBackup,
   getDefaultCalcState,
@@ -6,33 +6,15 @@ import {
   loadCalcState,
   loadState,
   replacePositions,
+  updateBalance,
   saveCalcState,
   saveState,
 } from './storage';
-
-function createMemoryStorage(): Storage {
-  const map = new Map<string, string>();
-
-  return {
-    get length() {
-      return map.size;
-    },
-    clear: () => {
-      map.clear();
-    },
-    getItem: (key: string) => map.get(key) ?? null,
-    key: (index: number) => Array.from(map.keys())[index] ?? null,
-    removeItem: (key: string) => {
-      map.delete(key);
-    },
-    setItem: (key: string, value: string) => {
-      map.set(key, value);
-    },
-  };
-}
+import { createMemoryStorage } from '../test/test-utils';
 
 describe('storage', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     Object.defineProperty(globalThis, 'localStorage', {
       value: createMemoryStorage(),
       configurable: true,
@@ -101,7 +83,7 @@ describe('storage', () => {
     const position = state.positions[0];
 
     expect(state.portfolio.currentBalance).toBe(0);
-    expect(state.portfolio.goalAmount).toBeGreaterThan(0);
+    expect(state.portfolio.goalAmount).toBe(0);
     expect(position.id).toBe('bad-id');
     expect(position.asset).toBe('SCRIPTALERT1SCRIPT');
     expect(position.direction).toBe('buy-low');
@@ -115,7 +97,7 @@ describe('storage', () => {
 
   it('replaces all positions from imported list', () => {
     const original = loadState();
-    expect(original.positions.length).toBeGreaterThan(0);
+    expect(original.positions).toHaveLength(0);
 
     replacePositions([{
       id: 'bulk_1',
@@ -136,5 +118,76 @@ describe('storage', () => {
     expect(next.positions[0].id).toBe('bulk_1');
     expect(next.positions[0].entryTime).toBe('08:05');
     expect(next.positions[0].settlementTime).toBe('03:00');
+  });
+
+  it('updates existing day snapshot instead of duplicating balance history', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-21T09:00:00.000Z'));
+
+    updateBalance(1000);
+    updateBalance(2000);
+
+    const state = loadState();
+    const todayEntries = state.portfolio.balanceHistory.filter((entry) => entry.date === '2026-02-21');
+    expect(todayEntries).toHaveLength(1);
+    expect(todayEntries[0].balance).toBe(2000);
+
+    vi.useRealTimers();
+  });
+
+  it('imports legacy backup format without wrapper fields', () => {
+    const legacy = JSON.stringify({
+      portfolio: {
+        totalInvested: 2000,
+        currentBalance: 1500,
+        goalAmount: 2500,
+        savings: 300,
+        lastUpdated: '2026-02-20',
+        balanceHistory: [{ date: '2026-02-20', balance: 1500 }],
+      },
+      positions: [],
+    });
+
+    const imported = importBackup(legacy);
+    expect(imported.portfolio.totalInvested).toBe(2000);
+    expect(loadState().portfolio.currentBalance).toBe(1500);
+  });
+
+  it('falls back to defaults on malformed persisted JSON', () => {
+    localStorage.setItem('crypto-portfolio-tracker', '{bad-json');
+    localStorage.setItem('crypto-calculadora', '{bad-json');
+
+    const appState = loadState();
+    const calcState = loadCalcState();
+
+    expect(appState.positions).toHaveLength(0);
+    expect(appState.portfolio.goalAmount).toBe(0);
+    expect(calcState.sellPct).toBe('0.98');
+  });
+
+  it('deduplicates and sorts balance history during sanitization', () => {
+    localStorage.setItem('crypto-portfolio-tracker', JSON.stringify({
+      portfolio: {
+        totalInvested: 1000,
+        currentBalance: 500,
+        goalAmount: 1500,
+        savings: 500,
+        lastUpdated: '2026-02-21',
+        balanceHistory: [
+          { date: '2026-02-20', balance: 400 },
+          { date: '2026-02-19', balance: 300 },
+          { date: '2026-02-20', balance: 450 },
+        ],
+      },
+      positions: [],
+    }));
+
+    const state = loadState();
+    expect(state.portfolio.balanceHistory.map((entry) => entry.date)).toEqual([
+      '2026-02-19',
+      '2026-02-20',
+      '2026-02-21',
+    ]);
+    expect(state.portfolio.balanceHistory[1].balance).toBe(450);
   });
 });

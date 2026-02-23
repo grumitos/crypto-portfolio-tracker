@@ -1,44 +1,35 @@
-import { updatePortfolio } from '../utils/storage';
+import { bindModalEvents, openModal, closeModal } from '../utils/modal-manager';
+
+export interface DashboardEventHandlers {
+  onSaveBalance: (savings: number) => void;
+  onSaveSettings: (invested: number, goal: number) => void;
+}
 
 export function bindDashboardEvents(
   container: HTMLElement,
-  onStateChange: () => void,
+  handlers: DashboardEventHandlers,
   parseFlexibleNumber: (value: string) => number,
 ): void {
   const modalBalance = container.querySelector('#modal-balance') as HTMLElement;
   const modalSettings = container.querySelector('#modal-settings') as HTMLElement;
 
   container.querySelector('#btn-edit-balance')?.addEventListener('click', () => {
-    modalBalance.style.display = 'flex';
+    openModal(modalBalance);
   });
 
   container.querySelector('#btn-edit-settings')?.addEventListener('click', () => {
-    modalSettings.style.display = 'flex';
+    openModal(modalSettings);
   });
 
-  container.querySelector('#btn-cancel-balance')?.addEventListener('click', () => {
-    modalBalance.style.display = 'none';
-  });
-
-  container.querySelector('#btn-cancel-settings')?.addEventListener('click', () => {
-    modalSettings.style.display = 'none';
-  });
-
-  modalBalance.addEventListener('click', (e) => {
-    if (e.target === modalBalance) modalBalance.style.display = 'none';
-  });
-
-  modalSettings.addEventListener('click', (e) => {
-    if (e.target === modalSettings) modalSettings.style.display = 'none';
-  });
+  bindModalEvents(modalBalance, [container.querySelector('#btn-cancel-balance') as HTMLElement]);
+  bindModalEvents(modalSettings, [container.querySelector('#btn-cancel-settings') as HTMLElement]);
 
   container.querySelector('#btn-save-balance')?.addEventListener('click', () => {
     const input = container.querySelector('#input-balance') as HTMLInputElement;
     const value = parseFlexibleNumber(input.value);
     if (!isNaN(value) && value >= 0) {
-      updatePortfolio({ savings: value });
-      modalBalance.style.display = 'none';
-      onStateChange();
+      handlers.onSaveBalance(value);
+      closeModal(modalBalance);
     }
   });
 
@@ -49,9 +40,8 @@ export function bindDashboardEvents(
     const goal = parseFlexibleNumber(goalInput.value);
 
     if (!isNaN(invested) && !isNaN(goal) && invested > 0 && goal > 0) {
-      updatePortfolio({ totalInvested: invested, goalAmount: goal });
-      modalSettings.style.display = 'none';
-      onStateChange();
+      handlers.onSaveSettings(invested, goal);
+      closeModal(modalSettings);
     }
   });
 }

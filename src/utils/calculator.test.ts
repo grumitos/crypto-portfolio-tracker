@@ -4,6 +4,8 @@ import {
   dailyEarnings,
   estimateDaysToGoal,
   estimateDaysToGoalFromProjection,
+  formatDateLatin,
+  formatPct,
   generateProjection,
   monthlyEarnings,
   weightedAverageAPR,
@@ -44,6 +46,13 @@ describe('calculator utils', () => {
     expect(days).not.toBeNull();
     expect(days!).toBeGreaterThan(600);
     expect(days!).toBeLessThan(800);
+  });
+
+  it('handles estimateDaysToGoal edge cases and invalid values', () => {
+    expect(estimateDaysToGoal(1000, 10, 1000)).toBe(0);
+    expect(estimateDaysToGoal(0, 10, 1000)).toBeNull();
+    expect(estimateDaysToGoal(1000, 0, 2000)).toBeNull();
+    expect(estimateDaysToGoal(1000, 10, 500)).toBe(0);
   });
 
   it('generates projection rows and detects goal date', () => {
@@ -141,5 +150,18 @@ describe('calculator utils', () => {
     expect(days).not.toBeNull();
     expect(days!).toBeGreaterThan(60);
     expect(days!).toBeLessThan(90);
+  });
+
+  it('returns null for invalid projection interpolation inputs', () => {
+    expect(estimateDaysToGoalFromProjection([], 1200)).toBeNull();
+    expect(estimateDaysToGoalFromProjection([{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }], -1)).toBeNull();
+    expect(estimateDaysToGoalFromProjection([{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }], 1200, 0)).toBeNull();
+  });
+
+  it('formats latin dates and percentage strings', () => {
+    expect(formatDateLatin('2026-02-21')).toBe('21/02/2026');
+    expect(formatDateLatin('bad-date')).toBe('bad-date');
+    expect(formatPct(12.3456)).toBe('+12.35%');
+    expect(formatPct(-1.234, 3)).toBe('-1.234%');
   });
 });

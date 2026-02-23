@@ -33,8 +33,10 @@ npm run dev
 | `npm run preview` | Servir build local |
 | `npm run test` | Tests en modo watch |
 | `npm run test:run` | Tests una sola vez |
+| `npm run test:coverage` | Tests + reporte de coverage |
 | `npm run typecheck` | Validacion TypeScript |
 | `npm run check` | Typecheck + tests + build |
+| `npm run check:ci` | Typecheck + coverage + build |
 
 ## Vistas
 1. `Dashboard`: resumen de portfolio, run-rate y progreso.

@@ -53,7 +53,7 @@ function emptyMilestone(key: MilestoneKey, targetAmount: number): MilestoneResol
   };
 }
 
-export function resolveMilestoneTargetAmounts(invested: number, goal: number): MilestoneTargetAmounts {
+function resolveMilestoneTargetAmounts(invested: number, goal: number): MilestoneTargetAmounts {
   return {
     be: sanitizePositive(invested),
     goal: sanitizePositive(goal),

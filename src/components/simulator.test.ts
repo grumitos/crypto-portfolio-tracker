@@ -3,6 +3,15 @@ import { renderSimulator } from './simulator';
 import { SIMULATOR_VIEW_KEY, saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import * as calculator from '../utils/calculator';
+import {
+  createMemoryStorage,
+  flushMicrotasks,
+  mockMatchMedia,
+  resetDom,
+} from '../test/test-utils';
+import { calculatePositionMetrics } from '../utils/market';
+import { registerApiFailure } from '../utils/api-status';
+import { showApiErrorBanner } from '../utils/notifications';
 
 vi.mock('../utils/market', () => ({
   calculatePositionMetrics: vi.fn(),
@@ -17,70 +26,76 @@ vi.mock('../utils/notifications', () => ({
   showApiErrorBanner: vi.fn(),
 }));
 
-function createMemoryStorage(): Storage {
-  const map = new Map<string, string>();
-
-  return {
-    get length() {
-      return map.size;
-    },
-    clear: () => map.clear(),
-    getItem: (key: string) => map.get(key) ?? null,
-    key: (index: number) => Array.from(map.keys())[index] ?? null,
-    removeItem: (key: string) => {
-      map.delete(key);
-    },
-    setItem: (key: string, value: string) => {
-      map.set(key, value);
-    },
-  };
+interface SeedSimulatorOptions {
+  goalAmount?: number;
+  positions?: AppState['positions'];
 }
 
-function seedState(goalAmount = 1500): void {
+const DEFAULT_POSITION: AppState['positions'][number] = {
+  id: 'p1',
+  asset: 'ETH',
+  direction: 'buy-low',
+  subscriptionAsset: 'USDT',
+  amount: 100,
+  targetPrice: 2000,
+  entryDate: '2026-02-20',
+  settlementDate: '2026-02-21',
+  apr: 35,
+};
+
+function mockAutoMetrics({
+  totalUsd = 400,
+  weightedApr = 35,
+}: {
+  totalUsd?: number;
+  weightedApr?: number;
+} = {}): void {
+  vi.mocked(calculatePositionMetrics).mockResolvedValue({
+    totalUsd,
+    weightedApr,
+    dailyEarningsUsd: 0.4,
+    usdByPositionId: { p1: totalUsd },
+    priceByAsset: { USDT: 1 },
+    marketLastUpdatedAt: Date.now(),
+    hasStalePrices: false,
+    hasUnavailablePrices: false,
+    priceSourceByAsset: { USDT: 'stable' },
+  });
+}
+
+function seedState(options: SeedSimulatorOptions = {}): void {
   const state: AppState = {
     portfolio: {
       totalInvested: 1200,
       currentBalance: 1000,
       savings: 1000,
-      goalAmount,
+      goalAmount: options.goalAmount ?? 1500,
       lastUpdated: '2026-02-21',
       balanceHistory: [{ date: '2026-02-21', balance: 1000 }],
     },
-    positions: [],
+    positions: options.positions ?? [DEFAULT_POSITION],
   };
 
   saveState(state);
 }
 
-async function flushMicrotasks(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-}
-
 describe('simulator dual milestones', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     Object.defineProperty(globalThis, 'localStorage', {
       value: createMemoryStorage(),
       configurable: true,
       writable: true,
     });
-    Object.defineProperty(window, 'matchMedia', {
-      value: vi.fn().mockImplementation(() => ({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      })),
-      configurable: true,
-      writable: true,
-    });
-
-    document.body.innerHTML = '';
+    mockMatchMedia(true);
+    resetDom();
     seedState();
+    mockAutoMetrics();
   });
 
   it('renders without target mode buttons and shows both BE/Meta columns', async () => {
     const container = document.createElement('div');
+    document.body.appendChild(container);
     const dispose = renderSimulator(container);
     await flushMicrotasks();
 
@@ -90,14 +105,92 @@ describe('simulator dual milestones', () => {
     expect(container.querySelector('#sim-out-goal-date')).not.toBeNull();
     expect(container.querySelector('#sim-out-goal-time')).not.toBeNull();
 
-    const beCrossing = container.querySelectorAll('tr.sim-row-cross-be');
-    expect(beCrossing.length).toBeGreaterThan(0);
+    const projectionRows = container.querySelectorAll('#sim-table tbody tr');
+    expect(projectionRows.length).toBeGreaterThan(0);
 
     dispose();
+    container.remove();
+  });
+
+  it('shows projection skeleton on initial load', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+
+    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe('block');
+    expect(container.querySelector('#sim-projection-chart-skeleton .skeleton')).not.toBeNull();
+    expect(container.querySelector('#sim-table .sim-projection-table-skeleton')).not.toBeNull();
+
+    dispose();
+    container.remove();
+  });
+
+  it('shows N/D for auto APR hint until market hydration completes', async () => {
+    seedState({ positions: [DEFAULT_POSITION] });
+    mockAutoMetrics({ totalUsd: 400, weightedApr: 35 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+
+    const capitalHint = container.querySelector('#sim-capital-hint') as HTMLElement;
+    const aprHint = container.querySelector('#sim-apr-hint') as HTMLElement;
+    const capitalInput = container.querySelector('#sim-capital') as HTMLInputElement;
+    const aprInput = container.querySelector('#sim-apr') as HTMLInputElement;
+    const initialCapitalHint = capitalHint.textContent?.trim();
+    const initialAprHint = aprHint.textContent?.trim();
+
+    expect(initialCapitalHint).toBe('Capital en posiciones');
+    expect(initialAprHint).toBe('Promedio ponderado (USD): N/D');
+    expect(capitalInput.value).toBe('');
+    expect(aprInput.value).toBe('');
+
+    await flushMicrotasks();
+
+    expect(capitalHint.textContent?.trim()).toBe('Capital en posiciones');
+    expect(aprHint.textContent?.trim()).toBe('Promedio ponderado (USD): 35.00%');
+    expect(capitalInput.value).toBe('400.00');
+    expect(aprInput.value).toBe('35.00');
+
+    dispose();
+    container.remove();
+  });
+
+  it('ignores persisted auto values until hydrated with market metrics', async () => {
+    seedState({ positions: [DEFAULT_POSITION] });
+    localStorage.setItem(SIMULATOR_VIEW_KEY, JSON.stringify({
+      capital: 9999.99,
+      apr: 141.3,
+      frequency: 'weekly',
+      goal: 99999.99,
+      targetMode: 'both',
+      autoCapital: true,
+      autoApr: true,
+      autoGoal: true,
+    }));
+    mockAutoMetrics({ totalUsd: 400, weightedApr: 35 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+
+    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('');
+    expect((container.querySelector('#sim-apr') as HTMLInputElement).value).toBe('');
+    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent?.trim()).toBe('Promedio ponderado (USD): N/D');
+
+    await flushMicrotasks();
+
+    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('400.00');
+    expect((container.querySelector('#sim-apr') as HTMLInputElement).value).toBe('35.00');
+    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent?.trim()).toBe('Promedio ponderado (USD): 35.00%');
+
+    dispose();
+    container.remove();
   });
 
   it('calculates and renders BE and Meta outputs by default', async () => {
     const container = document.createElement('div');
+    document.body.appendChild(container);
     const dispose = renderSimulator(container);
     await flushMicrotasks();
 
@@ -112,10 +205,12 @@ describe('simulator dual milestones', () => {
     expect(goalTime.textContent).not.toBe('---');
 
     dispose();
+    container.remove();
   });
 
   it('switches goal to manual and keeps BE based on invested target', async () => {
     const container = document.createElement('div');
+    document.body.appendChild(container);
     const dispose = renderSimulator(container);
     await flushMicrotasks();
 
@@ -138,10 +233,12 @@ describe('simulator dual milestones', () => {
     expect(goalDate.textContent).not.toBe(goalDateBefore);
 
     dispose();
+    container.remove();
   });
 
   it('keeps BE visible when manual Meta is invalid', async () => {
     const container = document.createElement('div');
+    document.body.appendChild(container);
     const dispose = renderSimulator(container);
     await flushMicrotasks();
 
@@ -161,10 +258,12 @@ describe('simulator dual milestones', () => {
     expect(goalTime.textContent).toBe('---');
 
     dispose();
+    container.remove();
   });
 
   it('persists targetMode as both and no longer depends on hidden mode input', async () => {
     const first = document.createElement('div');
+    document.body.appendChild(first);
     const disposeFirst = renderSimulator(first);
     await flushMicrotasks();
 
@@ -172,8 +271,10 @@ describe('simulator dual milestones', () => {
     expect(stored.targetMode).toBe('both');
 
     disposeFirst();
+    first.remove();
 
     const second = document.createElement('div');
+    document.body.appendChild(second);
     const disposeSecond = renderSimulator(second);
     await flushMicrotasks();
 
@@ -181,11 +282,13 @@ describe('simulator dual milestones', () => {
     expect(second.querySelectorAll('.sim-target-btn').length).toBe(0);
 
     disposeSecond();
+    second.remove();
   });
 
   it('runs a single projection call per simulation', async () => {
     const projectionSpy = vi.spyOn(calculator, 'generateProjection');
     const container = document.createElement('div');
+    document.body.appendChild(container);
     const dispose = renderSimulator(container);
     await flushMicrotasks();
     projectionSpy.mockClear();
@@ -196,5 +299,65 @@ describe('simulator dual milestones', () => {
     expect(projectionSpy).toHaveBeenCalledTimes(1);
 
     dispose();
+    container.remove();
+  });
+
+  it('shows invalid outputs when core simulation inputs are invalid', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+
+    (container.querySelector('#sim-capital') as HTMLInputElement).value = '0';
+    (container.querySelector('#sim-apr') as HTMLInputElement).value = '';
+    (container.querySelector('#btn-simulate') as HTMLButtonElement).click();
+
+    expect((container.querySelector('#sim-out-be-date') as HTMLElement).textContent).toBe('---');
+    expect((container.querySelector('#sim-out-goal-date') as HTMLElement).textContent).toBe('---');
+    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe('none');
+
+    dispose();
+    container.remove();
+  });
+
+  it('restores AUTO tags and hints when reset button is clicked', async () => {
+    seedState({ goalAmount: 2500 });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+
+    const goalInput = container.querySelector('#sim-goal') as HTMLInputElement;
+    goalInput.value = '5000';
+    goalInput.dispatchEvent(new Event('input', { bubbles: true }));
+    (container.querySelector('#btn-sim-reset') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect((container.querySelector('#sim-capital-tag') as HTMLElement).textContent).toBe('AUTO');
+    expect((container.querySelector('#sim-apr-tag') as HTMLElement).textContent).toBe('AUTO');
+    expect((container.querySelector('#sim-goal-tag') as HTMLElement).textContent).toBe('AUTO');
+    expect((container.querySelector('#sim-goal') as HTMLInputElement).value).toBe('2500.00');
+    expect((container.querySelector('#sim-capital-hint') as HTMLElement).textContent).toContain('Capital en posiciones');
+    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent).toContain('Promedio ponderado (USD):');
+    expect((container.querySelector('#sim-goal-hint') as HTMLElement).textContent).toContain('Meta del dashboard');
+
+    dispose();
+    container.remove();
+  });
+
+  it('handles auto-value hydration failures by reporting API error', async () => {
+    seedState({ positions: [DEFAULT_POSITION] });
+    vi.mocked(calculatePositionMetrics).mockRejectedValue(new Error('api down'));
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+
+    expect(registerApiFailure).toHaveBeenCalled();
+    expect(showApiErrorBanner).toHaveBeenCalled();
+
+    dispose();
+    container.remove();
   });
 });

@@ -68,7 +68,7 @@ export function loadSimulatorViewState(defaults: SimulatorViewState): SimulatorV
   }
 }
 
-export function saveSimulatorViewState(state: SimulatorViewState): void {
+function saveSimulatorViewState(state: SimulatorViewState): void {
   localStorage.setItem(SIMULATOR_VIEW_KEY, JSON.stringify(state));
 }
 

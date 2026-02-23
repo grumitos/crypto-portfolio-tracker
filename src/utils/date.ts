@@ -9,7 +9,7 @@ export function todayISODateLocal(): string {
   return formatISODateLocal(new Date());
 }
 
-export function isISODate(value: string): boolean {
+function isISODate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 

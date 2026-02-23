@@ -9,6 +9,7 @@ import {
 } from '../utils/dual-yield';
 import { iconTrash } from '../utils/icons';
 import { ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from '../utils/constants';
+import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-logos';
 import type { DualPosition } from '../types';
 
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
@@ -64,7 +65,7 @@ function renderPositionRow(p: DualPosition): string {
   return `
     <tr data-id="${p.id}">
       <td data-label="Activo">
-        <span style="font-weight:500;color:var(--text-primary)">${productLabel(p)}</span>
+        <span style="font-weight:500;color:var(--text-primary)">${productLabelHtml(p)}</span>
       </td>
       <td class="mono" data-label="Monto">${formatAmount(p.amount, p.subscriptionAsset)}</td>
       <td class="mono" style="font-weight:500" data-label="APR">${p.apr.toFixed(2)}%</td>
@@ -145,6 +146,18 @@ function productLabel(position: DualPosition): string {
     return `${position.subscriptionAsset}/USDT`;
   }
   return `${position.asset}/${position.subscriptionAsset}`;
+}
+
+function productLabelHtml(position: DualPosition): string {
+  const label = productLabel(position);
+  const logoAsset = position.direction === 'sell-high'
+    ? position.subscriptionAsset
+    : position.asset;
+
+  const sources = resolveAssetLogoSources(logoAsset);
+  const monogram = createAssetMonogram(logoAsset);
+
+  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap"><img class="pos-pair-logo" src="${sources.primarySrc}" ${sources.fallbackSrc ? `data-fallback="${sources.fallbackSrc}"` : ''} alt="${sources.alt}" loading="lazy" decoding="async" onerror="this.dataset.fallback?(this.src=this.dataset.fallback,delete this.dataset.fallback):(this.style.display='none',this.nextElementSibling.style.display='inline-flex')"><span class="pos-pair-fallback mono" style="display:none">${monogram}</span></span>${label}</span>`;
 }
 
 export function updateRemainingTimesInPlace(container: HTMLElement, positions: DualPosition[]): boolean {

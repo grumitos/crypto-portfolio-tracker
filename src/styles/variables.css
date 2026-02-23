@@ -1,28 +1,28 @@
 :root {
   /* ── Claude palette snapshot (2026-02-19, claude.ai/new) ── */
-  --claude-focus: #2C84DB;
-  --claude-light-bg: #FAF9F5;
-  --claude-light-text: #0A0A09; /* Darkened for better contrast */
+  --claude-focus: #2c84db;
+  --claude-light-bg: #faf9f5;
+  --claude-light-text: #0a0a09; /* Darkened for better contrast */
   --claude-light-border: #141312; /* Darkened */
   --claude-dark-bg: #262624;
-  --claude-dark-text: #FFFFFF; /* Lightened for better contrast */
-  --claude-dark-border: #E8E6E0;
+  --claude-dark-text: #ffffff; /* Lightened for better contrast */
+  --claude-dark-border: #e8e6e0;
 
   /* ── Background ── */
   --bg-primary: var(--claude-light-bg);
-  --bg-secondary: #F3F1EA;
-  --bg-card: #FFFEFB;
-  --bg-hover: #ECE9DF;
-  --bg-input: #FFFEFB;
+  --bg-secondary: #f3f1ea;
+  --bg-card: #fffefb;
+  --bg-hover: #ece9df;
+  --bg-input: #fffefb;
 
   /* ── Borders ── */
-  --border: #DCD8CB;
-  --border-hover: #CEC7B8;
+  --border: #dcd8cb;
+  --border-hover: #cec7b8;
 
   /* ── Text ── */
   --text-primary: var(--claude-light-text);
-  --text-secondary: #2C2A26; /* Darkened */
-  --text-muted: #57544C; /* Darkened */
+  --text-secondary: #2c2a26; /* Darkened */
+  --text-muted: #57544c; /* Darkened */
 
   /* ── Accent (neutral + warm) ── */
   --accent: var(--claude-light-border);
@@ -30,15 +30,15 @@
   --accent-muted: rgba(31, 30, 29, 0.08);
 
   /* ── Warm accent (Claude terracotta) ── */
-  --accent-warm: #C96442;
-  --accent-warm-hover: #B65334;
+  --accent-warm: #c96442;
+  --accent-warm-hover: #b65334;
   --accent-warm-muted: rgba(201, 100, 66, 0.16);
   --accent-warm-line: rgba(201, 100, 66, 0.74);
 
   /* ── Semantic ── */
-  --color-loss: #B95B55;
+  --color-loss: #b95b55;
   --color-loss-muted: rgba(185, 91, 85, 0.14);
-  --color-gain: #6A7C52;
+  --color-gain: #6a7c52;
   --color-gain-muted: rgba(106, 124, 82, 0.14);
   --goal-progress-be-muted: rgba(201, 100, 66, 0.34);
   --goal-progress-meta-muted: rgba(106, 124, 82, 0.34);
@@ -47,11 +47,11 @@
   --hover-overlay: rgba(20, 20, 19, 0.05);
   --focus-ring: rgba(44, 132, 219, 0.26);
   --modal-scrim: rgba(20, 20, 19, 0.24);
-  --btn-primary-text: #FFFFFF;
+  --btn-primary-text: #ffffff;
   --btn-danger-border: rgba(185, 91, 85, 0.32);
   --btn-danger-border-hover: rgba(185, 91, 85, 0.44);
   --select-arrow-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%2357544C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  
+
   /* ── Effects ── */
   --glass-bg: rgba(255, 254, 251, 0.85);
   --glass-blur: blur(12px);
@@ -73,8 +73,11 @@
   --radius-lg: 16px;
 
   /* ── Typography ── */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Fira Code", "SF Mono", ui-monospace, monospace;
 
   /* ── Layout ── */
   --header-height: 64px;
@@ -83,26 +86,27 @@
   --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.06);
   --shadow-md: 0 4px 14px rgba(20, 20, 19, 0.08);
   --shadow-lg: 0 14px 34px rgba(20, 20, 19, 0.12);
-  --shadow-card: 0 1px 3px rgba(20, 20, 19, 0.05), 0 0 0 1px rgba(20, 20, 19, 0.03);
+  --shadow-card:
+    0 1px 3px rgba(20, 20, 19, 0.05), 0 0 0 1px rgba(20, 20, 19, 0.03);
 }
 
 /* ── Dark Theme ── */
 [data-theme="dark"] {
   /* ── Background ── */
   --bg-primary: var(--claude-dark-bg);
-  --bg-secondary: #2E2D2B;
-  --bg-card: #33312F;
-  --bg-hover: #3A3835;
-  --bg-input: #2D2B29;
+  --bg-secondary: #2e2d2b;
+  --bg-card: #33312f;
+  --bg-hover: #3a3835;
+  --bg-input: #2d2b29;
 
   /* ── Borders ── */
-  --border: #4D4A45;
+  --border: #4d4a45;
   --border-hover: #666158;
 
   /* ── Text ── */
   --text-primary: var(--claude-dark-text);
-  --text-secondary: #EBE8E0; /* Lightened */
-  --text-muted: #C7C2B5; /* Lightened */
+  --text-secondary: #ebe8e0; /* Lightened */
+  --text-muted: #c7c2b5; /* Lightened */
 
   /* ── Accent ── */
   --accent: var(--claude-dark-border);
@@ -110,15 +114,15 @@
   --accent-muted: rgba(222, 220, 209, 0.12);
 
   /* ── Warm accent (Claude terracotta) ── */
-  --accent-warm: #DF805F;
-  --accent-warm-hover: #E9A589;
+  --accent-warm: #df805f;
+  --accent-warm-hover: #e9a589;
   --accent-warm-muted: rgba(223, 128, 95, 0.22);
   --accent-warm-line: rgba(223, 128, 95, 0.84);
 
   /* ── Semantic ── */
-  --color-loss: #D58780;
+  --color-loss: #d58780;
   --color-loss-muted: rgba(213, 135, 128, 0.18);
-  --color-gain: #9EAE86;
+  --color-gain: #9eae86;
   --color-gain-muted: rgba(158, 174, 134, 0.18);
   --goal-progress-be-muted: rgba(223, 128, 95, 0.44);
   --goal-progress-meta-muted: rgba(158, 174, 134, 0.44);
@@ -140,5 +144,6 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.42);
   --shadow-lg: 0 16px 34px rgba(0, 0, 0, 0.56);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(236, 235, 230, 0.04);
+  --shadow-card:
+    0 1px 2px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(236, 235, 230, 0.04);
 }

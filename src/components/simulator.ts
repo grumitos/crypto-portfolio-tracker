@@ -2,7 +2,6 @@ import { loadState } from '../utils/storage';
 import {
   formatDateLatin,
   formatUSD,
-  weightedAverageAPR,
   compoundedRateMetrics,
   dailyEarnings as calcDailyEarnings,
   monthlyEarnings as calcMonthlyEarnings,
@@ -20,22 +19,26 @@ import { showApiErrorBanner } from '../utils/notifications';
 import { iconRefreshCw, iconTarget } from '../utils/icons';
 import { getChartColors } from '../utils/theme';
 import {
-  DEFAULT_APR_FALLBACK,
   getDefaultViewState,
   loadSimulatorViewState,
   persistSimulatorViewState,
   type AutoState,
 } from './simulator.state';
 import type { CompoundFrequency, DualPosition } from '../types';
+import type { ChartDataset } from 'chart.js';
 import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
 import {
+  setAnimatedNumber,
+  setAnimatedText,
   stopValueAnimation as stopAnimationFrame,
-  getElementNumericValue,
 } from '../utils/animation';
 
 const PROJECTION_MAX_MONTH = 12;
 const RESULT_NUMBER_ANIM_MS = 560;
+const AUTO_CAPITAL_HINT = 'Capital en posiciones';
+const AUTO_APR_HINT_PREFIX = 'Promedio ponderado (USD):';
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
+const textAnimationByElement = new WeakMap<HTMLElement, number>();
 
 interface TriggerSimulationOptions {
   persist?: boolean;
@@ -44,6 +47,54 @@ interface TriggerSimulationOptions {
 
 interface RunSimulationOptions {
   animate?: boolean;
+}
+
+function formatAutoAprHint(apr: number | null): string {
+  if (Number.isFinite(apr) && (apr as number) > 0) {
+    return `${AUTO_APR_HINT_PREFIX} ${(apr as number).toFixed(2)}%`;
+  }
+  return `${AUTO_APR_HINT_PREFIX} N/D`;
+}
+
+function projectionTableSkeletonHtml(): string {
+  const head = `
+    <div class="sim-projection-table-head">
+      <span class="skeleton" style="width:36px;height:0.78rem"></span>
+      <span class="skeleton" style="width:72px;height:0.78rem"></span>
+      <span class="skeleton" style="width:74px;height:0.78rem"></span>
+      <span class="skeleton" style="width:116px;height:0.78rem"></span>
+    </div>
+  `;
+  const row = `
+    <div class="sim-projection-table-row">
+      <span class="skeleton" style="width:22px;height:0.95rem"></span>
+      <span class="skeleton" style="width:84px;height:0.95rem"></span>
+      <span class="skeleton" style="width:94px;height:0.95rem"></span>
+      <span class="skeleton" style="width:108px;height:0.95rem"></span>
+    </div>
+  `;
+
+  return `
+    <div class="sim-projection-table-skeleton">
+      ${head}
+      ${row}
+      ${row}
+      ${row}
+      ${row}
+    </div>
+  `;
+}
+
+function renderProjectionLoadingState(container: HTMLElement): void {
+  const tableContainer = container.querySelector('#sim-table-container') as HTMLElement | null;
+  const tableEl = container.querySelector('#sim-table') as HTMLElement | null;
+  const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
+  const chartSkeleton = container.querySelector('#sim-projection-chart-skeleton') as HTMLElement | null;
+
+  if (tableContainer) tableContainer.style.display = 'block';
+  if (canvas) canvas.style.display = 'none';
+  if (chartSkeleton) chartSkeleton.style.display = 'flex';
+  if (tableEl) tableEl.innerHTML = projectionTableSkeletonHtml();
 }
 
 function setTagMode(tag: HTMLElement, isAuto: boolean): void {
@@ -55,11 +106,30 @@ function stopValueAnimation(el: HTMLElement | null): void {
   stopAnimationFrame(valueAnimationByElement, el);
 }
 
-function setStaticOutput(el: HTMLElement | null, value: string): void {
+function stopTextAnimation(el: HTMLElement | null): void {
+  stopAnimationFrame(textAnimationByElement, el);
+}
+
+function setTextOutput(
+  el: HTMLElement | null,
+  value: string,
+  animate: boolean,
+  mode: 'fade' | 'scramble' = 'scramble',
+): void {
   if (!el) return;
   stopValueAnimation(el);
+  stopTextAnimation(el);
   delete el.dataset.numericValue;
-  el.textContent = value;
+  setAnimatedText(textAnimationByElement, el, value, {
+    enabled: animate,
+    mode,
+    className: 'text-swap',
+    durationMs: 260,
+  });
+}
+
+function setStaticOutput(el: HTMLElement | null, value: string): void {
+  setTextOutput(el, value, false, 'fade');
 }
 
 function setNumberOutput(
@@ -69,51 +139,20 @@ function setNumberOutput(
   animate: boolean,
 ): void {
   if (!el) return;
+  stopTextAnimation(el);
   if (!Number.isFinite(value)) {
-    setStaticOutput(el, '---');
+    setTextOutput(el, '---', animate, 'fade');
     return;
   }
 
   const end = value as number;
-  if (!animate) {
-    stopValueAnimation(el);
-    el.dataset.numericValue = String(end);
-    el.textContent = formatter(end);
-    return;
-  }
-
-  stopValueAnimation(el);
-  const start = getElementNumericValue(el, end);
-  if (Math.abs(start - end) < 0.0001) {
-    el.dataset.numericValue = String(end);
-    el.textContent = formatter(end);
-    return;
-  }
-
-  let startedAt: number | null = null;
-
-  const step = (timestamp: number) => {
-    if (startedAt === null) startedAt = timestamp;
-    const progress = Math.min((timestamp - startedAt) / RESULT_NUMBER_ANIM_MS, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const current = start + (end - start) * eased;
-
-    el.dataset.numericValue = String(current);
-    el.textContent = formatter(current);
-
-    if (progress < 1) {
-      const nextFrame = window.requestAnimationFrame(step);
-      valueAnimationByElement.set(el, nextFrame);
-      return;
-    }
-
-    el.dataset.numericValue = String(end);
-    el.textContent = formatter(end);
-    valueAnimationByElement.delete(el);
-  };
-
-  const animationId = window.requestAnimationFrame(step);
-  valueAnimationByElement.set(el, animationId);
+  setAnimatedNumber(
+    valueAnimationByElement,
+    el,
+    end,
+    (next) => formatter(next),
+    { enabled: animate, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
+  );
 }
 
 function setCurrencyOutput(
@@ -152,12 +191,12 @@ function setMilestoneOutputs(
   }
 
   if (milestone.isReached) {
-    setStaticOutput(dateEl, getReachedLabel(key));
-    setStaticOutput(timeEl, '---');
+    setTextOutput(dateEl, getReachedLabel(key), animate, 'scramble');
+    setTextOutput(timeEl, '---', animate, 'fade');
     return;
   }
 
-  setStaticOutput(dateEl, milestone.date ? formatDateLatin(milestone.date) : '---');
+  setTextOutput(dateEl, milestone.date ? formatDateLatin(milestone.date) : '---', animate, 'scramble');
   setDurationOutput(timeEl, milestone.days, animate);
 }
 
@@ -202,7 +241,6 @@ function resolveProjectionRowClasses(
 
 export function renderSimulator(container: HTMLElement): () => void {
   const state = loadState();
-  const avgAPR = weightedAverageAPR(state.positions);
   const defaults = getDefaultViewState();
   const viewState = loadSimulatorViewState(defaults);
   const autoState: AutoState = {
@@ -225,9 +263,9 @@ export function renderSimulator(container: HTMLElement): () => void {
               Capital actual (USD)
               <span class="auto-tag ${autoState.capital ? 'is-auto' : 'is-manual'}" id="sim-capital-tag">${autoState.capital ? 'AUTO' : 'MANUAL'}</span>
             </label>
-            <input type="number" id="sim-capital" step="1" value="${viewState.capital.toFixed(2)}">
+            <input type="number" id="sim-capital" step="1" value="${autoState.capital ? '' : viewState.capital.toFixed(2)}">
             <div class="text-muted" id="sim-capital-hint" style="font-size:0.72rem;margin-top:2px">
-              ${autoState.capital ? 'Saldo actual del dashboard' : 'Valor personalizado'}
+              ${autoState.capital ? AUTO_CAPITAL_HINT : 'Valor personalizado'}
             </div>
           </div>
           <div class="form-group">
@@ -235,11 +273,9 @@ export function renderSimulator(container: HTMLElement): () => void {
               APR esperado (%)
               <span class="auto-tag ${autoState.apr ? 'is-auto' : 'is-manual'}" id="sim-apr-tag">${autoState.apr ? 'AUTO' : 'MANUAL'}</span>
             </label>
-            <input type="number" id="sim-apr" step="1" value="${viewState.apr.toFixed(2)}">
+            <input type="number" id="sim-apr" step="1" value="${autoState.apr ? '' : viewState.apr.toFixed(2)}">
             <div class="text-muted" id="sim-apr-hint" style="font-size:0.72rem;margin-top:2px">
-              ${autoState.apr
-      ? (avgAPR > 0 ? `Promedio ponderado: ${avgAPR.toFixed(2)}%` : 'Calculando precios...')
-      : 'Valor personalizado'}
+              ${autoState.apr ? formatAutoAprHint(null) : 'Valor personalizado'}
             </div>
           </div>
           <div class="form-group">
@@ -329,15 +365,20 @@ export function renderSimulator(container: HTMLElement): () => void {
         </div>
       </div>
 
-      <div class="card" id="sim-table-container" style="display:none">
+      <div class="card" id="sim-table-container">
         <div class="card-title" style="margin-bottom:var(--space-md)">Proyeccion mensual</div>
         <div class="chart-container" style="margin-bottom:var(--space-lg)">
-          <canvas id="projection-chart"></canvas>
+          <canvas id="projection-chart" style="display:none"></canvas>
+          <div class="sim-projection-chart-skeleton" id="sim-projection-chart-skeleton">
+            <span class="skeleton" style="width:100%;height:184px"></span>
+          </div>
         </div>
         <div class="table-container" id="sim-table"></div>
       </div>
     </div>
   `;
+
+  renderProjectionLoadingState(container);
 
   const triggerSimulation = (options: TriggerSimulationOptions = {}): void => {
     const shouldPersist = options.persist !== false;
@@ -420,8 +461,11 @@ async function hydrateAutoValues(
   let changed = false;
 
   if (positions.length === 0) {
-    capitalHint.textContent = 'Saldo actual del dashboard';
-    aprHint.textContent = 'Sin posiciones para calcular APR promedio';
+    if (autoState.capital) {
+      capitalInput.value = '0.00';
+      capitalHint.textContent = AUTO_CAPITAL_HINT;
+    }
+    if (autoState.apr) aprHint.textContent = formatAutoAprHint(null);
     return false;
   }
 
@@ -433,24 +477,26 @@ async function hydrateAutoValues(
       showApiErrorBanner('No se pudo actualizar precios de mercado.');
     }
 
-    if (autoState.capital && metrics.totalUsd > 0) {
-      const nextCapital = metrics.totalUsd.toFixed(2);
-      if (capitalInput.value !== nextCapital) {
-        capitalInput.value = nextCapital;
-        changed = true;
+    if (autoState.capital) {
+      if (metrics.totalUsd > 0) {
+        const nextCapital = metrics.totalUsd.toFixed(2);
+        if (capitalInput.value !== nextCapital) {
+          capitalInput.value = nextCapital;
+          changed = true;
+        }
       }
-      capitalHint.textContent = 'Capital en posiciones';
+      capitalHint.textContent = AUTO_CAPITAL_HINT;
     }
 
-    if (autoState.apr && metrics.weightedApr > 0) {
-      const nextApr = metrics.weightedApr.toFixed(2);
-      if (aprInput.value !== nextApr) {
-        aprInput.value = nextApr;
-        changed = true;
+    if (autoState.apr) {
+      if (metrics.weightedApr > 0) {
+        const nextApr = metrics.weightedApr.toFixed(2);
+        if (aprInput.value !== nextApr) {
+          aprInput.value = nextApr;
+          changed = true;
+        }
       }
-      aprHint.textContent = `Promedio ponderado (USD): ${metrics.weightedApr.toFixed(2)}%`;
-    } else if (autoState.apr) {
-      aprHint.textContent = 'No se pudo calcular APR promedio';
+      aprHint.textContent = formatAutoAprHint(metrics.weightedApr > 0 ? metrics.weightedApr : null);
     }
   } catch {
     registerApiFailure();
@@ -510,14 +556,11 @@ function bindSimulatorEvents(
     setTagMode(goalTag, true);
 
     const state = loadState();
-    capitalInput.value = state.portfolio.currentBalance.toFixed(2);
-    capitalHint.textContent = 'Saldo actual del dashboard';
+    capitalInput.value = '';
+    capitalHint.textContent = AUTO_CAPITAL_HINT;
 
-    const avgAPR = weightedAverageAPR(state.positions);
-    aprInput.value = (avgAPR > 0 ? avgAPR : DEFAULT_APR_FALLBACK).toFixed(2);
-    aprHint.textContent = avgAPR > 0
-      ? `Promedio ponderado: ${avgAPR.toFixed(2)}%`
-      : 'Calculando precios...';
+    aprInput.value = '';
+    aprHint.textContent = formatAutoAprHint(null);
 
     goalInput.value = state.portfolio.goalAmount.toFixed(2);
     goalHint.textContent = 'Meta del dashboard';
@@ -601,14 +644,18 @@ function runSimulation(
 
   setCurrencyOutput(dailyEl, dailyRunRate, animate, ' /dia');
   setCurrencyOutput(monthlyEl, monthlyRunRate, animate, ' /mes');
-  setStaticOutput(rateEl, `${dailyCompoundedPct.toFixed(4)}% / ${apyPct.toFixed(2)}%`);
+  setTextOutput(rateEl, `${dailyCompoundedPct.toFixed(4)}% / ${apyPct.toFixed(2)}%`, animate, 'scramble');
   setCurrencyOutput(finalEl, snapshot.lastRow?.balance ?? null, animate);
 
   const projectedRows = snapshot.rows.filter((row) => row.month >= 1 && row.month <= PROJECTION_MAX_MONTH);
   const tableContainer = container.querySelector('#sim-table-container') as HTMLElement | null;
   const tableEl = container.querySelector('#sim-table') as HTMLElement | null;
+  const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
+  const chartSkeleton = container.querySelector('#sim-projection-chart-skeleton') as HTMLElement | null;
   if (!tableContainer || !tableEl || projectedRows.length === 0) {
     if (tableContainer) tableContainer.style.display = 'none';
+    if (canvas) canvas.style.display = 'none';
+    if (chartSkeleton) chartSkeleton.style.display = 'none';
     return;
   }
 
@@ -616,6 +663,8 @@ function runSimulation(
   const goalCrossMonth = milestones.byMilestone.goal.row?.month ?? null;
 
   tableContainer.style.display = 'block';
+  if (canvas) canvas.style.display = 'block';
+  if (chartSkeleton) chartSkeleton.style.display = 'none';
   tableEl.innerHTML = `
     <table>
       <thead>
@@ -670,7 +719,7 @@ async function renderProjectionChart(
     if (existingChart) existingChart.destroy();
 
     const cc = getChartColors();
-    const datasets: any[] = [{
+    const datasets: ChartDataset<'line', number[]>[] = [{
       label: 'Balance proyectado',
       data: rows.map((row) => row.balance),
       borderColor: cc.line,
