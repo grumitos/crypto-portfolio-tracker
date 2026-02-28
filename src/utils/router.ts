@@ -42,7 +42,7 @@ export function navigateTo(view: View, onNavigate: (view: View) => void): void {
     currentView = view;
 
     if (!prefersReduced && 'startViewTransition' in document) {
-        (document as any).startViewTransition(() => onNavigate(view));
+        document.startViewTransition!(() => onNavigate(view));
     } else {
         onNavigate(view);
     }
@@ -88,7 +88,7 @@ export function handleTransitionEntry(container: HTMLElement): void {
     }
 
     let delay = 0;
-    container.querySelectorAll<HTMLElement>('.card, .stat-card').forEach(el => {
+    container.querySelectorAll<HTMLElement>('.card, .stat-card, .positions-spot-card').forEach(el => {
         const key = el.dataset.sharedCard;
         if (key && movedKeys.has(key)) return;
 

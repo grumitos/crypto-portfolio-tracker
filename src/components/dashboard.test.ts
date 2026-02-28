@@ -255,6 +255,20 @@ describe('dashboard legends', () => {
     container.remove();
   });
 
+  it('shows zero balance when there are no positions and no savings', async () => {
+    seedState({ positions: [], currentBalance: 1234, savings: 0 });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect(container.querySelector('#dash-balance')?.textContent).toContain('$0.00');
+    expect(loadState().portfolio.currentBalance).toBe(0);
+
+    dispose();
+    container.remove();
+  });
+
   it('syncs dashboard balance from market metrics and surfaces stale API status', async () => {
     vi.mocked(calculatePositionMetrics).mockResolvedValue({
       totalUsd: 800,
@@ -342,6 +356,18 @@ describe('dashboard legends', () => {
   it('renders dashboard ETA once per autosync tick with latest APR only', async () => {
     vi.useFakeTimers();
     mockMatchMedia(false);
+
+    let rafTime = 0;
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+      return setTimeout(() => {
+        rafTime += 16;
+        cb(rafTime);
+      }, 16) as unknown as number;
+    });
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+      clearTimeout(id);
+    });
+
     try {
       let metricCall = 0;
       vi.mocked(calculatePositionMetrics).mockImplementation(async () => {
@@ -402,6 +428,8 @@ describe('dashboard legends', () => {
       expect(secondTickOptions?.enabled).toBe(true);
 
       numberSpy.mockRestore();
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
       dispose();
       container.remove();
     } finally {

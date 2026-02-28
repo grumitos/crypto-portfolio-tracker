@@ -120,6 +120,49 @@ describe('storage', () => {
     expect(next.positions[0].settlementTime).toBe('03:00');
   });
 
+  it('preserves grouped components when importing aggregated positions', () => {
+    replacePositions([{
+      id: 'agg_1',
+      asset: 'SOL',
+      direction: 'sell-high',
+      subscriptionAsset: 'SOL',
+      amount: 227.02692984,
+      targetPrice: 82,
+      entryDate: '2026-02-27',
+      entryTime: '22:59',
+      settlementDate: '2026-02-28',
+      settlementTime: '07:59',
+      apr: 321.12,
+      components: [
+        {
+          id: 'leg_1',
+          amount: 40.87873348,
+          targetPrice: 82,
+          entryDate: '2026-02-27',
+          entryTime: '23:00',
+          settlementDate: '2026-02-28',
+          settlementTime: '07:59',
+          apr: 200.33,
+        },
+        {
+          id: 'leg_2',
+          amount: 186.14819636,
+          targetPrice: 82,
+          entryDate: '2026-02-27',
+          entryTime: '22:59',
+          settlementDate: '2026-02-28',
+          settlementTime: '07:59',
+          apr: 347.65,
+        },
+      ],
+    }]);
+
+    const next = loadState();
+    expect(next.positions).toHaveLength(1);
+    expect(next.positions[0].components).toHaveLength(2);
+    expect(next.positions[0].components?.[0].id).toBe('leg_1');
+  });
+
   it('updates existing day snapshot instead of duplicating balance history', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-21T09:00:00.000Z'));

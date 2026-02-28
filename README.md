@@ -1,19 +1,13 @@
 # Crypto Portfolio Tracker
 
-App estatica para monitorear portafolio crypto, posiciones Dual Investment, simulador de recuperacion y calculadora de swing trade.
+App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual Investment, proyectar recuperacion por compound y calcular rendimiento de swing trade.
 
-## Objetivo
-- Seguimiento de balance, P&L y progreso a meta.
-- Gestion de posiciones Dual Investment.
-- Proyecciones de compound interest.
-- Calculo de APR/rendimiento para ciclos de trading.
-
-## Stack y alcance
+## Alcance
 - Frontend: `Vite + TypeScript`.
-- Sin backend (todo corre en navegador).
+- Sin backend: todo corre en el navegador.
 - Persistencia local en `localStorage`.
-- Graficos con `Chart.js`.
-- Import/export de backups JSON.
+- Graficos con `Chart.js` (vista Simulador).
+- Import/export de backup en JSON.
 
 ## Requisitos
 - Node.js 20+
@@ -24,6 +18,8 @@ App estatica para monitorear portafolio crypto, posiciones Dual Investment, simu
 npm ci
 npm run dev
 ```
+
+Abrir la URL local que imprime Vite (por defecto `http://localhost:5173`).
 
 ## Scripts
 | Comando | Descripcion |
@@ -38,27 +34,114 @@ npm run dev
 | `npm run check` | Typecheck + tests + build |
 | `npm run check:ci` | Typecheck + coverage + build |
 
-## Vistas
-1. `Dashboard`: resumen de portfolio, run-rate y progreso.
-2. `Posiciones`: CRUD de Dual Investment.
-3. `Simulador`: proyeccion de recuperacion/compound.
-4. `Calculadora`: metricas de APR, fees y ciclos.
+## Flujo recomendado de uso
+1. Configurar `Ahorros` y `Configurar` (invertido/meta) en `Dashboard`.
+2. Cargar posiciones en `Posiciones` (manual o con pegado de Binance).
+3. Revisar proyecciones en `Simulador` (AUTO o MANUAL).
+4. Evaluar ciclos en `Calculadora Swing Trade`.
+5. Exportar backup JSON desde el boton de archivo en la barra superior.
 
-## Persistencia local
-- `crypto-portfolio-tracker`: estado principal (portfolio + posiciones).
-- `crypto-calculadora`: estado de la calculadora.
-- `crypto-simulator-view`: estado de vista del simulador (capital, APR, frecuencia, meta, auto flags).
-- `crypto-api-last-updated-at`: timestamp de la ultima actualizacion exitosa de precios.
-- `crypto-theme`: preferencia de tema (light, dark, system).
+## Vistas y comportamiento
+### 1) Dashboard
+- Resumen de portfolio: balance, P&L, progreso a breakeven (BE) y meta.
+- Modales:
+  - `Ahorros`: actualiza balance disponible.
+  - `Configurar`: define total invertido y meta.
+- Barra de progreso con leyenda BE/Meta; el estado de la leyenda se persiste.
+- Tarjetas de capital/APR/rendimiento diario calculadas desde posiciones y precios de mercado.
+
+### 2) Posiciones
+- CRUD completo de posiciones Dual Investment.
+- Modo `Editar` para eliminar rapido desde la tabla.
+- Importacion masiva con `Pegar y reemplazar`:
+  - Parsea texto de posiciones exportadas/copypasteadas desde Binance.
+  - Reemplaza la lista completa por las posiciones parseadas.
+- Activo base permitido por defecto para parser: `BTC`, `ETH`, `BNB`, `SOL`, `USDT`, `USDC`.
+
+### 3) Simulador
+- Proyeccion de compound con frecuencia `Diaria`, `Semanal` o `Quincenal`.
+- Modos `AUTO/MANUAL` para:
+  - Capital (AUTO: total en posiciones).
+  - APR (AUTO: promedio ponderado USD de posiciones).
+  - Meta (AUTO: meta del dashboard).
+- Boton `Resetear AUTO` para restaurar sincronizacion automatica.
+- Resultado con hitos de BE/meta y grafica de proyeccion.
+
+### 4) Calculadora Swing Trade
+- Evalua resultados reales y estrategia objetivo por ciclo.
+- Soporta tabla de compras parciales (`Agregar`/`Borrar`).
+- Cuando hay compras validas:
+  - Capital y precio base se bloquean en modo AUTO usando totales de compras.
+- Presets de fee: `spot` y `futures` (con switch FDUSD en spot).
+
+## Datos de mercado
+- Endpoints usados (con fallback):
+  - `https://api.binance.com/api/v3/ticker/price`
+  - `https://api.binance.us/api/v3/ticker/price`
+- Estrategia de precio:
+  - Par directo `ASSETUSDT`.
+  - Fallback via `ASSETBTC` x `BTCUSDT`.
+- Polling central: cada 60s (`MARKET_POLL_INTERVAL_MS = 60000`).
+- Cache en memoria de precios: TTL 60s.
+- Si no hay precio fresco:
+  - Usa `cache-stale` cuando exista cache anterior.
+  - Marca `unavailable` cuando no hay forma de resolver precio.
+- Ante fallo/parcialidad:
+  - Se registra estado de error de API.
+  - Se muestra banner `No se pudo actualizar precios de mercado`.
+  - El header pasa a estado de error con ultimo dato valido relativo.
+
+## Backup de datos
+El modal de backup permite:
+- `Exportar JSON`
+- `Importar backup JSON`
+
+Formato actual exportado:
+
+```json
+{
+  "version": 2,
+  "exportedAt": "2026-02-23T00:00:00.000Z",
+  "app": {
+    "portfolio": {},
+    "positions": []
+  },
+  "calculadora": {}
+}
+```
+
+Compatibilidad de importacion:
+- Soporta formato actual (`version: 2`, con `app` y `calculadora`).
+- Soporta formato legacy (objeto raiz equivalente al estado `app`).
+
+## Persistencia local (`localStorage`)
+| Key | Uso |
+|-----|-----|
+| `crypto-portfolio-tracker` | Estado principal (`portfolio` + `positions`) |
+| `crypto-calculadora` | Estado de la calculadora |
+| `crypto-simulator-view` | Estado de UI del simulador (valores + banderas AUTO) |
+| `crypto-dashboard-view` | Preferencia de leyenda BE/Meta del dashboard |
+| `crypto-api-last-updated-at` | Timestamp de ultima actualizacion de mercado exitosa |
+| `crypto-theme` | Preferencia de tema (`light`, `dark`, `system`) |
 
 ## Tema y paleta
-Referencia guardada (captura 2026-02-19):
+La app soporta `light`, `dark` y `system`.  
+El tema se aplica al inicio para evitar FOUC y tambien actualiza `meta[name="theme-color"]`.
+
+Referencia de paleta:
 
 | Modo | Fondo | Texto | Borde ref | Focus |
 |------|-------|-------|-----------|-------|
 | Light | `#FAF9F5` | `#141413` | `#1F1E1D` | `#2C84DB` |
 | Dark | `#262624` | `#FAF9F5` | `#DEDCD1` | `#2C84DB` |
 
-Implementado en:
-- `src/styles/variables.css`
-- `src/utils/theme.ts`
+## Troubleshooting rapido
+- `No se pudo actualizar precios de mercado`:
+  - Verifica conectividad y disponibilidad de Binance.
+  - La app puede seguir mostrando valores de cache (stale) temporalmente.
+- Import JSON falla:
+  - Validar que el archivo sea JSON valido y tenga formato compatible.
+- Valores en `---` o `0` en cards:
+  - Revisar que existan posiciones activas con datos correctos.
+- Estado inconsistente:
+  - Reimportar ultimo backup valido.

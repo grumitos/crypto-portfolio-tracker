@@ -16,6 +16,17 @@ export interface BalanceSnapshot {
 // ── Dual Investment Positions ──
 export type Direction = 'buy-low' | 'sell-high';
 
+export interface DualPositionComponent {
+  id: string;
+  amount: number;
+  targetPrice: number;
+  entryDate: string;
+  entryTime?: string;
+  settlementDate: string;
+  settlementTime?: string;
+  apr: number;
+}
+
 export interface DualPosition {
   id: string;
   asset: string;            // e.g. "ETH", "SOL", "BTC"
@@ -28,6 +39,7 @@ export interface DualPosition {
   settlementDate: string;    // ISO date
   settlementTime?: string;   // local HH:mm (optional fallback to Binance default)
   apr: number;               // annual percentage rate
+  components?: DualPositionComponent[]; // grouped source entries used for weighted aggregate rows
 }
 
 // ── Simulator ──

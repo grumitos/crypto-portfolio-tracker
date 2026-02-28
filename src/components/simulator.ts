@@ -26,7 +26,7 @@ import {
 } from './simulator.state';
 import type { CompoundFrequency, DualPosition } from '../types';
 import type { ChartDataset } from 'chart.js';
-import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
+import { subscribeToMarketTicks } from '../utils/market-poller';
 import {
   setAnimatedNumber,
   setAnimatedText,
@@ -429,20 +429,20 @@ export function renderSimulator(container: HTMLElement): () => void {
     triggerSimulation({ persist: true, animate: false });
   }
 
-  const pollTimer = setInterval(() => {
-    void syncAutoValues(true).then((changed) => {
-      const goalChanged = syncAutoGoal();
-      if (changed || goalChanged) {
-        triggerSimulation({ persist: true, animate: true });
-      } else {
-        persistSimulatorViewState(container, autoState);
-      }
-    });
-  }, MARKET_POLL_INTERVAL_MS);
+  const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
+    if (disposed || !container.isConnected) return;
+    const changed = await syncAutoValues(forceRefresh);
+    const goalChanged = syncAutoGoal();
+    if (changed || goalChanged) {
+      triggerSimulation({ persist: true, animate: true });
+    } else {
+      persistSimulatorViewState(container, autoState);
+    }
+  }, false);
 
   return () => {
     disposed = true;
-    clearInterval(pollTimer);
+    unsubscribeMarket();
   };
 }
 
@@ -498,7 +498,8 @@ async function hydrateAutoValues(
       }
       aprHint.textContent = formatAutoAprHint(metrics.weightedApr > 0 ? metrics.weightedApr : null);
     }
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[Simulator] market hydration failed:', err);
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
   }
@@ -677,13 +678,13 @@ function runSimulation(
       </thead>
       <tbody>
         ${projectedRows.map((row) => {
-      const rowClass = resolveProjectionRowClasses(
-        row.month,
-        milestones.primaryKey,
-        beCrossMonth,
-        goalCrossMonth,
-      );
-      return `
+    const rowClass = resolveProjectionRowClasses(
+      row.month,
+      milestones.primaryKey,
+      beCrossMonth,
+      goalCrossMonth,
+    );
+    return `
             <tr${rowClass ? ` class="${rowClass}"` : ''}>
               <td class="mono">${row.month}</td>
               <td>${formatDateLatin(row.date)}</td>
@@ -691,7 +692,7 @@ function runSimulation(
               <td class="mono ${row.earned > 0 ? 'text-gain' : ''}">${formatUSD(row.earned)}</td>
             </tr>
           `;
-    }).join('')}
+  }).join('')}
       </tbody>
     </table>
   `;
@@ -791,7 +792,8 @@ async function renderProjectionChart(
         },
       },
     });
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[Simulator] Chart.js error:', err);
     return;
   }
 }

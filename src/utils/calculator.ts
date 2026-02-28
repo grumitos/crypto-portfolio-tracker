@@ -162,13 +162,15 @@ export function formatDateLatin(isoDate: string): string {
 /**
  * Format USD currency.
  */
+const usdFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export function formatUSD(n: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+  return usdFormatter.format(n);
 }
 
 /**
@@ -187,16 +189,8 @@ export function estimateDaysToGoal(currentBalance: number, apr: number, goal: nu
   if (currentBalance <= 0 || apr <= 0 || goal <= currentBalance) return null;
 
   const ratePerDay = apr / 100 / 365;
-  let balance = currentBalance;
-  let days = 0;
-  const maxDays = 365 * 50; // max 50 years
-
-  while (balance < goal && days < maxDays) {
-    balance += balance * ratePerDay;
-    days++;
-  }
-
-  return days < maxDays ? days : null;
+  const days = Math.log(goal / currentBalance) / Math.log(1 + ratePerDay);
+  return Number.isFinite(days) && days <= 365 * 50 ? Math.ceil(days) : null;
 }
 
 /**

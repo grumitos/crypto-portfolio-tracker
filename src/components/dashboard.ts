@@ -411,7 +411,7 @@ export function renderDashboard(container: HTMLElement): () => void {
   const { portfolio, positions } = state;
   dashboardLegendState = loadDashboardLegendState(sanitizeDashboardLegendState(undefined));
 
-  const displayBalance = portfolio.currentBalance;
+  const displayBalance = positions.length === 0 ? portfolio.savings : portfolio.currentBalance;
   const loss = displayBalance - portfolio.totalInvested;
   const lossPct = (loss / portfolio.totalInvested) * 100;
   const progressScale = progressScaleTarget(portfolio.totalInvested, portfolio.goalAmount);
@@ -560,7 +560,9 @@ export function renderDashboard(container: HTMLElement): () => void {
   bindDashboardEvents(container, {
     onSaveBalance: (savings) => {
       const before = loadState();
-      const basePositionsValue = before.portfolio.currentBalance - before.portfolio.savings;
+      const basePositionsValue = before.positions.length > 0
+        ? before.portfolio.currentBalance - before.portfolio.savings
+        : 0;
       const nextBalance = Math.max(0, Math.round((basePositionsValue + savings) * 100) / 100);
       updatePortfolio({ savings });
       const updatedState = updateBalance(nextBalance);
@@ -644,6 +646,13 @@ async function hydrateDashboardMarketStats(
   uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
   if (positions.length === 0) {
+    const savingsOnlyBalance = Math.round(currentState.portfolio.savings * 100) / 100;
+    const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
+    if (Math.abs(savingsOnlyBalance - storedBalance) >= 0.01) {
+      updateBalance(savingsOnlyBalance);
+      updateBalanceInPlace(container, savingsOnlyBalance, uiState, false);
+    }
+
     setTextResult(aprEl, '---', true);
     setTextResult(capitalEl, '---', true);
     setTextResult(dailyEl, '---', true);
@@ -659,10 +668,9 @@ async function hydrateDashboardMarketStats(
     const metrics = await calculatePositionMetrics(positions, { forceRefresh });
     registerApiLastUpdatedAt(metrics.marketLastUpdatedAt);
 
-    const state = loadState();
-    const savings = state.portfolio.savings;
+    const savings = currentState.portfolio.savings;
     const totalBalance = Math.round((metrics.totalUsd + savings) * 100) / 100;
-    const storedBalance = Math.round(state.portfolio.currentBalance * 100) / 100;
+    const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
     const now = Date.now();
 
     const shouldSyncBalance = metrics.totalUsd > 0
@@ -700,9 +708,9 @@ async function hydrateDashboardMarketStats(
       showApiErrorBanner('No se pudo actualizar precios de mercado.');
     }
 
-    uiState.balance = shouldSyncBalance ? totalBalance : state.portfolio.currentBalance;
-    uiState.invested = state.portfolio.totalInvested;
-    uiState.goal = state.portfolio.goalAmount;
+    uiState.balance = shouldSyncBalance ? totalBalance : currentState.portfolio.currentBalance;
+    uiState.invested = currentState.portfolio.totalInvested;
+    uiState.goal = currentState.portfolio.goalAmount;
     uiState.apr = metrics.weightedApr > 0 ? metrics.weightedApr : null;
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
@@ -710,7 +718,8 @@ async function hydrateDashboardMarketStats(
       animateNumbers: animateGoalSection,
       animateText: animateGoalSection,
     });
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[Dashboard] market hydration failed:', err);
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
     uiState.apr = null;

@@ -1,4 +1,12 @@
-import type { AppState, PortfolioData, DualPosition, BalanceSnapshot, CalculadoraState, Purchase } from '../types';
+import type {
+  AppState,
+  PortfolioData,
+  DualPosition,
+  DualPositionComponent,
+  BalanceSnapshot,
+  CalculadoraState,
+  Purchase,
+} from '../types';
 import { sanitizeISODate, todayISODateLocal } from './date';
 
 export const STORAGE_KEY = 'crypto-portfolio-tracker';
@@ -113,9 +121,15 @@ function sanitizeBalanceHistory(rawHistory: unknown, fallbackDate: string, fallb
     dedup.set(fallbackDate, fallbackBalance);
   }
 
-  return Array.from(dedup.entries())
+  const sorted = Array.from(dedup.entries())
     .map(([date, balance]) => ({ date, balance }))
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Keep only the most recent 365 entries to avoid unbounded localStorage growth
+  const MAX_HISTORY_ENTRIES = 365;
+  return sorted.length > MAX_HISTORY_ENTRIES
+    ? sorted.slice(sorted.length - MAX_HISTORY_ENTRIES)
+    : sorted;
 }
 
 function sanitizePortfolio(rawPortfolio: unknown): PortfolioData {
@@ -146,6 +160,7 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
   const record = isRecord(rawPosition) ? rawPosition : {};
   const id = sanitizeId(record.id, `position_${index + 1}`);
   const { entryDate, settlementDate } = sanitizeDateRange(record.entryDate, record.settlementDate);
+  const components = sanitizePositionComponents(record.components, id);
 
   return {
     id,
@@ -159,7 +174,37 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
     settlementDate,
     settlementTime: sanitizeTime(record.settlementTime),
     apr: sanitizeNonNegative(record.apr, defaults.apr),
+    ...(components.length > 1 ? { components } : {}),
   };
+}
+
+function sanitizePositionComponents(rawComponents: unknown, parentId: string): DualPositionComponent[] {
+  if (!Array.isArray(rawComponents)) return [];
+
+  const components: DualPositionComponent[] = [];
+  rawComponents.forEach((item, index) => {
+    const record = isRecord(item) ? item : {};
+    const componentId = sanitizeId(record.id, `${parentId}_component_${index + 1}`);
+    const { entryDate, settlementDate } = sanitizeDateRange(record.entryDate, record.settlementDate);
+    const amount = sanitizeNonNegative(record.amount, NaN);
+    const apr = sanitizeNonNegative(record.apr, NaN);
+    const targetPrice = sanitizeNonNegative(record.targetPrice, 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!Number.isFinite(apr) || apr < 0) return;
+
+    components.push({
+      id: componentId,
+      amount,
+      targetPrice,
+      entryDate,
+      entryTime: sanitizeTime(record.entryTime),
+      settlementDate,
+      settlementTime: sanitizeTime(record.settlementTime),
+      apr,
+    });
+  });
+
+  return components;
 }
 
 function sanitizePositions(rawPositions: unknown): DualPosition[] {
@@ -327,10 +372,19 @@ export function exportBackup(): string {
   }, null, 2);
 }
 
+const CURRENT_BACKUP_VERSION = 2;
+
 export function importBackup(json: string): AppState {
   const parsed = JSON.parse(json) as unknown;
 
   if (isRecord(parsed) && isRecord(parsed.app)) {
+    const version = typeof parsed.version === 'number' ? parsed.version : 1;
+    if (version > CURRENT_BACKUP_VERSION) {
+      throw new Error(
+        `Versión de backup no soportada (v${version}). Actualiza la app para importar este archivo.`,
+      );
+    }
+
     const appState = sanitizeAppState(parsed.app as Partial<AppState>);
     saveState(appState);
 

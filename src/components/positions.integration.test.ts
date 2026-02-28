@@ -4,10 +4,14 @@ import { loadState, saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
 
-vi.mock('../utils/market', () => ({
-  getAssetPriceSnapshot: vi.fn(),
-  calculatePositionMetricsFromSnapshot: vi.fn(),
-}));
+vi.mock('../utils/market', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/market')>();
+  return {
+    ...actual,
+    getAssetPriceSnapshot: vi.fn(),
+    calculatePositionMetricsFromSnapshot: vi.fn(),
+  };
+});
 
 vi.mock('../utils/api-status', () => ({
   registerApiFailure: vi.fn(),
@@ -21,6 +25,19 @@ vi.mock('../utils/notifications', () => ({
 import { calculatePositionMetricsFromSnapshot, getAssetPriceSnapshot } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
+import { DEFAULT_ASSET_POOL } from './positions.parser';
+
+const NON_STABLE_SPOT_ASSETS = DEFAULT_ASSET_POOL.filter((asset) => asset !== 'USDT' && asset !== 'USDC');
+
+function utcToLocalParts(value: string): { date: string; time: string } {
+  const [datePart, timePart] = value.split(' ');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute, second] = timePart.split(':').map(Number);
+  const local = new Date(Date.UTC(year, month - 1, day, hour, minute, second ?? 0, 0));
+  const localDate = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
+  const localTime = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
+  return { date: localDate, time: localTime };
+}
 
 function seedState(positions: AppState['positions']): void {
   saveState({
@@ -44,6 +61,12 @@ Buy-low
 1,925 2026-02-23 03:00
 191.04%
 Holding`;
+}
+
+function validBybitImportBlock(): string {
+  return `Producto	Precio objetivo	Importe de la inversion	Periodo de staking	Desde Cuenta	Hacia Cuenta	Precio Final	Hora de la Orden (UTC)	Direccion de la orden	APR	Liquidacion (UTC)	Ganancias	Estado	Tipo de orden	ID de la orden
+SOL-USDT	82.0000	40.87873348 SOL	< 1 Dia	Financiacion	--	--	2026-02-27 23:00:01	Vende caro	200.33%	2026-02-28 07:59:59	--	Activo	Suscribete	e47afe8e-ff1b-46b8-8cbd-79e5014cf5aa
+SOL-USDT	82.0000	186.14819636 SOL	< 1 Dia	Financiacion	--	--	2026-02-27 22:59:47	Vende caro	347.65%	2026-02-28 07:59:59	--	Activo	Suscribete	0d0a7216-6e4e-458b-8dd1-2b91378de6e7`;
 }
 
 const confirmMock = vi.fn(() => true);
@@ -71,8 +94,8 @@ describe('positions integration', () => {
     vi.clearAllMocks();
 
     vi.mocked(getAssetPriceSnapshot).mockResolvedValue({
-      priceByAsset: { USDT: 1, ETH: 2000 },
-      sourceByAsset: { USDT: 'stable', ETH: 'live' },
+      priceByAsset: { BTC: 50000, ETH: 2000, BNB: 500, SOL: 150, USDT: 1, USDC: 1 },
+      sourceByAsset: { BTC: 'live', ETH: 'live', BNB: 'live', SOL: 'live', USDT: 'stable', USDC: 'stable' },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,
       hasUnavailablePrices: false,
@@ -132,6 +155,10 @@ describe('positions integration', () => {
     expect(container.querySelector('#position-usd-p1')?.textContent).toContain('$400.00');
     expect(container.querySelector('#positions-spot-ETH')?.textContent).toContain('ETH');
     expect(container.querySelector('#positions-spot-value-ETH')?.textContent).toContain('$2,000.00');
+    expect(container.querySelector('#positions-spot-BTC')?.textContent).toContain('BTC');
+    expect(container.querySelector('#positions-spot-value-BTC')?.textContent).toContain('$50,000.00');
+    expect(container.querySelector('#positions-spot-USDT')).toBeNull();
+    expect(container.querySelector('#positions-spot-USDC')).toBeNull();
     expect(container.querySelector('#position-spot-p1')).toBeNull();
     expect(registerApiLastUpdatedAt).toHaveBeenCalled();
 
@@ -160,9 +187,11 @@ describe('positions integration', () => {
 
     const strip = container.querySelector('#positions-spot-strip') as HTMLElement;
     const value = container.querySelector('#positions-spot-value-ETH') as HTMLElement;
+    const missingPositionAsset = container.querySelector('#positions-spot-value-BTC') as HTMLElement;
 
     expect(strip.style.display).toBe('flex');
     expect(value.querySelector('.skeleton')).not.toBeNull();
+    expect(missingPositionAsset.querySelector('.skeleton')).not.toBeNull();
 
     dispose();
     container.remove();
@@ -295,6 +324,44 @@ describe('positions integration', () => {
     expect(loadState().positions[0].asset).toBe('ETH');
     expect(onStateChange).toHaveBeenCalledTimes(2);
     expect(confirmMock).toHaveBeenCalled();
+
+    dispose();
+    container.remove();
+  });
+
+  it('imports bybit positions from selector and consolidates same pair', async () => {
+    seedState([]);
+    const onStateChange = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, onStateChange);
+    await flushMicrotasks();
+
+    (container.querySelector('#btn-bulk-import') as HTMLButtonElement).click();
+    const sourceSelect = container.querySelector('#input-bulk-import-source') as HTMLSelectElement;
+    const text = container.querySelector('#input-bulk-import') as HTMLTextAreaElement;
+    sourceSelect.value = 'bybit';
+    text.value = validBybitImportBlock();
+    (container.querySelector('#btn-apply-bulk-import') as HTMLButtonElement).click();
+
+    const next = loadState();
+    const expectedEntry = utcToLocalParts('2026-02-27 22:59:47');
+    const expectedSettlement = utcToLocalParts('2026-02-28 07:59:59');
+    expect(next.positions).toHaveLength(1);
+    expect(next.positions[0]).toMatchObject({
+      direction: 'sell-high',
+      asset: 'SOL',
+      subscriptionAsset: 'SOL',
+      targetPrice: 82,
+      entryDate: expectedEntry.date,
+      entryTime: expectedEntry.time,
+      settlementDate: expectedSettlement.date,
+      settlementTime: expectedSettlement.time,
+    });
+    expect(next.positions[0].components).toHaveLength(2);
+    expect(next.positions[0].amount).toBeCloseTo(227.02692984, 10);
+    expect(next.positions[0].apr).toBeCloseTo(321.1233891679, 6);
+    expect(onStateChange).toHaveBeenCalledTimes(1);
 
     dispose();
     container.remove();
@@ -439,10 +506,18 @@ describe('positions integration', () => {
     const dispose = renderPositions(container, vi.fn());
     await flushMicrotasks();
 
+    expect(getAssetPriceSnapshot).toHaveBeenCalledWith(
+      expect.arrayContaining([...NON_STABLE_SPOT_ASSETS]),
+      expect.objectContaining({ forceRefresh: false }),
+    );
     const cards = [...container.querySelectorAll('#positions-spot-strip .positions-spot-card')];
-    expect(cards).toHaveLength(2);
+    expect(cards).toHaveLength(NON_STABLE_SPOT_ASSETS.length);
     expect(cards[0]?.id).toBe('positions-spot-ETH');
     expect(cards[1]?.id).toBe('positions-spot-SOL');
+    expect(cards[2]?.id).toBe('positions-spot-BNB');
+    expect(cards[3]?.id).toBe('positions-spot-BTC');
+    expect(container.querySelector('#positions-spot-USDC')).toBeNull();
+    expect(container.querySelector('#positions-spot-USDT')).toBeNull();
 
     dispose();
     container.remove();

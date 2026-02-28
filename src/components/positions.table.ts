@@ -61,9 +61,10 @@ function renderPositionRow(p: DualPosition): string {
   const daysDisplay = formatRemainingTime(p);
   const projectedEarned = calculateDualProjectedProfit(p);
   const projectedEarnedStr = formatAmount(projectedEarned, p.subscriptionAsset);
+  const hasComponents = p.components && p.components.length > 1;
 
-  return `
-    <tr data-id="${p.id}">
+  const mainRow = `
+    <tr data-id="${p.id}" ${hasComponents ? 'class="pos-row-grouped"' : ''}>
       <td data-label="Activo">
         <span style="font-weight:500;color:var(--text-primary)">${productLabelHtml(p)}</span>
       </td>
@@ -84,17 +85,68 @@ function renderPositionRow(p: DualPosition): string {
       </td>
     </tr>
   `;
+
+  if (!hasComponents) return mainRow;
+
+  const componentRows = renderComponentRows(p);
+  return mainRow + componentRows;
+}
+
+function renderComponentRows(parent: DualPosition): string {
+  const components = parent.components!;
+  const subscriptionAsset = parent.subscriptionAsset;
+  const sorted = [...components].sort((a, b) => {
+    const aKey = `${a.entryDate} ${normalizeTime(a.entryTime) ?? '00:00'}`;
+    const bKey = `${b.entryDate} ${normalizeTime(b.entryTime) ?? '00:00'}`;
+    return bKey.localeCompare(aKey);
+  });
+
+  const toggleRow = `
+    <tr class="pos-toggle-row" data-ignore-row-edit="true">
+      <td colspan="9" class="pos-toggle-cell">
+        <span class="pos-components-summary mono" data-toggle-components>
+          <span class="pos-components-chevron">▸</span>
+          Ver desglose (${components.length})
+        </span>
+      </td>
+    </tr>
+  `;
+
+  const subRows = sorted.map((c) => {
+    const tempPos: DualPosition = { ...parent, ...c };
+    const cDaysDisplay = formatRemainingTime(tempPos);
+    const cEarned = calculateDualProjectedProfit(tempPos);
+    const cEarnedStr = formatAmount(cEarned, subscriptionAsset);
+
+    return `
+    <tr class="pos-sub-row" style="display:none" data-ignore-row-edit="true">
+      <td></td>
+      <td class="mono">${formatAmount(c.amount, subscriptionAsset)}</td>
+      <td class="mono" style="font-weight:500">${c.apr.toFixed(2)}%</td>
+      <td class="mono" id="position-usd-${parent.id}-comp-${c.id}"></td>
+      <td class="mono">${c.targetPrice > 0 ? c.targetPrice.toLocaleString() : '---'}</td>
+      <td class="text-secondary pos-datetime-cell">${renderDateTimeCell(c.entryDate, c.entryTime)}</td>
+      <td class="text-secondary pos-datetime-cell">${renderDateTimeCell(c.settlementDate, c.settlementTime)}</td>
+      <td class="mono text-gain pos-earn-cell">+${cEarnedStr}</td>
+      <td class="pos-row-tail">
+        <span id="position-remaining-${parent.id}-comp-${c.id}">${cDaysDisplay}</span>
+      </td>
+    </tr>
+    `;
+  }).join('');
+
+  return toggleRow + subRows;
 }
 
 function formatRemainingTime(position: DualPosition): string {
   const remainingMs = getRemainingMsToSettlement(position);
   const isSettled = isDualSettlementReached(position);
-  const totalDays = calculateDualProjectedBilledDays(position);
-  const elapsed = calculateDualElapsedBilledDays(position);
-  const remaining = Math.max(0, totalDays - elapsed);
+  const totalDaysRaw = calculateDualProjectedBilledDays(position);
+  const elapsedRaw = calculateDualElapsedBilledDays(position);
+  const remaining = Math.max(0, totalDaysRaw - elapsedRaw);
 
   if (isSettled) {
-    return `<span class="mono text-muted">Liquidada</span>`;
+    return `< span class="mono text-muted" > Liquidada </span>`;
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_MINUTE_MS) {
@@ -110,7 +162,8 @@ function formatRemainingTime(position: DualPosition): string {
     return `<span class="mono text-accent">${hours}h ${minutesLabel}m</span>`;
   }
 
-  const dayNum = Math.max(0, Math.min(elapsed, totalDays));
+  const totalDays = Math.ceil(totalDaysRaw);
+  const dayNum = Math.max(0, Math.min(Math.floor(elapsedRaw), totalDays));
   const colorClass = remaining <= 1 ? 'text-accent' : '';
   return `<span class="mono ${colorClass}">${dayNum}d</span><span class="text-muted" style="font-size:0.7rem;margin-left:2px">/ ${totalDays}d</span>`;
 }
@@ -164,11 +217,22 @@ export function updateRemainingTimesInPlace(container: HTMLElement, positions: D
   let hasSubMinuteCountdown = false;
   positions.forEach((position) => {
     const remainingEl = container.querySelector(`#position-remaining-${position.id}`) as HTMLElement | null;
-    if (!remainingEl) return;
-    if (isSubMinuteCountdown(position)) hasSubMinuteCountdown = true;
-    const nextHtml = formatRemainingTime(position);
-    if (remainingEl.innerHTML === nextHtml) return;
-    remainingEl.innerHTML = nextHtml;
+    if (remainingEl) {
+      if (isSubMinuteCountdown(position)) hasSubMinuteCountdown = true;
+      const nextHtml = formatRemainingTime(position);
+      if (remainingEl.innerHTML !== nextHtml) remainingEl.innerHTML = nextHtml;
+    }
+
+    if (position.components) {
+      position.components.forEach((c) => {
+        const cRemainingEl = container.querySelector(`#position-remaining-${position.id}-comp-${c.id}`) as HTMLElement | null;
+        if (!cRemainingEl) return;
+        const tempPos: DualPosition = { ...position, ...c };
+        if (isSubMinuteCountdown(tempPos)) hasSubMinuteCountdown = true;
+        const cNextHtml = formatRemainingTime(tempPos);
+        if (cRemainingEl.innerHTML !== cNextHtml) cRemainingEl.innerHTML = cNextHtml;
+      });
+    }
   });
   return hasSubMinuteCountdown;
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateDualBilledDays,
+  calculateDualProjectedBilledDays,
   calculateDualProfitFromBilledDays,
   calculateDualYield,
   resolveDualSettlementAt,
@@ -24,6 +25,16 @@ describe('dual-yield utils', () => {
       new Date('2026-02-19T07:30:00.000Z'),
     );
     expect(minOneDay).toBe(1);
+  });
+
+  it('supports fractional billed days when entry and settlement include explicit times', () => {
+    const billed = calculateDualProjectedBilledDays({
+      entryDate: '2026-02-27',
+      entryTime: '15:00',
+      settlementDate: '2026-02-27',
+      settlementTime: '23:59',
+    });
+    expect(billed).toBeCloseTo((8 * 60 + 59) / (24 * 60), 8);
   });
 
   it('truncates yield to 4 decimals (floor), never rounds up', () => {

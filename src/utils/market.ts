@@ -55,7 +55,7 @@ function isStable(asset: string): boolean {
   return STABLE_ASSETS.has(asset.toUpperCase());
 }
 
-function normalizeAsset(asset: string): string {
+export function normalizeAsset(asset: string): string {
   return asset.toUpperCase().trim();
 }
 

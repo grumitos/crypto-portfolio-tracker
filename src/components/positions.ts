@@ -5,12 +5,18 @@ import {
   type AssetPriceSnapshot,
   calculatePositionMetricsFromSnapshot,
   getAssetPriceSnapshot,
+  normalizeAsset as normalizeAssetSymbol,
 } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
 import { normalizeTime } from '../utils/dual-yield';
 import { iconPlus, iconPencil, iconUpload } from '../utils/icons';
-import { parseBinancePositions as parseBinancePositionsFromText, DEFAULT_ASSET_POOL } from './positions.parser';
+import {
+  parseBinancePositions as parseBinancePositionsFromText,
+  parseImportedPositions as parseImportedPositionsFromText,
+  type PositionImportSource,
+  DEFAULT_ASSET_POOL,
+} from './positions.parser';
 import { formatTimeHHMM, renderPositionGroup, updateRemainingTimesInPlace } from './positions.table';
 import type { DualPosition, Direction } from '../types';
 import { ONE_SECOND_MS } from '../utils/constants';
@@ -35,6 +41,7 @@ const DURATION_PRESETS = [
 const ASSET_POOL: string[] = [...DEFAULT_ASSET_POOL];
 const SUBSCRIPTION_ASSETS = [...ASSET_POOL];
 const ALLOWED_ASSETS = new Set<string>(ASSET_POOL);
+const SPOT_STRIP_EXCLUDED_ASSETS = new Set<string>(['USDT', 'USDC']);
 const RESULT_NUMBER_ANIM_MS = 560;
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -46,12 +53,39 @@ interface SpotAssetData {
   spotPrice: number;
 }
 
+// normalizeAssetSymbol is imported from '../utils/market' (aliased normalizeAsset)
+
+function isSpotStripAsset(asset: string): boolean {
+  const normalized = normalizeAssetSymbol(asset);
+  return Boolean(normalized) && !SPOT_STRIP_EXCLUDED_ASSETS.has(normalized);
+}
+
 function uniqueAssetsFromPositions(positions: DualPosition[]): string[] {
   return Array.from(new Set(
     positions
-      .map((position) => position.asset.toUpperCase().trim())
+      .map((position) => normalizeAssetSymbol(position.asset))
       .filter(Boolean),
   )).sort((a, b) => a.localeCompare(b));
+}
+
+function getSpotStripAssets(positions: DualPosition[]): string[] {
+  const assets: string[] = [];
+  const seen = new Set<string>();
+  ASSET_POOL.forEach((asset) => {
+    if (!isSpotStripAsset(asset)) return;
+    const normalized = normalizeAssetSymbol(asset);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    assets.push(normalized);
+  });
+
+  uniqueAssetsFromPositions(positions).forEach((asset) => {
+    if (!isSpotStripAsset(asset)) return;
+    if (seen.has(asset)) return;
+    seen.add(asset);
+    assets.push(asset);
+  });
+  return assets;
 }
 
 function setStatText(el: HTMLElement | null, text: string, animate: boolean): void {
@@ -118,28 +152,28 @@ function setSpotLoading(el: HTMLElement | null): void {
 }
 
 function buildSpotAssetData(
+  spotAssets: string[],
   positions: DualPosition[],
   snapshot: AssetPriceSnapshot,
   usdByPositionId: Record<string, number>,
 ): SpotAssetData[] {
-  const byAsset = new Map<string, SpotAssetData>();
-  positions.forEach((position) => {
-    const asset = position.asset.toUpperCase().trim();
-    if (!asset) return;
-    const exposureUsd = usdByPositionId[position.id] ?? 0;
-    const previous = byAsset.get(asset);
-    if (previous) {
-      previous.exposureUsd += exposureUsd;
-      return;
-    }
-    byAsset.set(asset, {
-      asset,
-      exposureUsd,
-      spotPrice: snapshot.priceByAsset[asset] ?? 0,
-    });
+  const exposureByAsset = new Map<string, number>();
+  spotAssets.forEach((asset) => {
+    exposureByAsset.set(asset, 0);
   });
 
-  return [...byAsset.values()].sort((a, b) => {
+  positions.forEach((position) => {
+    const asset = normalizeAssetSymbol(position.asset);
+    if (!asset) return;
+    const exposureUsd = usdByPositionId[position.id] ?? 0;
+    exposureByAsset.set(asset, (exposureByAsset.get(asset) ?? 0) + exposureUsd);
+  });
+
+  return [...exposureByAsset.entries()].map(([asset, exposureUsd]) => ({
+    asset,
+    exposureUsd,
+    spotPrice: snapshot.priceByAsset[asset] ?? 0,
+  })).sort((a, b) => {
     if (b.exposureUsd !== a.exposureUsd) return b.exposureUsd - a.exposureUsd;
     return a.asset.localeCompare(b.asset);
   });
@@ -207,15 +241,15 @@ function updateSpotStrip(
     return;
   }
 
-  const loadingAssets = uniqueAssetsFromPositions(positions);
-  if (!snapshot && loadingAssets.length === 0) {
+  const stripAssets = getSpotStripAssets(positions);
+  if (!snapshot && stripAssets.length === 0) {
     stripEl.replaceChildren();
     stripEl.style.display = 'none';
     return;
   }
 
   const hydratedAssets = snapshot
-    ? buildSpotAssetData(positions, snapshot, usdByPositionId)
+    ? buildSpotAssetData(stripAssets, positions, snapshot, usdByPositionId)
     : [];
   if (snapshot && hydratedAssets.length === 0) {
     stripEl.replaceChildren();
@@ -235,7 +269,7 @@ function updateSpotStrip(
       fragment.appendChild(card);
     });
   } else {
-    loadingAssets.forEach((asset) => {
+    stripAssets.forEach((asset) => {
       const existing = stripEl.querySelector(`#positions-spot-${asset}`) as HTMLElement | null;
       const card = existing ?? createSpotCard(asset);
       const valueEl = card.querySelector(`#positions-spot-value-${asset}`) as HTMLElement | null;
@@ -248,7 +282,7 @@ function updateSpotStrip(
 }
 
 function createUnavailableSpotSnapshot(positions: DualPosition[]): AssetPriceSnapshot {
-  const assets = uniqueAssetsFromPositions(positions);
+  const assets = getSpotStripAssets(positions);
   const priceByAsset: Record<string, number> = {};
   const sourceByAsset: Record<string, 'unavailable'> = {};
   assets.forEach((asset) => {
@@ -405,9 +439,17 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
 
     <div id="modal-bulk-import" class="modal-overlay" style="display:none">
       <div class="modal">
-        <h3 class="modal-title">Pegar posiciones de Binance</h3>
+        <h3 class="modal-title">Pegar posiciones (Binance / Bybit)</h3>
         <div class="form-group">
-          <label>Pega el bloque completo copiado desde Binance</label>
+          <label>Origen del texto pegado</label>
+          <select id="input-bulk-import-source">
+            <option value="auto">Auto (recomendado)</option>
+            <option value="binance">Binance</option>
+            <option value="bybit">Bybit</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Pega el bloque completo copiado desde el exchange</label>
           <textarea id="input-bulk-import" rows="14" placeholder="USDC-ETH&#10;Buy-low&#10;2026-02-19 14:29&#10;100 USDC&#10;..."></textarea>
           <div class="text-muted" style="font-size:0.72rem;margin-top:6px">
             Reemplazara todas las posiciones actuales.
@@ -483,12 +525,12 @@ async function hydratePositionMarketData(
   const hasSubMinuteCountdown = updateRemainingTimesInPlace(container, positions);
 
   try {
-    const assetUniverse = Array.from(new Set(
-      positions
-        .flatMap((position) => [position.subscriptionAsset, position.asset])
-        .map((asset) => asset.toUpperCase().trim())
+    const assetUniverse = Array.from(new Set([
+      ...getSpotStripAssets(positions),
+      ...positions
+        .map((position) => normalizeAssetSymbol(position.subscriptionAsset))
         .filter(Boolean),
-    ));
+    ]));
     const snapshot = await getAssetPriceSnapshot(assetUniverse, { forceRefresh });
     const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);
     registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
@@ -521,11 +563,23 @@ async function hydratePositionMarketData(
 
     positions.forEach((position) => {
       const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;
-      if (!rowEl) return;
       const usdValue = metrics.usdByPositionId[position.id] ?? 0;
-      rowEl.textContent = usdValue > 0 ? formatUSD(usdValue) : 'N/D';
+      if (rowEl) {
+        rowEl.textContent = usdValue > 0 ? formatUSD(usdValue) : 'N/D';
+      }
+
+      if (position.components && position.amount > 0) {
+        position.components.forEach((c) => {
+          const cRowEl = container.querySelector(`#position-usd-${position.id}-comp-${c.id}`) as HTMLElement | null;
+          if (!cRowEl) return;
+          const ratio = c.amount / position.amount;
+          const cUsdValue = usdValue * ratio;
+          cRowEl.textContent = cUsdValue > 0 ? formatUSD(cUsdValue) : 'N/D';
+        });
+      }
     });
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[Positions] market hydration failed:', err);
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
     updateSpotStrip(container, positions, createUnavailableSpotSnapshot(positions));
@@ -544,10 +598,15 @@ export function parseBinancePositions(raw: string): DualPosition[] {
   return parseBinancePositionsFromText(raw, ALLOWED_ASSETS);
 }
 
+export function parseImportedPositions(raw: string, source: PositionImportSource = 'auto'): DualPosition[] {
+  return parseImportedPositionsFromText(raw, { source, allowedAssets: ALLOWED_ASSETS, consolidate: true });
+}
+
 function bindPositionEvents(container: HTMLElement, onStateChange: () => void): void {
   const modal = container.querySelector('#modal-position') as HTMLElement;
   const bulkImportModal = container.querySelector('#modal-bulk-import') as HTMLElement;
   const bulkImportInput = container.querySelector('#input-bulk-import') as HTMLTextAreaElement;
+  const bulkImportSourceInput = container.querySelector('#input-bulk-import-source') as HTMLSelectElement;
 
   // ── Direction toggle ──
   const dirBtns = container.querySelectorAll('.dir-btn');
@@ -633,14 +692,36 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
 
   container.querySelector('#btn-bulk-import')?.addEventListener('click', () => {
     bulkImportInput.value = '';
+    bulkImportSourceInput.value = 'auto';
     openModal(bulkImportModal);
     bulkImportInput.focus();
+  });
+
+  // ── Component sub-row toggle ──
+  container.querySelectorAll<HTMLElement>('[data-toggle-components]').forEach(toggle => {
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const toggleRow = toggle.closest('tr');
+      if (!toggleRow) return;
+      const chevron = toggle.querySelector('.pos-components-chevron') as HTMLElement | null;
+      let sibling = toggleRow.nextElementSibling;
+      const isExpanding = sibling?.classList.contains('pos-sub-row') && (sibling as HTMLElement).style.display === 'none';
+      while (sibling && sibling.classList.contains('pos-sub-row')) {
+        (sibling as HTMLElement).style.display = isExpanding ? '' : 'none';
+        sibling = sibling.nextElementSibling;
+      }
+      if (chevron) {
+        chevron.style.transform = isExpanding ? 'rotate(90deg)' : '';
+      }
+      toggleRow.classList.toggle('pos-toggle-expanded', isExpanding);
+    });
   });
 
   // ── Row click in edit-mode ──
   container.querySelectorAll<HTMLElement>('tr[data-id]').forEach(row => {
     row.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('.btn-del-pos')) return;
+      if ((e.target as HTMLElement).closest('[data-ignore-row-edit="true"]')) return;
       if (!sectionEl.classList.contains('editing-mode')) return;
       const id = row.dataset.id!;
       openEditModal(id);
@@ -663,7 +744,8 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   bindModalEvents(bulkImportModal, [container.querySelector('#btn-cancel-bulk-import') as HTMLElement]);
 
   container.querySelector('#btn-apply-bulk-import')?.addEventListener('click', () => {
-    const parsed = parseBinancePositions(bulkImportInput.value);
+    const source = (bulkImportSourceInput.value as PositionImportSource) || 'auto';
+    const parsed = parseImportedPositions(bulkImportInput.value, source);
     if (parsed.length === 0) {
       alert('No se detectaron posiciones validas en el texto pegado.');
       return;

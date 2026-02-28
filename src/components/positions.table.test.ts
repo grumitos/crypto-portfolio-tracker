@@ -19,6 +19,7 @@ function makePosition(overrides: Partial<DualPosition>): DualPosition {
     settlementDate: overrides.settlementDate ?? '2026-02-22',
     settlementTime: overrides.settlementTime,
     apr: overrides.apr ?? 50,
+    components: overrides.components,
   };
 }
 
@@ -40,6 +41,48 @@ describe('positions table rendering', () => {
     expect(buyGroup).toContain('Ganancia (Venc.)');
     expect(buyGroup).not.toContain('Spot (USD)');
     expect(buyGroup).not.toContain('position-spot-buy1');
+  });
+
+  it('renders a dropdown with component rows for grouped weighted positions', () => {
+    const grouped = renderPositionGroup('Sell High', [
+      makePosition({
+        id: 'agg1',
+        direction: 'sell-high',
+        asset: 'SOL',
+        subscriptionAsset: 'SOL',
+        amount: 371.0251611,
+        apr: 349.3803,
+        components: [
+          {
+            id: 'c1',
+            amount: 186.14819636,
+            targetPrice: 82,
+            entryDate: '2026-02-27',
+            entryTime: '22:59',
+            settlementDate: '2026-02-28',
+            settlementTime: '07:59',
+            apr: 347.65,
+          },
+          {
+            id: 'c2',
+            amount: 96,
+            targetPrice: 82,
+            entryDate: '2026-02-27',
+            entryTime: '22:59',
+            settlementDate: '2026-02-28',
+            settlementTime: '07:59',
+            apr: 397.8,
+          },
+        ],
+      }),
+    ]);
+
+    expect(grouped).toContain('pos-toggle-row');
+    expect(grouped).toContain('▸');
+    expect(grouped).toContain('Ver desglose (2)');
+    expect(grouped).toContain('pos-sub-row');
+    expect(grouped).toContain('186.148196 SOL');
+    expect(grouped).toContain('397.80%');
   });
 
   it('formats remaining time as seconds, hours/minutes, day progress and settled state', () => {
