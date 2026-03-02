@@ -52,6 +52,15 @@ function makePosition(
   };
 }
 
+async function readAssetPriceUSD(
+  market: typeof import('./market'),
+  asset: string,
+): Promise<number> {
+  const normalized = asset.toUpperCase().trim();
+  const snapshot = await market.getAssetPriceSnapshot([normalized]);
+  return snapshot.priceByAsset[normalized] ?? 0;
+}
+
 describe('market utils', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -64,8 +73,8 @@ describe('market utils', () => {
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
 
-    expect(await market.getAssetPriceUSD('USDT')).toBe(1);
-    expect(await market.getAssetPriceUSD('usdc')).toBe(1);
+    expect(await readAssetPriceUSD(market, 'USDT')).toBe(1);
+    expect(await readAssetPriceUSD(market, 'usdc')).toBe(1);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -77,7 +86,7 @@ describe('market utils', () => {
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
 
-    expect(await market.getAssetPriceUSD('ETH')).toBe(2500.5);
+    expect(await readAssetPriceUSD(market, 'ETH')).toBe(2500.5);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -97,7 +106,7 @@ describe('market utils', () => {
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
 
-    expect(await market.getAssetPriceUSD('ETH')).toBe(3000);
+    expect(await readAssetPriceUSD(market, 'ETH')).toBe(3000);
   });
 
   it('parses batched array payloads for multiple assets', async () => {
@@ -108,7 +117,7 @@ describe('market utils', () => {
 
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
-    const priceMap = await market.getPriceMap(['ETH', 'SOL']);
+    const priceMap = (await market.getAssetPriceSnapshot(['ETH', 'SOL'])).priceByAsset;
 
     expect(priceMap.ETH).toBe(2000);
     expect(priceMap.SOL).toBe(150);
@@ -144,8 +153,8 @@ describe('market utils', () => {
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
 
-    expect(await market.getAssetPriceUSD('ETH')).toBe(2050);
-    expect(await market.getAssetPriceUSD('ETH')).toBe(2050);
+    expect(await readAssetPriceUSD(market, 'ETH')).toBe(2050);
+    expect(await readAssetPriceUSD(market, 'ETH')).toBe(2050);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -238,8 +247,8 @@ describe('market utils', () => {
     const market = await import('./market');
 
     const [a, b] = await Promise.all([
-      market.getAssetPriceUSD('ETH'),
-      market.getAssetPriceUSD('eth'),
+      readAssetPriceUSD(market, 'ETH'),
+      readAssetPriceUSD(market, 'eth'),
     ]);
 
     expect(a).toBe(2200);
@@ -291,7 +300,7 @@ describe('market utils', () => {
 
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
-    const request = market.getAssetPriceUSD('ETH');
+    const request = readAssetPriceUSD(market, 'ETH');
 
     await vi.advanceTimersByTimeAsync(6000);
     await expect(request).resolves.toBe(2000);
@@ -326,5 +335,66 @@ describe('market utils', () => {
 
     expect(globalCalls).toHaveLength(1);
     expect(usCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('accepts numeric ticker prices and ignores malformed symbols', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([
+      { symbol: 'ETHUSDT', price: 2100.75 },
+      { symbol: 'INVALID SYMBOL', price: '1000' },
+      { symbol: 'BTCUSDT', price: 'bad' },
+    ]));
+
+    vi.stubGlobal('fetch', fetchMock);
+    const market = await import('./market');
+    const snapshot = await market.getAssetPriceSnapshot(['ETH', 'BTC'], { forceRefresh: true });
+
+    expect(snapshot.priceByAsset.ETH).toBe(2100.75);
+    expect(snapshot.priceByAsset.BTC).toBe(0);
+    expect(snapshot.sourceByAsset.BTC).toBe('unavailable');
+  });
+
+  it('drops very old stale cache entries instead of keeping them indefinitely', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-21T00:00:00.000Z'));
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ symbol: 'ETHUSDT', price: '1800' }))
+      .mockResolvedValue(failResponse());
+
+    vi.stubGlobal('fetch', fetchMock);
+    const market = await import('./market');
+
+    const first = await market.getAssetPriceSnapshot(['ETH'], { forceRefresh: true });
+    expect(first.sourceByAsset.ETH).toBe('live');
+
+    vi.setSystemTime(new Date('2026-02-22T01:00:00.000Z'));
+    const afterOneDay = await market.getAssetPriceSnapshot(['ETH'], { forceRefresh: true });
+    expect(afterOneDay.sourceByAsset.ETH).toBe('unavailable');
+  });
+
+  it('bounds cache growth by evicting oldest entries when the cache overflows', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-21T00:00:00.000Z'));
+
+    const assets = Array.from({ length: 270 }, (_, index) => `A${index.toString(36).toUpperCase().padStart(2, '0')}`);
+    const oldestAsset = assets[0];
+    const firstPayload = assets.map((asset, index) => ({
+      symbol: `${asset}USDT`,
+      price: String(100 + index),
+    }));
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(firstPayload))
+      .mockResolvedValue(failResponse());
+
+    vi.stubGlobal('fetch', fetchMock);
+    const market = await import('./market');
+
+    const seeded = await market.getAssetPriceSnapshot(assets, { forceRefresh: true });
+    expect(seeded.sourceByAsset[oldestAsset]).toBe('live');
+
+    vi.setSystemTime(new Date('2026-02-21T00:01:01.000Z'));
+    const oldestRefresh = await market.getAssetPriceSnapshot([oldestAsset], { forceRefresh: true });
+    expect(oldestRefresh.sourceByAsset[oldestAsset]).toBe('unavailable');
   });
 });

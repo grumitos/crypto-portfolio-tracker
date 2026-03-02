@@ -60,7 +60,7 @@ describe('projection-milestones', () => {
     expect(snapshot.daysByMilestone.goal).toBe(snapshot.goal.days);
   });
 
-  it('uses the farthest milestone as primary in both mode', () => {
+  it('uses the farthest milestone as primary', () => {
     const snapshot = buildProjectionSnapshot({
       capital: 1000,
       apr: 60,
@@ -69,7 +69,7 @@ describe('projection-milestones', () => {
       invested: 1200,
     });
 
-    const selection = resolveSimulationMilestones(snapshot, 'both');
+    const selection = resolveSimulationMilestones(snapshot);
 
     expect(selection.primaryKey).toBe('be');
     expect(selection.secondaryKey).toBe('goal');

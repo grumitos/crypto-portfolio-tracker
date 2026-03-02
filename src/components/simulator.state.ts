@@ -1,6 +1,6 @@
 import { loadState, SIMULATOR_VIEW_KEY } from '../utils/storage';
 import { weightedAverageAPR } from '../utils/calculator';
-import type { CompoundFrequency, SimulationTargetMode } from '../types';
+import type { CompoundFrequency } from '../types';
 
 export const DEFAULT_APR_FALLBACK = 30;
 
@@ -15,7 +15,6 @@ export interface SimulatorViewState {
   apr: number;
   frequency: CompoundFrequency;
   goal: number;
-  targetMode: SimulationTargetMode;
   autoCapital: boolean;
   autoApr: boolean;
   autoGoal: boolean;
@@ -41,7 +40,6 @@ export function getDefaultViewState(): SimulatorViewState {
     apr: avgAPR > 0 ? avgAPR : DEFAULT_APR_FALLBACK,
     frequency: 'daily',
     goal: state.portfolio.goalAmount,
-    targetMode: 'both',
     autoCapital: true,
     autoApr: true,
     autoGoal: true,
@@ -58,12 +56,14 @@ export function loadSimulatorViewState(defaults: SimulatorViewState): SimulatorV
       apr: parsePositiveNumber(parsed.apr, defaults.apr),
       frequency: sanitizeFrequency(parsed.frequency, defaults.frequency),
       goal: parsePositiveNumber(parsed.goal, defaults.goal),
-      targetMode: 'both',
       autoCapital: typeof parsed.autoCapital === 'boolean' ? parsed.autoCapital : defaults.autoCapital,
       autoApr: typeof parsed.autoApr === 'boolean' ? parsed.autoApr : defaults.autoApr,
       autoGoal: typeof parsed.autoGoal === 'boolean' ? parsed.autoGoal : defaults.autoGoal,
     };
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[simulator.state] failed to load view state', err);
+    }
     return defaults;
   }
 }
@@ -84,7 +84,6 @@ export function persistSimulatorViewState(container: HTMLElement, autoState: Aut
     apr: parsePositiveNumber(aprValue, defaults.apr),
     frequency: sanitizeFrequency(frequencyValue, defaults.frequency),
     goal: parsePositiveNumber(goalValue, defaults.goal),
-    targetMode: 'both',
     autoCapital: autoState.capital,
     autoApr: autoState.apr,
     autoGoal: autoState.goal,

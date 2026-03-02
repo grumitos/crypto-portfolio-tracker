@@ -15,8 +15,11 @@ async function runTick(forceRefresh = true): Promise<void> {
         const promises = Array.from(subscribers).map(cb => {
             try {
                 return cb(forceRefresh);
-            } catch {
+            } catch (err) {
                 // Individual subscriber errors must not break other subscribers.
+                if (import.meta.env.DEV) {
+                    console.warn('[market-poller] subscriber failed', err);
+                }
             }
         });
         await Promise.all(promises);

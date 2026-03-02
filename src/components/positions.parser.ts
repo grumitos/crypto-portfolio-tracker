@@ -2,33 +2,19 @@ import { generateId } from '../utils/storage';
 import type { DualPosition, DualPositionComponent, Direction } from '../types';
 
 const DATETIME_GLOBAL_PATTERN = /(\d{4}-\d{2}-\d{2})\s+([01]\d|2[0-3]):([0-5]\d)/g;
-const DATETIME_WITH_SECONDS_PATTERN = /^(\d{4}-\d{2}-\d{2})\s+([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
 const AMOUNT_PATTERN = /([+-]?\d[\d,]*(?:\.\d+)?)\s+([A-Z0-9]{2,10})$/;
 const APR_PATTERN = /([0-9]+(?:\.[0-9]+)?)\s*%/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/;
-const BYBIT_MIN_COLUMNS = 11;
-const BYBIT_ROW_PAIR_PATTERN = /^[A-Z0-9]{2,10}-[A-Z0-9]{2,10}$/;
 
 export const DEFAULT_ASSET_POOL = ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC'] as const;
 const DEFAULT_ALLOWED_ASSETS = new Set<string>(DEFAULT_ASSET_POOL);
 
-export type PositionImportSource = 'auto' | 'binance' | 'bybit';
-
-export interface ParseImportedPositionsOptions {
-  source?: PositionImportSource;
-  allowedAssets?: Set<string>;
-  consolidate?: boolean;
-}
-
-export function parseImportedPositions(raw: string, options: ParseImportedPositionsOptions = {}): DualPosition[] {
-  const source = options.source ?? 'auto';
-  const allowedAssets = options.allowedAssets ?? DEFAULT_ALLOWED_ASSETS;
-  const parsed = parseBySource(raw, source, allowedAssets);
-  if (options.consolidate === false) return parsed;
+export function parseImportedPositions(raw: string): DualPosition[] {
+  const parsed = parseBinancePositions(raw);
   return consolidatePositionsByPair(parsed);
 }
 
-export function parseBinancePositions(raw: string, allowedAssets: Set<string> = DEFAULT_ALLOWED_ASSETS): DualPosition[] {
+export function parseBinancePositions(raw: string): DualPosition[] {
   const lines = raw
     .split(/\r?\n/)
     .map(normalizeImportLine)
@@ -38,7 +24,7 @@ export function parseBinancePositions(raw: string, allowedAssets: Set<string> = 
 
   const startIndexes: number[] = [];
   lines.forEach((line, index) => {
-    if (isPairLine(line, allowedAssets)) startIndexes.push(index);
+    if (isPairLine(line, DEFAULT_ALLOWED_ASSETS)) startIndexes.push(index);
   });
   if (startIndexes.length === 0) return [];
 
@@ -46,72 +32,8 @@ export function parseBinancePositions(raw: string, allowedAssets: Set<string> = 
   startIndexes.forEach((start, index) => {
     const end = startIndexes[index + 1] ?? lines.length;
     const chunk = lines.slice(start, end);
-    const position = parseBinanceChunk(chunk, allowedAssets);
+    const position = parseBinanceChunk(chunk, DEFAULT_ALLOWED_ASSETS);
     if (position) parsed.push(position);
-  });
-
-  return parsed;
-}
-
-export function parseBybitPositions(raw: string, allowedAssets: Set<string> = DEFAULT_ALLOWED_ASSETS): DualPosition[] {
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  if (lines.length === 0) return [];
-
-  const parsed: DualPosition[] = [];
-  const seenOrderIds = new Set<string>();
-  lines.forEach((line) => {
-    const columns = splitBybitColumns(line);
-    if (columns.length < BYBIT_MIN_COLUMNS) return;
-    if (isBybitHeaderRow(columns)) return;
-
-    const orderId = normalizeImportLine(columns[14] ?? '');
-    if (orderId && seenOrderIds.has(orderId)) return;
-    if (orderId) seenOrderIds.add(orderId);
-
-    const pair = parsePairLine(columns[0], allowedAssets);
-    if (!pair) return;
-
-    const direction = parseDirectionText(columns[8] ?? '');
-    if (!direction) return;
-
-    const entry = parseUTCDateTimeColumnToLocal(columns[7] ?? '');
-    const settlement = parseUTCDateTimeColumnToLocal(columns[10] ?? '');
-    if (!entry || !settlement) return;
-
-    const amountMatch = normalizeImportLine(columns[2] ?? '').match(AMOUNT_PATTERN);
-    if (!amountMatch) return;
-    const amount = parseLooseNumber(amountMatch[1]);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const subscriptionAsset = amountMatch[2].toUpperCase();
-    if (!allowedAssets.has(subscriptionAsset)) return;
-
-    const aprMatch = normalizeImportLine(columns[9] ?? '').match(APR_PATTERN);
-    if (!aprMatch) return;
-    const apr = parseLooseNumber(aprMatch[1]);
-    if (!Number.isFinite(apr) || apr < 0) return;
-
-    const resolvedAsset = resolveAssetForDirection(direction, pair, subscriptionAsset);
-    if (!resolvedAsset || !allowedAssets.has(resolvedAsset)) return;
-
-    const targetRaw = parseLooseNumber(columns[1] ?? '');
-    const targetPrice = Number.isFinite(targetRaw) && targetRaw >= 0 ? targetRaw : 0;
-
-    parsed.push({
-      id: generateId(),
-      asset: resolvedAsset,
-      direction,
-      subscriptionAsset,
-      amount,
-      targetPrice,
-      entryDate: entry.date,
-      entryTime: entry.time,
-      settlementDate: settlement.date,
-      settlementTime: settlement.time,
-      apr,
-    });
   });
 
   return parsed;
@@ -242,81 +164,6 @@ function extractDateTimes(chunk: string[]): Array<{ date: string; time: string }
   const joined = chunk.join(' ');
   const matches = [...joined.matchAll(DATETIME_GLOBAL_PATTERN)];
   return matches.map((match) => ({ date: match[1], time: `${match[2]}:${match[3]}` }));
-}
-
-function parseBySource(raw: string, source: PositionImportSource, allowedAssets: Set<string>): DualPosition[] {
-  if (source === 'binance') return parseBinancePositions(raw, allowedAssets);
-  if (source === 'bybit') return parseBybitPositions(raw, allowedAssets);
-
-  const bybitLikely = isLikelyBybitImport(raw);
-  if (bybitLikely) {
-    const bybitParsed = parseBybitPositions(raw, allowedAssets);
-    if (bybitParsed.length > 0) return bybitParsed;
-  }
-
-  const binanceParsed = parseBinancePositions(raw, allowedAssets);
-  if (binanceParsed.length > 0) return binanceParsed;
-
-  return parseBybitPositions(raw, allowedAssets);
-}
-
-function splitBybitColumns(line: string): string[] {
-  const withStandardSpaces = line.replace(/[\u00a0\u202f\u2007]/g, ' ');
-  const tabColumns = withStandardSpaces
-    .split('\t')
-    .map((column) => normalizeImportLine(column))
-    .filter(Boolean);
-  if (tabColumns.length >= BYBIT_MIN_COLUMNS) return tabColumns;
-
-  return withStandardSpaces
-    .split(/\s{2,}/)
-    .map((column) => normalizeImportLine(column))
-    .filter(Boolean);
-}
-
-function isBybitHeaderRow(columns: string[]): boolean {
-  if (columns.length < 2) return false;
-  const first = normalizeText(columns[0]);
-  const second = normalizeText(columns[1]);
-  if ((first === 'producto' || first === 'product') && (second.includes('precio objetivo') || second.includes('target price'))) {
-    return true;
-  }
-  return false;
-}
-
-function parseUTCDateTimeColumnToLocal(value: string): { date: string; time: string } | null {
-  const clean = normalizeImportLine(value);
-  const match = clean.match(DATETIME_WITH_SECONDS_PATTERN);
-  if (!match) return null;
-  const year = Number(match[1].slice(0, 4));
-  const month = Number(match[1].slice(5, 7));
-  const day = Number(match[1].slice(8, 10));
-  const hour = Number(match[2]);
-  const minute = Number(match[3]);
-  const second = match[4] ? Number(match[4]) : 0;
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
-  if (!Number.isFinite(hour) || !Number.isFinite(minute) || !Number.isFinite(second)) return null;
-
-  const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second, 0));
-  if (!Number.isFinite(utcDate.getTime())) return null;
-
-  return {
-    date: formatLocalDateIso(utcDate),
-    time: formatLocalTimeHHMM(utcDate),
-  };
-}
-
-function formatLocalDateIso(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function formatLocalTimeHHMM(date: Date): string {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
 }
 
 function parseDirectionText(value: string): Direction | null {
@@ -485,23 +332,5 @@ export function consolidatePositionsByPair(positions: DualPosition[]): DualPosit
       apr: total > 0 ? aggregate.aprWeightSum / total : 0,
       ...(aggregate.components.length > 1 ? { components: aggregate.components } : {}),
     };
-  });
-}
-
-function isLikelyBybitImport(raw: string): boolean {
-  const normalized = normalizeText(raw);
-  if (normalized.includes('producto') && normalized.includes('precio objetivo') && normalized.includes('hora de la orden')) {
-    return true;
-  }
-  if (normalized.includes('product') && normalized.includes('target price') && normalized.includes('order time')) {
-    return true;
-  }
-
-  const lines = raw.split(/\r?\n/);
-  return lines.some((line) => {
-    const columns = splitBybitColumns(line.trim());
-    if (columns.length < BYBIT_MIN_COLUMNS) return false;
-    const product = normalizeImportLine(columns[0] ?? '').toUpperCase();
-    return BYBIT_ROW_PAIR_PATTERN.test(product);
   });
 }

@@ -20,6 +20,7 @@ import {
 } from '../utils/animation';
 import { skeletonSpan } from '../utils/ui-helpers';
 import { sanitizeFrequency } from './simulator.state';
+import { parseFlexibleNumber } from '../utils/parse-number';
 import {
   clearDashboardLegendState,
   loadDashboardLegendState,
@@ -58,46 +59,6 @@ function formatEditableCurrency(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function parseFlexibleNumber(raw: string): number {
-  const cleaned = raw.trim().replace(/\s+/g, '').replace(/[^\d.,+-]/g, '');
-  if (!cleaned) return NaN;
-
-  const sign = cleaned.startsWith('-') ? -1 : 1;
-  const unsigned = cleaned.replace(/^[+-]/, '');
-  if (!unsigned) return NaN;
-
-  const commaCount = (unsigned.match(/,/g) || []).length;
-  const dotCount = (unsigned.match(/\./g) || []).length;
-  if (commaCount === 0 && dotCount === 0) {
-    const value = Number(unsigned);
-    return Number.isFinite(value) ? sign * value : NaN;
-  }
-
-  let decimalSep: ',' | '.' | null = null;
-  if (commaCount > 0 && dotCount > 0) {
-    decimalSep = unsigned.lastIndexOf(',') > unsigned.lastIndexOf('.') ? ',' : '.';
-  } else {
-    const sep: ',' | '.' = commaCount > 0 ? ',' : '.';
-    const count = sep === ',' ? commaCount : dotCount;
-    const lastIndex = unsigned.lastIndexOf(sep);
-    const fractionalLength = unsigned.length - lastIndex - 1;
-    decimalSep = fractionalLength === 3 && count >= 1 ? null : sep;
-  }
-
-  let normalized = '';
-  if (!decimalSep) {
-    normalized = unsigned.replace(/[.,]/g, '');
-  } else {
-    const index = unsigned.lastIndexOf(decimalSep);
-    const integerPart = unsigned.slice(0, index).replace(/[.,]/g, '');
-    const fractionPart = unsigned.slice(index + 1).replace(/[.,]/g, '');
-    normalized = `${integerPart}.${fractionPart}`;
-  }
-
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? sign * parsed : NaN;
 }
 
 function progressPct(balance: number, target: number): number {
@@ -182,7 +143,10 @@ function readSimulatorFrequency(fallback: CompoundFrequency): CompoundFrequency 
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as { frequency?: unknown };
     return sanitizeFrequency(parsed.frequency, fallback);
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[dashboard] failed to read simulator frequency', err);
+    }
     return fallback;
   }
 }
@@ -615,11 +579,9 @@ function updateBalanceInPlace(
   container: HTMLElement,
   newBalance: number,
   uiState: DashboardUiState,
+  portfolio: AppState['portfolio'],
   animateGoalSection = true,
 ): void {
-  const state = loadState();
-  const { portfolio } = state;
-
   uiState.balance = newBalance;
   uiState.invested = portfolio.totalInvested;
   uiState.goal = portfolio.goalAmount;
@@ -649,8 +611,8 @@ async function hydrateDashboardMarketStats(
     const savingsOnlyBalance = Math.round(currentState.portfolio.savings * 100) / 100;
     const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
     if (Math.abs(savingsOnlyBalance - storedBalance) >= 0.01) {
-      updateBalance(savingsOnlyBalance);
-      updateBalanceInPlace(container, savingsOnlyBalance, uiState, false);
+      const updatedState = updateBalance(savingsOnlyBalance);
+      updateBalanceInPlace(container, savingsOnlyBalance, uiState, updatedState.portfolio, false);
     }
 
     setTextResult(aprEl, '---', true);
@@ -679,8 +641,8 @@ async function hydrateDashboardMarketStats(
 
     if (shouldSyncBalance) {
       lastAutoBalanceSyncAt = now;
-      updateBalance(totalBalance);
-      updateBalanceInPlace(container, totalBalance, uiState, false);
+      const updatedState = updateBalance(totalBalance);
+      updateBalanceInPlace(container, totalBalance, uiState, updatedState.portfolio, false);
     }
 
     aprEl.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';

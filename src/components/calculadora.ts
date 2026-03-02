@@ -17,6 +17,7 @@ import {
   roundTo,
 } from './calculadora.math';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
+import { showConfirmDialog } from '../utils/dialogs';
 
 // ── Fee presets ──
 
@@ -394,17 +395,22 @@ function bindEvents(container: HTMLElement): void {
   });
 
   // Clear purchases
-  container.querySelector('#calc-clear-purchases')?.addEventListener('click', () => {
+  container.querySelector('#calc-clear-purchases')?.addEventListener('click', async () => {
     if (state.purchases.length === 0) return;
-    if (confirm('Borrar todas las posiciones?')) {
-      state.purchases = [];
-      renderPurchaseRows(container);
-      cancelScheduledRecalculate();
-      recalculate(container, { animate: true });
-      save();
-      const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
-      if (clearBtn) clearBtn.disabled = true;
-    }
+    const shouldClear = await showConfirmDialog('Borrar todas las posiciones?', {
+      title: 'Confirmar borrado',
+      confirmLabel: 'Borrar',
+      destructive: true,
+    });
+    if (!shouldClear) return;
+
+    state.purchases = [];
+    renderPurchaseRows(container);
+    cancelScheduledRecalculate();
+    recalculate(container, { animate: true });
+    save();
+    const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
+    if (clearBtn) clearBtn.disabled = true;
   });
 
   bindPurchaseListEvents(container);

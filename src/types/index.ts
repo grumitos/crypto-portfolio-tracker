@@ -44,7 +44,6 @@ export interface DualPosition {
 
 // ── Simulator ──
 export type CompoundFrequency = 'daily' | 'weekly' | 'biweekly';
-export type SimulationTargetMode = 'be' | 'goal' | 'both';
 
 export interface SimulatorParams {
   capital: number;

@@ -18,7 +18,10 @@ function readStoredTimestamp(): number | null {
   if (typeof localStorage === 'undefined') return null;
   try {
     return normalizeTimestamp(localStorage.getItem(API_LAST_UPDATED_KEY));
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[api-status] failed to read timestamp from storage', err);
+    }
     return null;
   }
 }
@@ -27,7 +30,10 @@ function writeStoredTimestamp(value: number): void {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(API_LAST_UPDATED_KEY, String(value));
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[api-status] failed to write timestamp to storage', err);
+    }
     // Ignore storage failures (private mode, quota, etc.)
   }
 }

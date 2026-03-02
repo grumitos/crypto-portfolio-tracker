@@ -8,6 +8,7 @@ import type {
   Purchase,
 } from '../types';
 import { sanitizeISODate, todayISODateLocal } from './date';
+import { parseLooseNumber } from './parse-number';
 
 export const STORAGE_KEY = 'crypto-portfolio-tracker';
 export const CALC_KEY = 'crypto-calculadora';
@@ -220,11 +221,6 @@ function sanitizeAppState(raw: Partial<AppState> | null | undefined): AppState {
   };
 }
 
-function parseLooseNumber(value: unknown): number {
-  if (value === undefined || value === null) return NaN;
-  return parseFloat(String(value).replace(/[\s,]+/g, '').replace(/[^\d.-]+/g, '').trim());
-}
-
 function inferSellSyncSource(
   sellPrice: string,
   sellPct: string,
@@ -292,7 +288,10 @@ export function loadState(): AppState {
     if (!raw) return getDefaultState();
     const parsed = JSON.parse(raw) as Partial<AppState>;
     return sanitizeAppState(parsed);
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[storage] failed to load app state', err);
+    }
     return getDefaultState();
   }
 }
@@ -431,7 +430,10 @@ export function loadCalcState(): CalculadoraState {
     if (!raw) return sanitizeCalcState(getDefaultCalcState());
     const parsed = JSON.parse(raw) as Partial<CalculadoraState>;
     return sanitizeCalcState(parsed);
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[storage] failed to load calculadora state', err);
+    }
     return sanitizeCalcState(getDefaultCalcState());
   }
 }

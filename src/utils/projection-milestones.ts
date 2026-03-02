@@ -1,4 +1,4 @@
-import type { ProjectionRow, SimulatorParams, SimulationTargetMode } from '../types';
+import type { ProjectionRow, SimulatorParams } from '../types';
 import { estimateDaysToGoalFromProjection, generateProjection } from './calculator';
 
 export type MilestoneKey = 'be' | 'goal';
@@ -29,7 +29,6 @@ export interface ProjectionSnapshot {
 }
 
 export interface SimulationMilestoneSelection {
-  mode: SimulationTargetMode;
   primaryKey: MilestoneKey;
   secondaryKey: MilestoneKey | null;
   primary: MilestoneResolution;
@@ -142,28 +141,23 @@ export function buildProjectionSnapshot(params: SimulatorParams): ProjectionSnap
 }
 
 function resolvePrimaryMilestoneKey(
-  mode: SimulationTargetMode,
   targets: MilestoneTargetAmounts,
 ): MilestoneKey {
-  if (mode === 'be') return 'be';
-  if (mode === 'goal') return 'goal';
   return targets.be > targets.goal ? 'be' : 'goal';
 }
 
 export function resolveSimulationMilestones(
   snapshot: ProjectionSnapshot,
-  mode: SimulationTargetMode,
 ): SimulationMilestoneSelection {
   const byMilestone: Record<MilestoneKey, MilestoneResolution> = {
     be: snapshot.breakeven,
     goal: snapshot.goal,
   };
 
-  const primaryKey = resolvePrimaryMilestoneKey(mode, snapshot.targetByMilestone);
-  const secondaryKey = mode === 'both' ? (primaryKey === 'be' ? 'goal' : 'be') : null;
+  const primaryKey = resolvePrimaryMilestoneKey(snapshot.targetByMilestone);
+  const secondaryKey = primaryKey === 'be' ? 'goal' : 'be';
 
   return {
-    mode,
     primaryKey,
     secondaryKey,
     primary: byMilestone[primaryKey],

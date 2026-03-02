@@ -196,6 +196,25 @@ describe('storage', () => {
     expect(loadState().portfolio.currentBalance).toBe(1500);
   });
 
+  it('rejects backups from unsupported future versions', () => {
+    const futureBackup = JSON.stringify({
+      version: 999,
+      app: {
+        portfolio: {
+          totalInvested: 1000,
+          currentBalance: 800,
+          goalAmount: 1500,
+          savings: 800,
+          lastUpdated: '2026-02-21',
+          balanceHistory: [{ date: '2026-02-21', balance: 800 }],
+        },
+        positions: [],
+      },
+    });
+
+    expect(() => importBackup(futureBackup)).toThrow('Versión de backup no soportada');
+  });
+
   it('falls back to defaults on malformed persisted JSON', () => {
     localStorage.setItem('crypto-portfolio-tracker', '{bad-json');
     localStorage.setItem('crypto-calculadora', '{bad-json');

@@ -27,14 +27,14 @@ describe('dual-yield utils', () => {
     expect(minOneDay).toBe(1);
   });
 
-  it('supports fractional billed days when entry and settlement include explicit times', () => {
+  it('uses Binance billed-day windows even when entry/settlement include explicit times', () => {
     const billed = calculateDualProjectedBilledDays({
       entryDate: '2026-02-27',
       entryTime: '15:00',
       settlementDate: '2026-02-27',
       settlementTime: '23:59',
     });
-    expect(billed).toBeCloseTo((8 * 60 + 59) / (24 * 60), 8);
+    expect(billed).toBe(1);
   });
 
   it('truncates yield to 4 decimals (floor), never rounds up', () => {
@@ -50,5 +50,18 @@ describe('dual-yield utils', () => {
     expect(solUsdt).toBeCloseTo(4.165618, 6);
     expect(ethUsdt).toBeCloseTo(38.91162, 5);
     expect(ethUsdc).toBeCloseTo(1.5, 8);
+  });
+
+  it('matches Binance reference: before 15:59 UTC cutoff settles at 08:00 UTC and bills 1 day', () => {
+    const billed = calculateDualProjectedBilledDays({
+      entryDate: '2026-03-02',
+      entryTime: '10:30',
+      settlementDate: '2026-03-03',
+      settlementTime: '03:00',
+    });
+    const reward = calculateDualProfitFromBilledDays(30336.4, 116.82, billed);
+
+    expect(billed).toBe(1);
+    expect(reward).toBeCloseTo(97.07648, 8);
   });
 });

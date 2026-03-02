@@ -4,10 +4,10 @@ import type {
   PurchaseTotals,
   StrategyResults,
 } from '../types';
+import { parseLooseNumber } from '../utils/parse-number';
 
 export function parseNum(value: string): number {
-  const normalized = String(value).replace(/[\s,]+/g, '').replace(/[^\d.-]+/g, '').trim();
-  return parseFloat(normalized);
+  return parseLooseNumber(value);
 }
 
 export function roundTo(value: number, decimals: number): number {

@@ -73,7 +73,6 @@ describe('simulator view state', () => {
     expect(defaults.goal).toBe(900);
     expect(defaults.apr).toBeCloseTo(32.5, 8);
     expect(defaults.frequency).toBe('daily');
-    expect(defaults.targetMode).toBe('both');
     expect(defaults.autoCapital).toBe(true);
     expect(defaults.autoApr).toBe(true);
     expect(defaults.autoGoal).toBe(true);
@@ -108,7 +107,6 @@ describe('simulator view state', () => {
       apr: number;
       frequency: string;
       goal: number;
-      targetMode: string;
       autoCapital: boolean;
       autoApr: boolean;
       autoGoal: boolean;
@@ -118,7 +116,6 @@ describe('simulator view state', () => {
     expect(parsed.apr).toBe(37.2);
     expect(parsed.frequency).toBe('weekly');
     expect(parsed.goal).toBe(4567.8);
-    expect(parsed.targetMode).toBe('both');
     expect(parsed.autoCapital).toBe(false);
     expect(parsed.autoApr).toBe(true);
     expect(parsed.autoGoal).toBe(false);

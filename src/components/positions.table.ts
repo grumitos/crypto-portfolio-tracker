@@ -10,15 +10,17 @@ import {
 import { iconTrash } from '../utils/icons';
 import { ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from '../utils/constants';
 import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-logos';
+import { escapeHtml } from '../utils/ui-helpers';
 import type { DualPosition } from '../types';
 
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
   const isBuyLow = title === 'Buy Low';
+  const safeTitle = escapeHtml(title);
   return `
     <div class="card">
       <div class="flex-between" style="margin-bottom:var(--space-md)">
         <div class="card-title" style="margin-bottom:0">
-          <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${title}</span>
+          <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${safeTitle}</span>
           <span class="text-muted" style="margin-left:var(--space-sm);font-size:0.75rem">${positions.length} posicion${positions.length > 1 ? 'es' : ''}</span>
         </div>
       </div>
@@ -146,7 +148,7 @@ function formatRemainingTime(position: DualPosition): string {
   const remaining = Math.max(0, totalDaysRaw - elapsedRaw);
 
   if (isSettled) {
-    return `< span class="mono text-muted" > Liquidada </span>`;
+    return '<span class="mono text-muted">Liquidada</span>';
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_MINUTE_MS) {
@@ -179,10 +181,10 @@ function isSubMinuteCountdown(position: DualPosition): boolean {
 }
 
 function renderDateTimeCell(date: string, time?: string): string {
-  const parts = [`<span class="pos-date-value">${formatDateLatin(date)}</span>`];
+  const parts = [`<span class="pos-date-value">${escapeHtml(formatDateLatin(date))}</span>`];
   const normalizedTime = normalizeTime(time);
   if (normalizedTime) {
-    parts.push(`<span class="pos-time-value mono">${normalizedTime}</span>`);
+    parts.push(`<span class="pos-time-value mono">${escapeHtml(normalizedTime)}</span>`);
   }
   return parts.join('');
 }
@@ -202,7 +204,7 @@ function productLabel(position: DualPosition): string {
 }
 
 function productLabelHtml(position: DualPosition): string {
-  const label = productLabel(position);
+  const label = escapeHtml(productLabel(position));
   const logoAsset = position.direction === 'sell-high'
     ? position.subscriptionAsset
     : position.asset;
@@ -210,25 +212,40 @@ function productLabelHtml(position: DualPosition): string {
   const sources = resolveAssetLogoSources(logoAsset);
   const monogram = createAssetMonogram(logoAsset);
 
-  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap"><img class="pos-pair-logo" src="${sources.primarySrc}" ${sources.fallbackSrc ? `data-fallback="${sources.fallbackSrc}"` : ''} alt="${sources.alt}" loading="lazy" decoding="async" onerror="this.dataset.fallback?(this.src=this.dataset.fallback,delete this.dataset.fallback):(this.style.display='none',this.nextElementSibling.style.display='inline-flex')"><span class="pos-pair-fallback mono" style="display:none">${monogram}</span></span>${label}</span>`;
+  const safePrimarySrc = escapeHtml(sources.primarySrc);
+  const safeFallbackAttr = sources.fallbackSrc ? `data-fallback="${escapeHtml(sources.fallbackSrc)}"` : '';
+  const safeAlt = escapeHtml(sources.alt);
+  const safeMonogram = escapeHtml(monogram);
+  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap"><img class="pos-pair-logo" src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async" onerror="this.dataset.fallback?(this.src=this.dataset.fallback,delete this.dataset.fallback):(this.style.display='none',this.nextElementSibling.style.display='inline-flex')"><span class="pos-pair-fallback mono" style="display:none">${safeMonogram}</span></span>${label}</span>`;
 }
 
-export function updateRemainingTimesInPlace(container: HTMLElement, positions: DualPosition[]): boolean {
+export function updateRemainingTimesInPlace(
+  container: HTMLElement,
+  positions: DualPosition[],
+  options: { subMinuteOnly?: boolean } = {},
+): boolean {
+  const subMinuteOnly = options.subMinuteOnly === true;
   let hasSubMinuteCountdown = false;
   positions.forEach((position) => {
-    const remainingEl = container.querySelector(`#position-remaining-${position.id}`) as HTMLElement | null;
-    if (remainingEl) {
-      if (isSubMinuteCountdown(position)) hasSubMinuteCountdown = true;
+    const isMainSubMinute = isSubMinuteCountdown(position);
+    if (isMainSubMinute) hasSubMinuteCountdown = true;
+
+    if (!subMinuteOnly || isMainSubMinute) {
+      const remainingEl = container.querySelector(`#position-remaining-${position.id}`) as HTMLElement | null;
+      if (!remainingEl) return;
       const nextHtml = formatRemainingTime(position);
       if (remainingEl.innerHTML !== nextHtml) remainingEl.innerHTML = nextHtml;
     }
 
     if (position.components) {
       position.components.forEach((c) => {
+        const tempPos: DualPosition = { ...position, ...c };
+        const isComponentSubMinute = isSubMinuteCountdown(tempPos);
+        if (isComponentSubMinute) hasSubMinuteCountdown = true;
+        if (subMinuteOnly && !isComponentSubMinute) return;
+
         const cRemainingEl = container.querySelector(`#position-remaining-${position.id}-comp-${c.id}`) as HTMLElement | null;
         if (!cRemainingEl) return;
-        const tempPos: DualPosition = { ...position, ...c };
-        if (isSubMinuteCountdown(tempPos)) hasSubMinuteCountdown = true;
         const cNextHtml = formatRemainingTime(tempPos);
         if (cRemainingEl.innerHTML !== cNextHtml) cRemainingEl.innerHTML = cNextHtml;
       });

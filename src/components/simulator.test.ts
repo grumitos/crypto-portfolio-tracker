@@ -163,7 +163,6 @@ describe('simulator dual milestones', () => {
       apr: 141.3,
       frequency: 'weekly',
       goal: 99999.99,
-      targetMode: 'both',
       autoCapital: true,
       autoApr: true,
       autoGoal: true,
@@ -261,14 +260,11 @@ describe('simulator dual milestones', () => {
     container.remove();
   });
 
-  it('persists targetMode as both and no longer depends on hidden mode input', async () => {
+  it('no longer depends on hidden mode input', async () => {
     const first = document.createElement('div');
     document.body.appendChild(first);
     const disposeFirst = renderSimulator(first);
     await flushMicrotasks();
-
-    const stored = JSON.parse(localStorage.getItem(SIMULATOR_VIEW_KEY) ?? '{}') as { targetMode?: string };
-    expect(stored.targetMode).toBe('both');
 
     disposeFirst();
     first.remove();

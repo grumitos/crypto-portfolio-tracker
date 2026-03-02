@@ -4,12 +4,36 @@ import { dailyEarnings as calculateDailyEarnings } from './calculator';
 const STABLE_ASSETS = new Set(['USD', 'USDT', 'USDC', 'FDUSD', 'BUSD']);
 const priceCache = new Map<string, { value: number; ts: number }>();
 const CACHE_TTL_MS = 60_000;
+const STALE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const PRICE_CACHE_MAX_ENTRIES = 256;
 const BINANCE_FETCH_TIMEOUT_MS = 6000;
 const DEFAULT_RATE_LIMIT_BLOCK_MS = 60_000;
-const BINANCE_TICKER_ENDPOINTS = [
+const DEFAULT_BINANCE_TICKER_ENDPOINTS = [
   'https://api.binance.com/api/v3/ticker/price',
   'https://api.binance.us/api/v3/ticker/price',
 ] as const;
+const TICKER_SYMBOL_PATTERN = /^[A-Z0-9_-]{3,20}$/;
+
+function resolveTickerEndpoints(): string[] {
+  const raw = import.meta.env.VITE_BINANCE_ENDPOINTS;
+  if (typeof raw !== 'string') {
+    return [...DEFAULT_BINANCE_TICKER_ENDPOINTS];
+  }
+
+  const endpoints = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((url) => /^https?:\/\//i.test(url));
+
+  if (endpoints.length === 0) {
+    return [...DEFAULT_BINANCE_TICKER_ENDPOINTS];
+  }
+
+  return Array.from(new Set(endpoints));
+}
+
+const BINANCE_TICKER_ENDPOINTS = resolveTickerEndpoints();
 const endpointBlockedUntilByUrl = new Map<string, number>();
 let preferredEndpointIndex = 0;
 const tickerInFlight = new Map<string, Promise<number | null>>();
@@ -63,19 +87,37 @@ function isValidPrice(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseTickerSymbol(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.toUpperCase().trim();
+  return TICKER_SYMBOL_PATTERN.test(normalized) ? normalized : null;
+}
+
+function parseTickerPrice(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return isValidPrice(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return isValidPrice(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function parseTickerRows(payload: unknown): Map<string, number> {
   const rows = Array.isArray(payload) ? payload : [payload];
   const result = new Map<string, number>();
 
   for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const symbol = Reflect.get(row, 'symbol');
-    const rawPrice = Reflect.get(row, 'price');
-    if (typeof symbol !== 'string' || typeof rawPrice !== 'string') continue;
-
-    const price = Number(rawPrice);
-    if (!isValidPrice(price)) continue;
-    result.set(symbol.toUpperCase(), price);
+    if (!isRecord(row)) continue;
+    const symbol = parseTickerSymbol(row.symbol);
+    const price = parseTickerPrice(row.price);
+    if (!symbol || price === null) continue;
+    result.set(symbol, price);
   }
 
   return result;
@@ -135,7 +177,10 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
 
   try {
     return await fetch(url, { signal: controller.signal });
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[market] fetch failed', { url, err });
+    }
     return null;
   } finally {
     clearTimeout(timeoutId);
@@ -163,7 +208,10 @@ async function fetchTickerRowsWithFallback(query: string): Promise<Map<string, n
       const rows = parseTickerRows(await response.json());
       markEndpointHealthy(index);
       return rows;
-    } catch {
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.warn('[market] invalid ticker payload', { baseUrl, err });
+      }
       continue;
     }
   }
@@ -218,7 +266,27 @@ async function fetchTickersBatch(symbols: string[]): Promise<Map<string, number>
 function rememberPrice(asset: string, value: number): ResolvedAssetPrice {
   const ts = Date.now();
   priceCache.set(asset, { value, ts });
+  prunePriceCache(ts);
   return { value, ts, source: 'live' };
+}
+
+function prunePriceCache(now = Date.now()): void {
+  for (const [asset, entry] of priceCache.entries()) {
+    if (now - entry.ts > STALE_CACHE_MAX_AGE_MS) {
+      priceCache.delete(asset);
+    }
+  }
+
+  const overflow = priceCache.size - PRICE_CACHE_MAX_ENTRIES;
+  if (overflow <= 0) return;
+
+  // Evict the oldest timestamp entries first to keep cache bounded.
+  const oldestFirst = [...priceCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+  for (let i = 0; i < overflow; i += 1) {
+    const key = oldestFirst[i]?.[0];
+    if (!key) break;
+    priceCache.delete(key);
+  }
 }
 
 function staleOrUnavailable(asset: string): ResolvedAssetPrice {
@@ -233,6 +301,8 @@ async function resolveAssetsUSD(
   assets: string[],
   options: ResolveAssetsOptions = {},
 ): Promise<Record<string, ResolvedAssetPrice>> {
+  prunePriceCache();
+
   const unique = Array.from(new Set(assets.map(normalizeAsset).filter(Boolean)));
   const resolved: Record<string, ResolvedAssetPrice> = {};
   const missing: string[] = [];
@@ -374,18 +444,6 @@ export function calculatePositionMetricsFromSnapshot(
     hasUnavailablePrices: sources.some((source) => source === 'unavailable'),
     priceSourceByAsset,
   };
-}
-
-export async function getAssetPriceUSD(asset: string): Promise<number> {
-  const normalized = normalizeAsset(asset);
-  if (!normalized) return 0;
-  const snapshot = await getAssetPriceSnapshot([normalized]);
-  return snapshot.priceByAsset[normalized] ?? 0;
-}
-
-export async function getPriceMap(assets: string[]): Promise<Record<string, number>> {
-  const snapshot = await getAssetPriceSnapshot(assets);
-  return snapshot.priceByAsset;
 }
 
 export async function calculatePositionMetrics(

@@ -19,8 +19,19 @@ interface TextAnimationOptions {
 }
 
 const DEFAULT_SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const MAX_REMEMBERED_VALUES = 512;
 const lastNumericValueByKey = new Map<string, number>();
 const lastTextValueByKey = new Map<string, string>();
+
+function setRememberedValue<T>(map: Map<string, T>, key: string, value: T): void {
+  // Keep insertion order to evict oldest remembered keys when the map grows.
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+
+  if (map.size <= MAX_REMEMBERED_VALUES) return;
+  const oldestKey = map.keys().next().value as string | undefined;
+  if (oldestKey) map.delete(oldestKey);
+}
 
 function resolveStabilityKey(el: HTMLElement, explicitKey?: string): string | null {
   const trimmed = explicitKey?.trim();
@@ -31,7 +42,7 @@ function resolveStabilityKey(el: HTMLElement, explicitKey?: string): string | nu
 
 function setRememberedNumber(stabilityKey: string | null, value: number): void {
   if (!stabilityKey) return;
-  lastNumericValueByKey.set(stabilityKey, value);
+  setRememberedValue(lastNumericValueByKey, stabilityKey, value);
 }
 
 function getRememberedNumber(stabilityKey: string | null): number | undefined {
@@ -41,7 +52,7 @@ function getRememberedNumber(stabilityKey: string | null): number | undefined {
 
 function setRememberedText(stabilityKey: string | null, value: string): void {
   if (!stabilityKey) return;
-  lastTextValueByKey.set(stabilityKey, value);
+  setRememberedValue(lastTextValueByKey, stabilityKey, value);
 }
 
 function getRememberedText(stabilityKey: string | null): string | undefined {
@@ -52,6 +63,13 @@ function getRememberedText(stabilityKey: string | null): string | undefined {
 export function resetAnimationMemoryForTests(): void {
   lastNumericValueByKey.clear();
   lastTextValueByKey.clear();
+}
+
+export function getAnimationMemorySizesForTests(): { numeric: number; text: number } {
+  return {
+    numeric: lastNumericValueByKey.size,
+    text: lastTextValueByKey.size,
+  };
 }
 
 function requestTrackedFrame(
@@ -86,7 +104,10 @@ function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   try {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  } catch {
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[animation] matchMedia unavailable', err);
+    }
     return false;
   }
 }

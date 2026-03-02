@@ -52,18 +52,6 @@ function dayIndexAtCutoff(date: Date): number {
   return Math.floor((date.getTime() - cutoffOffsetMs) / DAY_MS);
 }
 
-function calculatePreciseBilledDays(subscriptionAt: Date, settlementAt: Date): number {
-  const elapsedMs = settlementAt.getTime() - subscriptionAt.getTime();
-  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
-  return elapsedMs / DAY_MS;
-}
-
-function hasExplicitInterval(
-  position: Pick<DualPosition, 'entryTime' | 'settlementTime'>,
-): boolean {
-  return Boolean(normalizeTime(position.entryTime) && normalizeTime(position.settlementTime));
-}
-
 export function calculateDualBilledDays(subscriptionAt: Date, settlementAt: Date): number {
   const subDay = dayIndexAtCutoff(subscriptionAt);
   const setDay = dayIndexAtCutoff(settlementAt);
@@ -74,9 +62,6 @@ export function calculateDualProjectedBilledDays(position: Pick<DualPosition, 'e
   const subscriptionAt = resolveDualEntryAt(position);
   const settlementAt = resolveDualSettlementAt(position);
   if (!subscriptionAt || !settlementAt) return 0;
-  if (hasExplicitInterval(position)) {
-    return calculatePreciseBilledDays(subscriptionAt, settlementAt);
-  }
   return calculateDualBilledDays(subscriptionAt, settlementAt);
 }
 
@@ -88,14 +73,6 @@ export function calculateDualElapsedBilledDays(
   const settlementAt = resolveDualSettlementAt(position);
   if (!subscriptionAt || !settlementAt) return 0;
   if (now.getTime() <= subscriptionAt.getTime()) return 0;
-
-  if (hasExplicitInterval(position)) {
-    const projectedDays = calculatePreciseBilledDays(subscriptionAt, settlementAt);
-    const upperBoundAt = now.getTime() < settlementAt.getTime() ? now : settlementAt;
-    const elapsedMs = upperBoundAt.getTime() - subscriptionAt.getTime();
-    const elapsedDays = elapsedMs > 0 ? elapsedMs / DAY_MS : 0;
-    return Math.max(0, Math.min(projectedDays, elapsedDays));
-  }
 
   const projectedDays = calculateDualBilledDays(subscriptionAt, settlementAt);
   const upperBound = now.getTime() < settlementAt.getTime() ? now : settlementAt;

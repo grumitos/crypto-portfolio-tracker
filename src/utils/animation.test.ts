@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockMatchMedia } from '../test/test-utils';
 import {
+  getAnimationMemorySizesForTests,
   getElementNumericValue,
   resetAnimationMemoryForTests,
   setAnimatedNumber,
@@ -190,5 +191,31 @@ describe('animation utils', () => {
     expect(remount.textContent).toBe('35.00%');
     expect(remount.dataset.numericValue).toBe('35');
     rafSpy.mockRestore();
+  });
+
+  it('caps remembered numeric values to avoid unbounded memory growth', () => {
+    mockMatchMedia(true);
+    const map = new WeakMap<HTMLElement, number>();
+
+    for (let i = 0; i < 700; i += 1) {
+      const el = document.createElement('div');
+      el.id = `metric-${i}`;
+      setAnimatedNumber(map, el, i, (next) => `${next}`, { enabled: false });
+    }
+
+    expect(getAnimationMemorySizesForTests().numeric).toBeLessThanOrEqual(512);
+  });
+
+  it('caps remembered text values to avoid unbounded memory growth', () => {
+    mockMatchMedia(true);
+    const map = new WeakMap<HTMLElement, number>();
+
+    for (let i = 0; i < 700; i += 1) {
+      const el = document.createElement('div');
+      el.id = `label-${i}`;
+      setAnimatedText(map, el, `value-${i}`, { enabled: false, mode: 'fade' });
+    }
+
+    expect(getAnimationMemorySizesForTests().text).toBeLessThanOrEqual(512);
   });
 });

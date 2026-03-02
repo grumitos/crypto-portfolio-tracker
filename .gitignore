@@ -12,6 +12,10 @@ tmpclaude-*-cwd
 *.tmp
 *.temp
 .cache/
+tmp_*.html
+tmp_binance_*.html
+audit.md
+audit_report.md
 
 # Logs
 *.log

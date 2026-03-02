@@ -56,6 +56,7 @@ Abrir la URL local que imprime Vite (por defecto `http://localhost:5173`).
 - Importacion masiva con `Pegar y reemplazar`:
   - Parsea texto de posiciones exportadas/copypasteadas desde Binance.
   - Reemplaza la lista completa por las posiciones parseadas.
+- Parser estricto Binance-only (sin capas ni opciones de otros exchanges).
 - Activo base permitido por defecto para parser: `BTC`, `ETH`, `BNB`, `SOL`, `USDT`, `USDC`.
 
 ### 3) Simulador
@@ -90,6 +91,13 @@ Abrir la URL local que imprime Vite (por defecto `http://localhost:5173`).
   - Se registra estado de error de API.
   - Se muestra banner `No se pudo actualizar precios de mercado`.
   - El header pasa a estado de error con ultimo dato valido relativo.
+
+## Regla de facturacion (Dual Binance)
+- Liquidacion de referencia: `08:00 UTC` (`03:00 UTC-5`) para la fecha de settlement.
+- Corte de ventana Binance: `15:59 UTC` (`10:59 UTC-5`).
+- Dias facturados:
+  - Se calculan por ventanas de corte Binance (no por fracciones de hora).
+  - El minimo facturable es `1` dia.
 
 ## Backup de datos
 El modal de backup permite:

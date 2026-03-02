@@ -2,6 +2,7 @@ import { iconDownload, iconUpload } from '../utils/icons';
 import { exportBackup, importBackup } from '../utils/storage';
 import { todayISODateLocal } from '../utils/date';
 import { bindModalEvents, openModal, closeModal } from '../utils/modal-manager';
+import { showAlertDialog } from '../utils/dialogs';
 
 export function renderBackupModal(): string {
     return `
@@ -57,8 +58,11 @@ export function bindBackupEvents(app: HTMLElement, onStateChange: () => void): v
                 importBackup(json);
                 closeModal(modal);
                 onStateChange();
-            } catch {
-                alert('Error al importar el archivo. Asegurate de que sea un JSON valido.');
+            } catch (err) {
+                if (import.meta.env.DEV) {
+                    console.warn('[backup] import failed', err);
+                }
+                void showAlertDialog('Error al importar el archivo. Asegurate de que sea un JSON valido.');
             }
         };
         reader.readAsText(file);

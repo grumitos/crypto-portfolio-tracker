@@ -39,6 +39,7 @@ const AUTO_CAPITAL_HINT = 'Capital en posiciones';
 const AUTO_APR_HINT_PREFIX = 'Promedio ponderado (USD):';
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
+let chartJsRegistered = false;
 
 interface TriggerSimulationOptions {
   persist?: boolean;
@@ -392,13 +393,13 @@ export function renderSimulator(container: HTMLElement): () => void {
   let disposed = false;
   let isHydrating = false;
 
-  const syncAutoGoal = (): boolean => {
+  const syncAutoGoal = (state: ReturnType<typeof loadState> = loadState()): boolean => {
     if (!autoState.goal) return false;
     const goalInput = container.querySelector('#sim-goal') as HTMLInputElement | null;
     const goalHint = container.querySelector('#sim-goal-hint') as HTMLElement | null;
     if (!goalInput) return false;
 
-    const nextGoal = loadState().portfolio.goalAmount.toFixed(2);
+    const nextGoal = state.portfolio.goalAmount.toFixed(2);
     let changed = false;
     if (goalInput.value !== nextGoal) {
       goalInput.value = nextGoal;
@@ -408,11 +409,14 @@ export function renderSimulator(container: HTMLElement): () => void {
     return changed;
   };
 
-  const syncAutoValues = async (forceRefresh = false): Promise<boolean> => {
+  const syncAutoValues = async (
+    forceRefresh = false,
+    state: ReturnType<typeof loadState> = loadState(),
+  ): Promise<boolean> => {
     if (disposed || isHydrating || !container.isConnected) return false;
     isHydrating = true;
     try {
-      const { positions } = loadState();
+      const { positions } = state;
       return await hydrateAutoValues(container, positions, autoState, forceRefresh);
     } finally {
       isHydrating = false;
@@ -431,8 +435,9 @@ export function renderSimulator(container: HTMLElement): () => void {
 
   const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
     if (disposed || !container.isConnected) return;
-    const changed = await syncAutoValues(forceRefresh);
-    const goalChanged = syncAutoGoal();
+    const state = loadState();
+    const changed = await syncAutoValues(forceRefresh, state);
+    const goalChanged = syncAutoGoal(state);
     if (changed || goalChanged) {
       triggerSimulation({ persist: true, animate: true });
     } else {
@@ -443,6 +448,7 @@ export function renderSimulator(container: HTMLElement): () => void {
   return () => {
     disposed = true;
     unsubscribeMarket();
+    void destroyProjectionChart(container);
   };
 }
 
@@ -616,6 +622,7 @@ function runSimulation(
 
   if (hasInvalidCore || hasInvalidBreakevenTarget) {
     setInvalidSimulationOutputs(container);
+    void destroyProjectionChart(container);
     return;
   }
 
@@ -626,7 +633,7 @@ function runSimulation(
     goal,
     invested,
   });
-  const milestones = resolveSimulationMilestones(snapshot, 'both');
+  const milestones = resolveSimulationMilestones(snapshot);
   const beDateEl = container.querySelector('#sim-out-be-date') as HTMLElement | null;
   const beTimeEl = container.querySelector('#sim-out-be-time') as HTMLElement | null;
   const goalDateEl = container.querySelector('#sim-out-goal-date') as HTMLElement | null;
@@ -657,6 +664,7 @@ function runSimulation(
     if (tableContainer) tableContainer.style.display = 'none';
     if (canvas) canvas.style.display = 'none';
     if (chartSkeleton) chartSkeleton.style.display = 'none';
+    void destroyProjectionChart(container);
     return;
   }
 
@@ -700,6 +708,22 @@ function runSimulation(
   void renderProjectionChart(container, projectedRows, snapshot.targetByMilestone);
 }
 
+async function destroyProjectionChart(container: HTMLElement): Promise<void> {
+  const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) return;
+
+  try {
+    const { Chart } = await import('chart.js');
+    const existingChart = Chart.getChart(canvas);
+    if (existingChart) {
+      existingChart.destroy();
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[Simulator] chart cleanup failed:', err);
+  }
+}
+
 async function renderProjectionChart(
   container: HTMLElement,
   rows: { month: number; date: string; balance: number }[],
@@ -714,7 +738,10 @@ async function renderProjectionChart(
     if (!context) return;
 
     const { Chart, registerables } = await import('chart.js');
-    Chart.register(...registerables);
+    if (!chartJsRegistered) {
+      Chart.register(...registerables);
+      chartJsRegistered = true;
+    }
 
     const existingChart = Chart.getChart(canvas);
     if (existingChart) existingChart.destroy();
