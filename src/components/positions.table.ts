@@ -26,17 +26,6 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
       </div>
       <div class="table-container">
         <table class="positions-table">
-          <colgroup>
-            <col style="width:11%">
-            <col style="width:15%">
-            <col style="width:8%">
-            <col style="width:11%">
-            <col style="width:8%">
-            <col style="width:11%">
-            <col style="width:11%">
-            <col style="width:14%">
-            <col style="width:11%">
-          </colgroup>
           <thead>
             <tr>
               <th>Activo</th>
@@ -143,9 +132,6 @@ function renderComponentRows(parent: DualPosition): string {
 function formatRemainingTime(position: DualPosition): string {
   const remainingMs = getRemainingMsToSettlement(position);
   const isSettled = isDualSettlementReached(position);
-  const totalDaysRaw = calculateDualProjectedBilledDays(position);
-  const elapsedRaw = calculateDualElapsedBilledDays(position);
-  const remaining = Math.max(0, totalDaysRaw - elapsedRaw);
 
   if (isSettled) {
     return '<span class="mono text-muted">Liquidada</span>';
@@ -164,10 +150,23 @@ function formatRemainingTime(position: DualPosition): string {
     return `<span class="mono text-accent">${hours}h ${minutesLabel}m</span>`;
   }
 
-  const totalDays = Math.ceil(totalDaysRaw);
-  const dayNum = Math.max(0, Math.min(Math.floor(elapsedRaw), totalDays));
-  const colorClass = remaining <= 1 ? 'text-accent' : '';
-  return `<span class="mono ${colorClass}">${dayNum}d</span><span class="text-muted" style="font-size:0.7rem;margin-left:2px">/ ${totalDays}d</span>`;
+  if (Number.isFinite(remainingMs) && remainingMs > 0) {
+    const remainingDays = Math.max(1, Math.ceil(remainingMs / ONE_DAY_MS));
+    const colorClass = remainingDays <= 1 ? 'text-accent' : '';
+    return `<span class="mono ${colorClass}">${remainingDays}d</span>`;
+  }
+
+  // Fallback for edge cases where settlement timestamp cannot be resolved.
+  const totalDaysRaw = calculateDualProjectedBilledDays(position);
+  const elapsedRaw = calculateDualElapsedBilledDays(position);
+  const remainingDaysFallback = Math.max(0, totalDaysRaw - elapsedRaw);
+  if (remainingDaysFallback > 0) {
+    const roundedRemainingDays = Math.max(1, Math.ceil(remainingDaysFallback));
+    const colorClass = roundedRemainingDays <= 1 ? 'text-accent' : '';
+    return `<span class="mono ${colorClass}">${roundedRemainingDays}d</span>`;
+  }
+
+  return '<span class="mono text-muted">---</span>';
 }
 
 function getRemainingMsToSettlement(position: DualPosition): number {

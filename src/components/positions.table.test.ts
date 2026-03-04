@@ -85,7 +85,7 @@ describe('positions table rendering', () => {
     expect(grouped).toContain('397.80%');
   });
 
-  it('formats remaining time as seconds, hours/minutes, day progress and settled state', () => {
+  it('formats remaining time as seconds, hours/minutes, day countdown and settled state', () => {
     vi.setSystemTime(new Date(2026, 1, 21, 12, 0, 30));
 
     const secondsHtml = renderPositionGroup('Buy Low', [
@@ -121,8 +121,8 @@ describe('positions table rendering', () => {
         settlementTime: '10:00',
       }),
     ]);
-    expect(daysHtml).toContain('/ ');
-    expect(daysHtml).toContain('d</span>');
+    expect(daysHtml).toContain('3d');
+    expect(daysHtml).not.toContain('/ ');
 
     vi.setSystemTime(new Date(2026, 1, 22, 12, 0, 0));
     const settledHtml = renderPositionGroup('Buy Low', [

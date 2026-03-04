@@ -31,6 +31,57 @@ Holding
     expect(parsed[1].subscriptionAsset).toBe('SOL');
   });
 
+  it('parses Spanish "Comprar bajo" direction from pasted Binance rows', () => {
+    const raw = `
+image
+image
+USDT-ETH
+Comprar bajo
+2026-03-03 03:44
+19,101.4 USDT
+≈ $19,101.4
+1,875 2026-03-04 03:00
+140.39%
+Holding
+image
+image
+USDT-ETH
+Comprar bajo
+2026-03-03 03:43
+19,101 USDT
+≈ $19,101
+1,850 2026-03-04 03:00
+103.62%
+Holding
+`.trim();
+
+    const parsed = parseBinancePositions(raw);
+    expect(parsed).toHaveLength(2);
+    expect(parsed.every((position) => position.direction === 'buy-low')).toBe(true);
+    expect(parsed[0]).toMatchObject({
+      asset: 'ETH',
+      subscriptionAsset: 'USDT',
+      amount: 19101.4,
+      targetPrice: 1875,
+      entryDate: '2026-03-03',
+      entryTime: '03:44',
+      settlementDate: '2026-03-04',
+      settlementTime: '03:00',
+      apr: 140.39,
+    });
+    expect(parsed[1]).toMatchObject({
+      asset: 'ETH',
+      subscriptionAsset: 'USDT',
+      amount: 19101,
+      targetPrice: 1850,
+      entryDate: '2026-03-03',
+      entryTime: '03:43',
+      settlementDate: '2026-03-04',
+      settlementTime: '03:00',
+      apr: 103.62,
+    });
+  });
+
   it('rejects blocks using assets outside the allowed pool', () => {
     const raw = `
 DOGE-USDT

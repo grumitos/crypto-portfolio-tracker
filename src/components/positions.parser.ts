@@ -174,6 +174,8 @@ function parseDirectionText(value: string): Direction | null {
 
   if (
     normalized.includes('buy low')
+    || normalized.includes('compra bajo')
+    || normalized.includes('comprar bajo')
     || normalized.includes('compra barato')
     || normalized.includes('comprar barato')
   ) {
@@ -181,6 +183,8 @@ function parseDirectionText(value: string): Direction | null {
   }
   if (
     normalized.includes('sell high')
+    || normalized.includes('vende alto')
+    || normalized.includes('vender alto')
     || normalized.includes('vende caro')
     || normalized.includes('vender caro')
   ) {

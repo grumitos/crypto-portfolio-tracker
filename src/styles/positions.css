@@ -71,8 +71,8 @@ table {
 }
 
 .positions-table {
-  table-layout: fixed;
-  min-width: 850px;
+  table-layout: auto;
+  min-width: 900px;
 }
 
 .position-datetime-inputs {
@@ -113,6 +113,7 @@ table {
 
 .pos-toggle-row td {
   padding-top: 0;
+  padding-bottom: 0;
   border-bottom-color: transparent;
 }
 
@@ -130,11 +131,12 @@ table {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  line-height: 1;
   font-size: 0.7rem;
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
-  padding: 3px 10px 3px 6px;
+  padding: 4px 10px 4px 6px;
   border-radius: 4px;
   transition: background 0.15s ease, color 0.15s ease;
 }
