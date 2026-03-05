@@ -778,6 +778,10 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
       await showAlertDialog('Completa todos los campos requeridos.');
       return;
     }
+    if (amount <= 0 || apr < 0) {
+      await showAlertDialog('El monto debe ser mayor a 0 y el APR no puede ser negativo.');
+      return;
+    }
     if (!ALLOWED_ASSETS.has(asset)) {
       await showAlertDialog('Activo invalido. Solo BTC, ETH, BNB, SOL, USDT y USDC.');
       return;

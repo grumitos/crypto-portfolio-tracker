@@ -196,6 +196,15 @@ describe('storage', () => {
     expect(loadState().portfolio.currentBalance).toBe(1500);
   });
 
+  it('rejects unrecognized legacy backup objects without overwriting persisted state', () => {
+    const state = loadState();
+    state.portfolio.currentBalance = 777;
+    saveState(state);
+
+    expect(() => importBackup(JSON.stringify({ foo: 'bar' }))).toThrow('Formato de backup no valido');
+    expect(loadState().portfolio.currentBalance).toBe(777);
+  });
+
   it('rejects backups from unsupported future versions', () => {
     const futureBackup = JSON.stringify({
       version: 999,
@@ -251,5 +260,28 @@ describe('storage', () => {
       '2026-02-21',
     ]);
     expect(state.portfolio.balanceHistory[1].balance).toBe(450);
+  });
+
+  it('does not throw when localStorage writes fail', () => {
+    const storage = createMemoryStorage();
+    const setItem = vi.fn(() => {
+      throw new Error('quota exceeded');
+    });
+    Object.defineProperty(storage, 'setItem', {
+      value: setItem,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: storage,
+      configurable: true,
+      writable: true,
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(() => saveState(loadState())).not.toThrow();
+    expect(() => saveCalcState(getDefaultCalcState())).not.toThrow();
+
+    warnSpy.mockRestore();
   });
 });

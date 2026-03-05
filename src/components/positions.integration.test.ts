@@ -264,6 +264,33 @@ describe('positions integration', () => {
     container.remove();
   });
 
+  it('blocks saving when amount is non-positive or APR is negative', async () => {
+    seedState([]);
+    const onStateChange = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, onStateChange);
+    await flushMicrotasks();
+
+    (container.querySelector('#btn-add-position') as HTMLButtonElement).click();
+    (container.querySelector('#input-amount') as HTMLInputElement).value = '0';
+    (container.querySelector('#input-apr') as HTMLInputElement).value = '-1';
+    (container.querySelector('#input-target') as HTMLInputElement).value = '2000';
+    (container.querySelector('#input-entry-date') as HTMLInputElement).value = '2026-02-21';
+    (container.querySelector('#input-entry-time') as HTMLInputElement).value = '09:00';
+    (container.querySelector('#input-settlement-date') as HTMLInputElement).value = '2026-02-22';
+    (container.querySelector('#input-settlement-time') as HTMLInputElement).value = '03:00';
+    (container.querySelector('#btn-save-position') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(loadState().positions).toHaveLength(0);
+    expect(onStateChange).not.toHaveBeenCalled();
+    expect(showAlertDialog).toHaveBeenCalledWith('El monto debe ser mayor a 0 y el APR no puede ser negativo.');
+
+    dispose();
+    container.remove();
+  });
+
   it('supports edit mode click, delete and bulk replace import flow', async () => {
     seedState([{
       id: 'p1',

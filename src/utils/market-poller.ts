@@ -6,22 +6,24 @@ const subscribers = new Set<TickCallback>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let isHydrating = false;
 
+async function invokeSubscriber(callback: TickCallback, forceRefresh: boolean): Promise<void> {
+    try {
+        await callback(forceRefresh);
+    } catch (err) {
+        // Individual subscriber errors must not break other subscribers.
+        if (import.meta.env.DEV) {
+            console.warn('[market-poller] subscriber failed', err);
+        }
+    }
+}
+
 async function runTick(forceRefresh = true): Promise<void> {
     if (isHydrating) return;
     if (subscribers.size === 0) return;
 
     isHydrating = true;
     try {
-        const promises = Array.from(subscribers).map(cb => {
-            try {
-                return cb(forceRefresh);
-            } catch (err) {
-                // Individual subscriber errors must not break other subscribers.
-                if (import.meta.env.DEV) {
-                    console.warn('[market-poller] subscriber failed', err);
-                }
-            }
-        });
+        const promises = Array.from(subscribers).map((cb) => invokeSubscriber(cb, forceRefresh));
         await Promise.all(promises);
     } finally {
         isHydrating = false;
@@ -30,7 +32,9 @@ async function runTick(forceRefresh = true): Promise<void> {
 
 function startTimer(): void {
     if (pollTimer) return;
-    pollTimer = setInterval(() => runTick(true), MARKET_POLL_INTERVAL_MS);
+    pollTimer = setInterval(() => {
+        void runTick(true);
+    }, MARKET_POLL_INTERVAL_MS);
 }
 
 function stopTimer(): void {
@@ -55,7 +59,7 @@ export function subscribeToMarketTicks(callback: TickCallback, runImmediately = 
         // Escapar el loop asíncrono para no bloquear la suscripción
         setTimeout(() => {
             if (subscribers.has(callback)) {
-                void callback(false);
+                void invokeSubscriber(callback, false);
             }
         }, 0);
     }

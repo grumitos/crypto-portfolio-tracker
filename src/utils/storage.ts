@@ -221,6 +221,15 @@ function sanitizeAppState(raw: Partial<AppState> | null | undefined): AppState {
   };
 }
 
+function isLegacyAppBackupPayload(raw: Record<string, unknown>): boolean {
+  const hasPortfolio = Object.prototype.hasOwnProperty.call(raw, 'portfolio');
+  const hasPositions = Object.prototype.hasOwnProperty.call(raw, 'positions');
+  if (!hasPortfolio && !hasPositions) return false;
+  if (hasPortfolio && !isRecord(raw.portfolio)) return false;
+  if (hasPositions && !Array.isArray(raw.positions)) return false;
+  return true;
+}
+
 function inferSellSyncSource(
   sellPrice: string,
   sellPct: string,
@@ -297,7 +306,13 @@ export function loadState(): AppState {
 }
 
 export function saveState(state: AppState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[storage] failed to save app state', err);
+    }
+  }
 }
 
 // ── Portfolio updates ──
@@ -394,7 +409,7 @@ export function importBackup(json: string): AppState {
     return appState;
   }
 
-  if (isRecord(parsed)) {
+  if (isRecord(parsed) && isLegacyAppBackupPayload(parsed)) {
     const legacyState = sanitizeAppState(parsed as Partial<AppState>);
     saveState(legacyState);
     return legacyState;
@@ -439,5 +454,11 @@ export function loadCalcState(): CalculadoraState {
 }
 
 export function saveCalcState(state: CalculadoraState): void {
-  localStorage.setItem(CALC_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(CALC_KEY, JSON.stringify(state));
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[storage] failed to save calculadora state', err);
+    }
+  }
 }

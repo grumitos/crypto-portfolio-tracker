@@ -47,6 +47,11 @@ function ensureDialogElements(): DialogElements | null {
   bindModalEvents(overlay, [cancelButton]);
   cancelButton.addEventListener('click', () => settleDialog(false));
   confirmButton.addEventListener('click', () => settleDialog(true));
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      settleDialog(false);
+    }
+  });
 
   dialogElements = {
     overlay,

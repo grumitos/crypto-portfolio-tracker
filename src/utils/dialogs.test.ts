@@ -58,6 +58,24 @@ describe('dialogs', () => {
     await expect(pending).resolves.toBe(false);
   });
 
+  it('resolves false when confirm dialog is closed from overlay click', async () => {
+    const dialogs = await loadDialogs();
+    const pending = dialogs.showConfirmDialog('Cerrar por overlay?');
+    const root = getDialogRoot();
+
+    root.click();
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it('resolves alert dialog when closed from overlay click', async () => {
+    const dialogs = await loadDialogs();
+    const pending = dialogs.showAlertDialog('Overlay alert');
+    const root = getDialogRoot();
+
+    root.click();
+    await expect(pending).resolves.toBeUndefined();
+  });
+
   it('closes previous pending dialog when opening a new one', async () => {
     const dialogs = await loadDialogs();
     const first = dialogs.showConfirmDialog('Primero');

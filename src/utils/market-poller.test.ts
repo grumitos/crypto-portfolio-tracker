@@ -94,4 +94,24 @@ describe('market-poller', () => {
     unsubBad();
     unsubGood();
   });
+
+  it('isolates async rejections so polling continues for other subscribers', async () => {
+    const poller = await loadMarketPoller();
+    const badAsync = vi.fn(async () => {
+      throw new Error('async boom');
+    });
+    const good = vi.fn();
+
+    const unsubBad = poller.subscribeToMarketTicks(badAsync, false);
+    const unsubGood = poller.subscribeToMarketTicks(good, false);
+
+    await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
+
+    expect(badAsync).toHaveBeenCalledTimes(2);
+    expect(good).toHaveBeenCalledTimes(2);
+
+    unsubBad();
+    unsubGood();
+  });
 });
