@@ -31,6 +31,10 @@ Abrir la URL local que imprime Vite (por defecto `http://localhost:5173`).
 | `npm run test:run` | Tests una sola vez |
 | `npm run test:coverage` | Tests + reporte de coverage |
 | `npm run typecheck` | Validacion TypeScript |
+| `npm run lint` | Lint con ESLint |
+| `npm run lint:fix` | Lint + autofix |
+| `npm run format` | Formatear con Prettier |
+| `npm run format:check` | Verificar formato |
 | `npm run check` | Typecheck + tests + build |
 | `npm run check:ci` | Typecheck + coverage + build |
 
@@ -52,6 +56,7 @@ Abrir la URL local que imprime Vite (por defecto `http://localhost:5173`).
 
 ### 2) Posiciones
 - CRUD completo de posiciones Dual Investment.
+- **Tira de precios spot**: muestra precio actual y cambio 24h de los activos con posiciones (BTC, ETH, BNB, SOL). Orden fijo, excluye stablecoins.
 - Modo `Editar` para eliminar rapido desde la tabla.
 - Importacion masiva con `Pegar y reemplazar`:
   - Parsea texto de posiciones exportadas/copypasteadas desde Binance.
@@ -142,6 +147,16 @@ Referencia de paleta:
 |------|-------|-------|-----------|-------|
 | Light | `#FAF9F5` | `#141413` | `#1F1E1D` | `#2C84DB` |
 | Dark | `#262624` | `#FAF9F5` | `#DEDCD1` | `#2C84DB` |
+
+## Accesibilidad
+- `:focus-visible` en todos los elementos interactivos.
+- `aria-current="page"` en la navegacion activa.
+- `aria-expanded` y `aria-pressed` en toggles y leyendas.
+- Soporte `prefers-reduced-motion` para animaciones.
+- Targets tactiles minimos de 36px.
+
+## PWA
+Incluye `manifest.json`, iconos (192/512) y service worker basico (`public/sw.js`) para instalacion como app.
 
 ## Troubleshooting rapido
 - `No se pudo actualizar precios de mercado`:

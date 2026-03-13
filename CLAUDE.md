@@ -45,6 +45,10 @@ The four views:
 
 Larger components split logic into companion files (e.g. `positions.table.ts`, `positions.parser.ts`, `dashboard.state.ts`, `dashboard.events.ts`, `calculadora.math.ts`, `simulator.state.ts`).
 
+### Spot Price Strip
+
+The Positions view includes a horizontal strip of spot price cards showing live prices and 24h change for non-stablecoin assets (BTC, ETH, BNB, SOL). Fixed display order defined in `SPOT_STRIP_ASSET_ORDER`. Cards use a vertical layout: logo + symbol header, price, and 24h change. Responsive — cards share available width equally on mobile.
+
 ### Market Data
 
 `src/utils/market.ts` fetches prices from Binance API with US fallback. Resolution strategy: direct pair (`ASSETUSDT`), then cross via `ASSETBTC × BTCUSDT`. Prices cached in memory with 60s TTL.
@@ -68,6 +72,10 @@ Modals use native `<dialog>` elements via `src/utils/modal-manager.ts` (`openMod
 ### Styling
 
 CSS files in `src/styles/` with CSS custom properties for theming. Light/dark/system theme support via `[data-theme]` attribute. Theme variables defined in `variables.css`. Anti-FOUC inline script in `index.html` applies theme before CSS loads.
+
+### PWA
+
+Basic PWA support: `public/manifest.json`, icons (192/512 SVG), and a simple service worker (`public/sw.js`). Installable as a standalone app.
 
 ## Testing
 
