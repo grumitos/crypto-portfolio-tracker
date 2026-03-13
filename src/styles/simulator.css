@@ -38,6 +38,7 @@
 
 .sim-result-value {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   min-height: 1.6em;
   display: flex;
   align-items: center;

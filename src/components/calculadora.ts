@@ -99,16 +99,16 @@ export function renderCalculadora(container: HTMLElement): () => void {
       <!-- Config bar -->
       <div class="card">
         <div class="calc-config-bar">
-          <div class="form-group" style="margin-bottom:0">
+          <div class="form-group form-group-inline">
             <label for="calc-price">Precio activo</label>
             <div class="calc-input-wrap">
               <span class="calc-prefix">$</span>
               <input type="text" id="calc-price" class="calc-has-prefix" placeholder="600" inputmode="decimal" value="${state.price}">
             </div>
-            <span class="auto-tag is-auto" id="calc-price-lock" style="display:none;margin-top:2px">AUTO</span>
+            <span class="auto-tag is-auto hint-text" id="calc-price-lock" style="display:none">AUTO</span>
           </div>
 
-          <div class="form-group" style="margin-bottom:0">
+          <div class="form-group form-group-inline">
             <label for="calc-capital">Capital</label>
             <div class="calc-input-wrap">
               <span class="calc-prefix">$</span>
@@ -116,21 +116,21 @@ export function renderCalculadora(container: HTMLElement): () => void {
             </div>
           </div>
 
-          <div class="form-group" style="margin-bottom:0">
+          <div class="form-group form-group-inline">
             <label for="calc-trades">Trades/Ano</label>
             <input type="text" id="calc-trades" inputmode="decimal" value="${state.trades}">
           </div>
 
-          <div class="form-group" style="margin-bottom:0">
+          <div class="form-group form-group-inline">
             <label>Comision</label>
             <div class="calc-fee-row">
               <button type="button" class="preset-btn ${state.feePreset === 'spot' && !state.fdusdEnabled ? 'active' : ''}" id="calc-fee-spot">Spot</button>
               <button type="button" class="preset-btn ${state.feePreset === 'futures' ? 'active' : ''}" id="calc-fee-futures">Futuros</button>
               <button type="button" class="preset-btn ${state.feePreset === 'spot' && state.fdusdEnabled ? 'active' : ''}" id="calc-fee-fdusd" ${state.feePreset !== 'spot' ? 'disabled' : ''}>FDUSD</button>
             </div>
-            <div class="text-muted" style="font-size:0.72rem;margin-top:2px">
+            <div class="text-muted hint-text">
               Fee: <span id="calc-fee-display" class="mono">${getEffectiveFee().maker.toFixed(3)}%</span>
-              <span style="margin:0 4px">·</span>
+              <span class="calc-fee-sep">&middot;</span>
               Total: <span id="calc-fee-total" class="mono">-</span>
             </div>
           </div>
@@ -143,7 +143,7 @@ export function renderCalculadora(container: HTMLElement): () => void {
         <div>
           <!-- Execution -->
           <div class="card mb-md">
-            <div class="card-title flex-between" style="margin-bottom:var(--space-md)">
+            <div class="card-title flex-between mb-md">
               Ejecucion
               <button class="btn btn-sm" id="calc-reset-exec" title="Resetear valores">${iconRefreshCw(14)} Reset</button>
             </div>
@@ -168,9 +168,9 @@ export function renderCalculadora(container: HTMLElement): () => void {
 
           <!-- Purchases -->
           <div class="card">
-            <div class="card-title flex-between" style="margin-bottom:var(--space-md)">
+            <div class="card-title flex-between mb-md">
               Posiciones
-              <div style="display:flex;gap:var(--space-xs)">
+              <div class="flex-row gap-sm">
                 <button class="btn btn-sm btn-danger" id="calc-clear-purchases" ${state.purchases.length === 0 ? 'disabled' : ''}>${iconTrash(14)} Borrar</button>
                 <button class="btn btn-sm btn-primary" id="calc-add-purchase">${iconPlus(14)} Agregar</button>
               </div>
@@ -191,7 +191,7 @@ export function renderCalculadora(container: HTMLElement): () => void {
 
             <div id="calc-purchases-list"></div>
 
-            <div class="text-muted" style="font-size:0.78rem;margin-top:var(--space-sm)" id="calc-purchase-summary">
+            <div class="text-muted hint-text mt-md" id="calc-purchase-summary">
               ${state.purchases.length === 0 ? 'Agrega compras para calcular precio promedio ponderado.' : ''}
             </div>
           </div>
@@ -199,7 +199,7 @@ export function renderCalculadora(container: HTMLElement): () => void {
 
         <!-- Right: Metrics -->
         <div class="card">
-          <div class="card-title" style="margin-bottom:var(--space-md)">Senal Actual</div>
+          <div class="card-title mb-md">Senal Actual</div>
           <div class="calc-metrics-grid">
             <div class="calc-metric-card calc-hero">
               <span class="calc-metric-label">APR real</span>
@@ -267,19 +267,19 @@ function renderPurchaseRows(container: HTMLElement): void {
     const row = document.createElement('div');
     row.className = 'calc-purchase-row';
     row.innerHTML = `
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-inline">
         <input type="text" data-purchase-id="${purchase.id}" data-field="qty" placeholder="0.00" inputmode="decimal" value="${purchase.qty}">
       </div>
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-inline">
         <div class="calc-input-wrap">
           <span class="calc-prefix">$</span>
           <input type="text" data-purchase-id="${purchase.id}" data-field="price" class="calc-has-prefix" placeholder="0.00" inputmode="decimal" value="${purchase.price}">
         </div>
       </div>
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-inline">
         <input type="text" readonly tabindex="-1" class="calc-locked" value="${Number.isFinite(total) ? fmtNum(total, 2) : '-'}">
       </div>
-      <button type="button" class="btn btn-sm btn-danger calc-remove-btn" data-remove-id="${purchase.id}">${iconX(14)}</button>
+      <button type="button" class="btn btn-sm btn-danger calc-remove-btn" data-remove-id="${purchase.id}" aria-label="Eliminar posicion">${iconX(14)}</button>
     `;
     list.appendChild(row);
   }

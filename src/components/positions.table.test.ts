@@ -124,6 +124,19 @@ describe('positions table rendering', () => {
     expect(daysHtml).toContain('3d');
     expect(daysHtml).not.toContain('/ ');
 
+    // Extended format: shows days + hours when not exact
+    vi.setSystemTime(new Date(2026, 1, 21, 11, 0, 0));
+    const extendedHtml = renderPositionGroup('Buy Low', [
+      makePosition({
+        id: 'ext',
+        entryDate: '2026-02-20',
+        entryTime: '10:00',
+        settlementDate: '2026-02-24',
+        settlementTime: '10:00',
+      }),
+    ]);
+    expect(extendedHtml).toContain('2d 23h');
+
     vi.setSystemTime(new Date(2026, 1, 22, 12, 0, 0));
     const settledHtml = renderPositionGroup('Buy Low', [
       makePosition({

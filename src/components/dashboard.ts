@@ -427,7 +427,7 @@ export function renderDashboard(container: HTMLElement): () => void {
     <div class="section">
       <div class="section-header">
         <h2 class="section-title">Portfolio</h2>
-        <div style="display:flex;gap:var(--space-sm)">
+        <div class="flex-row gap-sm">
           <button class="btn btn-sm" id="btn-edit-balance">${iconWallet(14)}Ahorros</button>
           <button class="btn btn-sm" id="btn-edit-settings">${iconSettings(14)}Configurar</button>
         </div>
@@ -441,7 +441,7 @@ export function renderDashboard(container: HTMLElement): () => void {
         <div class="card">
           <div class="card-title">Saldo total</div>
           <div class="big-number accent" id="dash-balance">${formatUSD(displayBalance)}</div>
-          <div class="text-muted" id="dash-balance-date" style="font-size:0.75rem;margin-top:6px">
+          <div class="text-muted sub-text" id="dash-balance-date">
             ${formatDateLatin(portfolio.lastUpdated)}
           </div>
         </div>
@@ -450,7 +450,7 @@ export function renderDashboard(container: HTMLElement): () => void {
           <div class="big-number ${loss >= 0 ? 'gain' : 'loss'}" id="dash-pnl">
             ${formatUSD(loss)}
           </div>
-          <div id="dash-pnl-pct" class="mono ${loss >= 0 ? 'text-gain' : 'text-loss'}" style="font-size:0.85rem;margin-top:6px">
+          <div id="dash-pnl-pct" class="mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}">
             ${formatPct(lossPct)}
           </div>
         </div>
@@ -524,7 +524,7 @@ export function renderDashboard(container: HTMLElement): () => void {
       <div class="modal">
         <h3 class="modal-title">Ahorros</h3>
         <div class="form-group">
-          <label>Efectivo / stablecoins fuera de posiciones (USD)</label>
+          <label for="input-balance">Efectivo / stablecoins fuera de posiciones (USD)</label>
           <input type="text" id="input-balance" inputmode="decimal" value="${formatEditableCurrency(portfolio.savings)}">
         </div>
         <div class="modal-actions">
@@ -538,11 +538,11 @@ export function renderDashboard(container: HTMLElement): () => void {
       <div class="modal">
         <h3 class="modal-title">Configuracion</h3>
         <div class="form-group">
-          <label>Total invertido (USD)</label>
+          <label for="input-invested">Total invertido (USD)</label>
           <input type="text" id="input-invested" inputmode="decimal" value="${formatEditableCurrency(portfolio.totalInvested)}">
         </div>
         <div class="form-group">
-          <label>Meta (USD)</label>
+          <label for="input-goal">Meta (USD)</label>
           <input type="text" id="input-goal" inputmode="decimal" value="${formatEditableCurrency(portfolio.goalAmount)}">
         </div>
         <div class="modal-actions">

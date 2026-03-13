@@ -35,6 +35,9 @@ pnpm-debug.log*
 *.swo
 .claude/
 .codex/
+.agents/
+.agent/
+skills-lock.json
 
 # OS
 .DS_Store

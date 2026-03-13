@@ -40,13 +40,13 @@ function init(): void {
         <h1 class="app-title">Crypto <span>Portfolio Tracker</span></h1>
         <div class="app-last-update" id="app-last-update">Actualizado: pendiente</div>
       </div>
-      <nav class="nav">
+      <nav class="nav" aria-label="Vistas principales">
         <button class="nav-btn active" data-view="dashboard">${iconDashboard(15)}Dashboard</button>
         <button class="nav-btn" data-view="positions">${iconLayers(15)}Posiciones</button>
         <button class="nav-btn" data-view="simulator">${iconTrendingUp(15)}Simulador</button>
         <button class="nav-btn" data-view="calculadora">${iconCalculator(15)}Calculadora</button>
-        <button class="nav-btn" id="btn-backup" title="Exportar/Importar datos">${iconArchive(15)}</button>
-        <button class="theme-toggle" id="btn-theme" title="Cambiar tema">${themeIcon()}</button>
+        <button class="nav-btn" id="btn-backup" title="Exportar/Importar datos" aria-label="Exportar/Importar datos">${iconArchive(15)}</button>
+        <button class="theme-toggle" id="btn-theme" title="Cambiar tema" aria-label="Cambiar tema">${themeIcon()}</button>
       </nav>
     </header>
     <main id="view-container"></main>

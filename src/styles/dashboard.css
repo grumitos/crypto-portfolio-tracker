@@ -59,7 +59,7 @@
 .goal-progress-bar {
   margin-bottom: 10px;
   position: relative;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s var(--ease-out);
 }
 
 .goal-progress-zone {
@@ -68,10 +68,10 @@
   bottom: 0;
   z-index: 2;
   transition:
-    width 0.5s cubic-bezier(0.22, 1, 0.36, 1),
-    left 0.5s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.28s ease,
-    background-color 0.28s ease;
+    width 0.5s var(--ease-out-quint),
+    left 0.5s var(--ease-out-quint),
+    opacity 0.28s var(--ease-out),
+    background-color 0.28s var(--ease-out);
 }
 
 .goal-progress-zone-muted {
@@ -80,10 +80,10 @@
   bottom: 0;
   z-index: 1;
   transition:
-    width 0.5s cubic-bezier(0.22, 1, 0.36, 1),
-    left 0.5s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.28s ease,
-    background-color 0.28s ease;
+    width 0.5s var(--ease-out-quint),
+    left 0.5s var(--ease-out-quint),
+    opacity 0.28s var(--ease-out),
+    background-color 0.28s var(--ease-out);
 }
 
 .goal-progress-zone.breakeven {
@@ -144,15 +144,19 @@
   background: var(--bg-card);
   cursor: pointer;
   transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    color 0.2s ease,
-    transform 0.15s ease;
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    transform 0.15s var(--ease-out);
 }
 
 .goal-progress-legend:hover {
   border-color: var(--border-hover);
   background: var(--bg-hover);
+}
+
+.goal-progress-legend:active {
+  transform: scale(0.95);
 }
 
 .goal-progress-legend:focus-visible {
@@ -202,9 +206,8 @@
   color: var(--text-secondary);
 }
 
-.text-swap,
-.goal-text-swap {
-  animation: fadeInUp 0.2s ease;
+.text-swap {
+  animation: fadeInUp 0.2s var(--ease-out);
 }
 
 @keyframes legendShake {

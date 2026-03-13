@@ -263,14 +263,14 @@ export function renderSimulator(container: HTMLElement): () => void {
 
       <div class="grid-2">
         <div class="card">
-          <div class="card-title" style="margin-bottom:var(--space-md)">Parametros</div>
+          <div class="card-title mb-md">Parametros</div>
           <div class="form-group">
             <label class="label-with-badge">
               Capital actual (USD)
               <span class="auto-tag ${autoState.capital ? 'is-auto' : 'is-manual'}" id="sim-capital-tag">${autoState.capital ? 'AUTO' : 'MANUAL'}</span>
             </label>
             <input type="number" id="sim-capital" step="1" value="${autoState.capital ? '' : viewState.capital.toFixed(2)}">
-            <div class="text-muted" id="sim-capital-hint" style="font-size:0.72rem;margin-top:2px">
+            <div class="text-muted hint-text" id="sim-capital-hint">
               ${autoState.capital ? AUTO_CAPITAL_HINT : 'Valor personalizado'}
             </div>
           </div>
@@ -280,12 +280,12 @@ export function renderSimulator(container: HTMLElement): () => void {
               <span class="auto-tag ${autoState.apr ? 'is-auto' : 'is-manual'}" id="sim-apr-tag">${autoState.apr ? 'AUTO' : 'MANUAL'}</span>
             </label>
             <input type="number" id="sim-apr" step="1" value="${autoState.apr ? '' : viewState.apr.toFixed(2)}">
-            <div class="text-muted" id="sim-apr-hint" style="font-size:0.72rem;margin-top:2px">
+            <div class="text-muted hint-text" id="sim-apr-hint">
               ${autoState.apr ? formatAutoAprHint(null) : 'Valor personalizado'}
             </div>
           </div>
           <div class="form-group">
-            <label>Capitalizacion</label>
+            <label for="sim-frequency">Capitalizacion</label>
             <select id="sim-frequency">
               <option value="daily" ${viewState.frequency === 'daily' ? 'selected' : ''}>Diaria</option>
               <option value="weekly" ${viewState.frequency === 'weekly' ? 'selected' : ''}>Semanal</option>
@@ -298,18 +298,18 @@ export function renderSimulator(container: HTMLElement): () => void {
               <span class="auto-tag ${autoState.goal ? 'is-auto' : 'is-manual'}" id="sim-goal-tag">${autoState.goal ? 'AUTO' : 'MANUAL'}</span>
             </label>
             <input type="number" id="sim-goal" step="1" value="${(autoState.goal ? state.portfolio.goalAmount : viewState.goal).toFixed(2)}">
-            <div class="text-muted" id="sim-goal-hint" style="font-size:0.72rem;margin-top:2px">
+            <div class="text-muted hint-text" id="sim-goal-hint">
               ${autoState.goal ? 'Meta del dashboard' : 'Valor personalizado'}
             </div>
           </div>
-          <div style="display:flex;gap:var(--space-sm)">
-            <button class="btn btn-sm" id="btn-sim-reset" style="flex:1">${iconRefreshCw(14)} Resetear AUTO</button>
-            <button class="btn btn-primary" id="btn-simulate" style="flex:2">${iconTarget(14)} Simular</button>
+          <div class="flex-row gap-sm">
+            <button class="btn btn-sm flex-1" id="btn-sim-reset">${iconRefreshCw(14)} Resetear AUTO</button>
+            <button class="btn btn-primary flex-2" id="btn-simulate">${iconTarget(14)} Simular</button>
           </div>
         </div>
 
         <div class="card" id="sim-results">
-          <div class="card-title" style="margin-bottom:var(--space-lg)">Resultados</div>
+          <div class="card-title mb-lg">Resultados</div>
           <div class="sim-results-container">
             <div class="sim-milestones-grid">
               <div class="sim-milestone-col">
@@ -372,8 +372,8 @@ export function renderSimulator(container: HTMLElement): () => void {
       </div>
 
       <div class="card" id="sim-table-container">
-        <div class="card-title" style="margin-bottom:var(--space-md)">Proyeccion mensual</div>
-        <div class="chart-container" style="margin-bottom:var(--space-lg)">
+        <div class="card-title mb-md">Proyeccion mensual</div>
+        <div class="chart-container mb-lg">
           <canvas id="projection-chart" style="display:none"></canvas>
           <div class="sim-projection-chart-skeleton" id="sim-projection-chart-skeleton">
             <span class="skeleton" style="width:100%;height:184px"></span>

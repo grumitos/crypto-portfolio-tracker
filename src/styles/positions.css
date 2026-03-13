@@ -30,7 +30,7 @@
   background: linear-gradient(90deg, transparent, var(--bg-card) 40%);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s var(--ease-out);
 }
 
 tr:hover .pos-row-actions {
@@ -80,23 +80,27 @@ table {
 
 .positions-table {
   table-layout: fixed;
-  min-width: 940px;
+  min-width: 860px;
+}
+
+.positions-table col.col-pos-asset {
+  width: 13%;
 }
 
 .positions-table col.col-pos-amount {
-  width: 11%;
+  width: 13%;
 }
 
 .positions-table col.col-pos-apr {
-  width: 8%;
+  width: 7%;
 }
 
 .positions-table col.col-pos-usd {
-  width: 12%;
+  width: 11%;
 }
 
 .positions-table col.col-pos-target {
-  width: 9%;
+  width: 7%;
 }
 
 .positions-table col.col-pos-subscription {
@@ -105,6 +109,14 @@ table {
 
 .positions-table col.col-pos-settlement {
   width: 12%;
+}
+
+.positions-table col.col-pos-earnings {
+  width: 16%;
+}
+
+.positions-table col.col-pos-remaining {
+  width: 9%;
 }
 
 .position-datetime-inputs {
@@ -156,7 +168,7 @@ table {
 .pos-components-chevron {
   display: inline-block;
   font-size: 0.55rem;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s var(--ease-out);
 }
 
 .pos-components-summary {
@@ -171,8 +183,8 @@ table {
   padding: 4px 10px 4px 6px;
   border-radius: 4px;
   transition:
-    background 0.15s ease,
-    color 0.15s ease;
+    background 0.15s var(--ease-out),
+    color 0.15s var(--ease-out);
 }
 
 .pos-components-summary:hover {
@@ -270,6 +282,7 @@ tr:hover td {
 td.mono {
   font-family: var(--font-mono);
   font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Direction toggle ── */
@@ -291,7 +304,9 @@ td.mono {
   font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out);
 }
 
 .dir-btn:first-child {
@@ -313,6 +328,10 @@ td.mono {
   color: var(--text-primary);
 }
 
+.dir-btn:active {
+  transform: scale(0.97);
+}
+
 /* ── Duration presets ── */
 .duration-presets {
   display: flex;
@@ -330,12 +349,19 @@ td.mono {
   font-size: 0.75rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    color 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out);
 }
 
 .preset-btn:hover {
   border-color: var(--accent-warm);
   color: var(--accent-warm);
+}
+
+.preset-btn:active {
+  transform: scale(0.95);
 }
 
 .preset-btn.active {

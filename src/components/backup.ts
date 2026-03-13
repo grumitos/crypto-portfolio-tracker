@@ -9,13 +9,13 @@ export function renderBackupModal(): string {
     <dialog id="modal-backup" class="modal-overlay">
       <div class="modal">
         <h3 class="modal-title">Backup de datos</h3>
-        <div style="display:flex;flex-direction:column;gap:var(--space-md)">
+        <div class="backup-body">
           <button class="btn btn-primary" id="btn-export">${iconDownload(15)}Exportar JSON</button>
-          <div style="border-top:1px solid var(--border);padding-top:var(--space-md)">
-            <label class="text-secondary" style="font-size:0.8rem;display:flex;align-items:center;gap:6px;margin-bottom:var(--space-sm)">
+          <div class="backup-import-section">
+            <label class="backup-import-label text-secondary">
               ${iconUpload(14)}Importar backup JSON
             </label>
-            <input type="file" id="backup-file-input" accept=".json" style="font-size:0.8rem;color:var(--text-secondary)">
+            <input type="file" id="backup-file-input" accept=".json" class="backup-file-input">
           </div>
         </div>
         <div class="modal-actions">

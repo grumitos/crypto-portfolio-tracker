@@ -152,8 +152,9 @@ function setSpotValue(el: HTMLElement | null, value: number): void {
 }
 
 function formatSpotChange(value: number): string {
+  const arrow = value > 0 ? '\u25B2' : value < 0 ? '\u25BC' : '';
   const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
+  return `${arrow}${sign}${value.toFixed(2)}%`;
 }
 
 function setSpotChange(el: HTMLElement | null, value: number | null): void {
@@ -411,8 +412,8 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
       `
           : `
         <div class="card empty-state">
-          <p>No tienes posiciones registradas.</p>
-          <p>Agrega tus posiciones activas de Dual Investment.</p>
+          <p>Sin posiciones activas</p>
+          <p>Usa el botón "Agregar" o pega texto desde Binance para importar tus posiciones de Dual Investment.</p>
         </div>
       `
       }
@@ -426,7 +427,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
 
         <!-- Direction toggle -->
         <div class="form-group">
-          <label>Direccion</label>
+          <label for="input-direction">Direccion</label>
           <div class="direction-toggle">
             <button class="dir-btn active" data-dir="buy-low" id="dir-buy-low">Buy Low</button>
             <button class="dir-btn" data-dir="sell-high" id="dir-sell-high">Sell High</button>
@@ -437,13 +438,13 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
         <!-- Asset -->
         <div class="grid-2">
           <div class="form-group">
-            <label>Activo</label>
+            <label for="input-asset">Activo</label>
             <select id="input-asset">
               ${ASSET_POOL.map((a) => `<option value="${a}" ${a === 'ETH' ? 'selected' : ''}>${a}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
-            <label>Moneda de suscripcion</label>
+            <label for="input-sub-asset">Moneda de suscripcion</label>
             <select id="input-sub-asset">
               ${SUBSCRIPTION_ASSETS.map((a) => `<option value="${a}" ${a === 'USDT' ? 'selected' : ''}>${a}</option>`).join('')}
             </select>
@@ -453,24 +454,24 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
         <!-- Amount and APR -->
         <div class="grid-2">
           <div class="form-group">
-            <label>Monto suscrito</label>
+            <label for="input-amount">Monto suscrito</label>
             <input type="number" id="input-amount" step="1" placeholder="0.00">
           </div>
           <div class="form-group">
-            <label>APR (%)</label>
+            <label for="input-apr">APR (%)</label>
             <input type="number" id="input-apr" step="1" placeholder="0.00">
           </div>
         </div>
 
         <!-- Target price -->
         <div class="form-group">
-          <label>Precio objetivo</label>
+          <label for="input-target">Precio objetivo</label>
           <input type="number" id="input-target" step="1" placeholder="0.00">
         </div>
 
         <!-- Dates with presets -->
         <div class="form-group">
-          <label>Fecha de suscripcion</label>
+          <label for="input-entry-date">Fecha de suscripcion</label>
           <div class="grid-2 position-datetime-inputs">
             <input type="date" id="input-entry-date">
             <input type="time" id="input-entry-time" step="60" placeholder="HH:MM">
@@ -478,7 +479,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
         </div>
 
         <div class="form-group">
-          <label>Fecha de liquidacion</label>
+          <label for="input-settlement-date">Fecha de liquidacion</label>
           <div class="duration-presets">
             ${DURATION_PRESETS.map((p) => `<button class="preset-btn" data-days="${p.days}">${p.label}</button>`).join('')}
           </div>
@@ -499,9 +500,9 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
       <div class="modal">
         <h3 class="modal-title">Pegar posiciones (Binance)</h3>
         <div class="form-group">
-          <label>Pega el bloque completo copiado desde Binance</label>
+          <label for="input-bulk-import">Pega el bloque completo copiado desde Binance</label>
           <textarea id="input-bulk-import" rows="14" placeholder="USDC-ETH&#10;Buy-low&#10;2026-02-19 14:29&#10;100 USDC&#10;..."></textarea>
-          <div class="text-muted" style="font-size:0.72rem;margin-top:6px">
+          <div class="text-muted hint-text">
             Reemplazara todas las posiciones actuales.
           </div>
         </div>

@@ -14,7 +14,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 0.15s ease;
+  animation: fadeIn 0.15s var(--ease-out);
 }
 
 .modal-overlay::backdrop {
@@ -33,17 +33,15 @@
 }
 
 .modal {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--space-xl);
   width: 100%;
-  max-width: 460px;
+  max-width: min(460px, calc(100vw - 2 * var(--space-lg)));
   max-height: 90vh;
   overflow-y: auto;
-  animation: modalSlideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: modalSlideIn 0.25s var(--ease-out-quint);
   box-shadow: var(--shadow-lg);
 }
 

@@ -18,10 +18,10 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
   const safeTitle = escapeHtml(title);
   return `
     <div class="card">
-      <div class="flex-between" style="margin-bottom:var(--space-md)">
-        <div class="card-title" style="margin-bottom:0">
+      <div class="flex-between mb-md">
+        <div class="card-title form-group-inline">
           <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${safeTitle}</span>
-          <span class="text-muted" style="margin-left:var(--space-sm);font-size:0.75rem">${positions.length} posicion${positions.length > 1 ? 'es' : ''}</span>
+          <span class="text-muted sub-text" style="margin-left:var(--space-sm)">${positions.length} posicion${positions.length > 1 ? 'es' : ''}</span>
         </div>
       </div>
       <div class="table-container">
@@ -164,9 +164,12 @@ function formatRemainingTime(position: DualPosition): string {
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0) {
-    const remainingDays = Math.max(1, Math.ceil(remainingMs / ONE_DAY_MS));
-    const colorClass = remainingDays <= 1 ? 'text-accent' : '';
-    return `<span class="mono ${colorClass}">${remainingDays}d</span>`;
+    const totalHours = Math.floor(remainingMs / (60 * ONE_MINUTE_MS));
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const colorClass = days < 1 ? 'text-accent' : '';
+    const label = hours > 0 ? `${days}d ${hours}h` : `${days > 0 ? days : 1}d`;
+    return `<span class="mono ${colorClass}">${label}</span>`;
   }
 
   // Fallback for edge cases where settlement timestamp cannot be resolved.

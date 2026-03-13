@@ -109,7 +109,7 @@ describe('positions integration', () => {
     const dispose = renderPositions(container, vi.fn());
     await flushMicrotasks();
 
-    expect(container.textContent).toContain('No tienes posiciones registradas');
+    expect(container.textContent).toContain('Sin posiciones activas');
     expect((container.querySelector('#positions-apr') as HTMLElement).textContent).toContain('---');
     expect(getAssetPriceSnapshot).not.toHaveBeenCalled();
     expect(calculatePositionMetricsFromSnapshot).not.toHaveBeenCalled();
