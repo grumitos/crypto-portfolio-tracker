@@ -28,11 +28,12 @@ pnpm-debug.log*
 .env
 .env.*
 
-# IDE
+# IDE / Editor tools
 .vscode/
 .idea/
 *.swp
 *.swo
+.claude/
 
 # OS
 .DS_Store
