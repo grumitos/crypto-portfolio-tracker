@@ -93,9 +93,5 @@
 }
 
 .sim-row-cross-be.sim-row-cross-goal td {
-  background: color-mix(
-    in srgb,
-    var(--accent-warm-muted) 50%,
-    var(--color-gain-muted)
-  );
+  background: color-mix(in srgb, var(--accent-warm-muted) 50%, var(--color-gain-muted));
 }

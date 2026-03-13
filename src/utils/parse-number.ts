@@ -1,6 +1,9 @@
 function normalizeRawNumericInput(value: unknown): string {
   if (value === undefined || value === null) return '';
-  return String(value).replace(/[\s,]+/g, '').replace(/[^\d.-]+/g, '').trim();
+  return String(value)
+    .replace(/[\s,]+/g, '')
+    .replace(/[^\d.-]+/g, '')
+    .trim();
 }
 
 export function parseLooseNumber(value: unknown): number {
@@ -17,7 +20,10 @@ export function parseStrictNumber(value: unknown): number {
 }
 
 export function parseFlexibleNumber(raw: string): number {
-  const cleaned = raw.trim().replace(/\s+/g, '').replace(/[^\d.,+-]/g, '');
+  const cleaned = raw
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[^\d.,+-]/g, '');
   if (!cleaned) return Number.NaN;
 
   const sign = cleaned.startsWith('-') ? -1 : 1;
@@ -45,11 +51,11 @@ export function parseFlexibleNumber(raw: string): number {
   const normalized = !decimalSep
     ? unsigned.replace(/[.,]/g, '')
     : (() => {
-      const index = unsigned.lastIndexOf(decimalSep);
-      const integerPart = unsigned.slice(0, index).replace(/[.,]/g, '');
-      const fractionPart = unsigned.slice(index + 1).replace(/[.,]/g, '');
-      return `${integerPart}.${fractionPart}`;
-    })();
+        const index = unsigned.lastIndexOf(decimalSep);
+        const integerPart = unsigned.slice(0, index).replace(/[.,]/g, '');
+        const fractionPart = unsigned.slice(index + 1).replace(/[.,]/g, '');
+        return `${integerPart}.${fractionPart}`;
+      })();
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? sign * parsed : Number.NaN;

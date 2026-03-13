@@ -3,12 +3,7 @@ import { renderSimulator } from './simulator';
 import { SIMULATOR_VIEW_KEY, saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import * as calculator from '../utils/calculator';
-import {
-  createMemoryStorage,
-  flushMicrotasks,
-  mockMatchMedia,
-  resetDom,
-} from '../test/test-utils';
+import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
 import { calculatePositionMetrics } from '../utils/market';
 import { registerApiFailure } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
@@ -117,7 +112,9 @@ describe('simulator dual milestones', () => {
     document.body.appendChild(container);
     const dispose = renderSimulator(container);
 
-    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe('block');
+    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe(
+      'block',
+    );
     expect(container.querySelector('#sim-projection-chart-skeleton .skeleton')).not.toBeNull();
     expect(container.querySelector('#sim-table .sim-projection-table-skeleton')).not.toBeNull();
 
@@ -158,15 +155,18 @@ describe('simulator dual milestones', () => {
 
   it('ignores persisted auto values until hydrated with market metrics', async () => {
     seedState({ positions: [DEFAULT_POSITION] });
-    localStorage.setItem(SIMULATOR_VIEW_KEY, JSON.stringify({
-      capital: 9999.99,
-      apr: 141.3,
-      frequency: 'weekly',
-      goal: 99999.99,
-      autoCapital: true,
-      autoApr: true,
-      autoGoal: true,
-    }));
+    localStorage.setItem(
+      SIMULATOR_VIEW_KEY,
+      JSON.stringify({
+        capital: 9999.99,
+        apr: 141.3,
+        frequency: 'weekly',
+        goal: 99999.99,
+        autoCapital: true,
+        autoApr: true,
+        autoGoal: true,
+      }),
+    );
     mockAutoMetrics({ totalUsd: 400, weightedApr: 35 });
 
     const container = document.createElement('div');
@@ -175,13 +175,17 @@ describe('simulator dual milestones', () => {
 
     expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('');
     expect((container.querySelector('#sim-apr') as HTMLInputElement).value).toBe('');
-    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent?.trim()).toBe('Promedio ponderado (USD): N/D');
+    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent?.trim()).toBe(
+      'Promedio ponderado (USD): N/D',
+    );
 
     await flushMicrotasks();
 
     expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('400.00');
     expect((container.querySelector('#sim-apr') as HTMLInputElement).value).toBe('35.00');
-    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent?.trim()).toBe('Promedio ponderado (USD): 35.00%');
+    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent?.trim()).toBe(
+      'Promedio ponderado (USD): 35.00%',
+    );
 
     dispose();
     container.remove();
@@ -225,7 +229,9 @@ describe('simulator dual milestones', () => {
     simulateButton.click();
     await flushMicrotasks();
 
-    const stored = JSON.parse(localStorage.getItem(SIMULATOR_VIEW_KEY) ?? '{}') as { autoGoal?: boolean };
+    const stored = JSON.parse(localStorage.getItem(SIMULATOR_VIEW_KEY) ?? '{}') as {
+      autoGoal?: boolean;
+    };
 
     expect(stored.autoGoal).toBe(false);
     expect(beDate.textContent).toBe(beDateBefore);
@@ -310,7 +316,9 @@ describe('simulator dual milestones', () => {
 
     expect((container.querySelector('#sim-out-be-date') as HTMLElement).textContent).toBe('---');
     expect((container.querySelector('#sim-out-goal-date') as HTMLElement).textContent).toBe('---');
-    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe('none');
+    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe(
+      'none',
+    );
 
     dispose();
     container.remove();
@@ -333,9 +341,15 @@ describe('simulator dual milestones', () => {
     expect((container.querySelector('#sim-apr-tag') as HTMLElement).textContent).toBe('AUTO');
     expect((container.querySelector('#sim-goal-tag') as HTMLElement).textContent).toBe('AUTO');
     expect((container.querySelector('#sim-goal') as HTMLInputElement).value).toBe('2500.00');
-    expect((container.querySelector('#sim-capital-hint') as HTMLElement).textContent).toContain('Capital en posiciones');
-    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent).toContain('Promedio ponderado (USD):');
-    expect((container.querySelector('#sim-goal-hint') as HTMLElement).textContent).toContain('Meta del dashboard');
+    expect((container.querySelector('#sim-capital-hint') as HTMLElement).textContent).toContain(
+      'Capital en posiciones',
+    );
+    expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent).toContain(
+      'Promedio ponderado (USD):',
+    );
+    expect((container.querySelector('#sim-goal-hint') as HTMLElement).textContent).toContain(
+      'Meta del dashboard',
+    );
 
     dispose();
     container.remove();

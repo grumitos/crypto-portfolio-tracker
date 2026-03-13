@@ -56,7 +56,8 @@ export function loadSimulatorViewState(defaults: SimulatorViewState): SimulatorV
       apr: parsePositiveNumber(parsed.apr, defaults.apr),
       frequency: sanitizeFrequency(parsed.frequency, defaults.frequency),
       goal: parsePositiveNumber(parsed.goal, defaults.goal),
-      autoCapital: typeof parsed.autoCapital === 'boolean' ? parsed.autoCapital : defaults.autoCapital,
+      autoCapital:
+        typeof parsed.autoCapital === 'boolean' ? parsed.autoCapital : defaults.autoCapital,
       autoApr: typeof parsed.autoApr === 'boolean' ? parsed.autoApr : defaults.autoApr,
       autoGoal: typeof parsed.autoGoal === 'boolean' ? parsed.autoGoal : defaults.autoGoal,
     };
@@ -76,7 +77,8 @@ export function persistSimulatorViewState(container: HTMLElement, autoState: Aut
   const defaults = getDefaultViewState();
   const capitalValue = (container.querySelector('#sim-capital') as HTMLInputElement | null)?.value;
   const aprValue = (container.querySelector('#sim-apr') as HTMLInputElement | null)?.value;
-  const frequencyValue = (container.querySelector('#sim-frequency') as HTMLSelectElement | null)?.value;
+  const frequencyValue = (container.querySelector('#sim-frequency') as HTMLSelectElement | null)
+    ?.value;
   const goalValue = (container.querySelector('#sim-goal') as HTMLInputElement | null)?.value;
 
   saveSimulatorViewState({

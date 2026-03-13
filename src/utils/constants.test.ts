@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  MARKET_POLL_INTERVAL_MS,
-  ONE_DAY_MS,
-  ONE_MINUTE_MS,
-  ONE_SECOND_MS,
-} from './constants';
+import { MARKET_POLL_INTERVAL_MS, ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from './constants';
 
 describe('constants', () => {
   it('exposes shared time constants', () => {

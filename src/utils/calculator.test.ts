@@ -154,8 +154,19 @@ describe('calculator utils', () => {
 
   it('returns null for invalid projection interpolation inputs', () => {
     expect(estimateDaysToGoalFromProjection([], 1200)).toBeNull();
-    expect(estimateDaysToGoalFromProjection([{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }], -1)).toBeNull();
-    expect(estimateDaysToGoalFromProjection([{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }], 1200, 0)).toBeNull();
+    expect(
+      estimateDaysToGoalFromProjection(
+        [{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }],
+        -1,
+      ),
+    ).toBeNull();
+    expect(
+      estimateDaysToGoalFromProjection(
+        [{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }],
+        1200,
+        0,
+      ),
+    ).toBeNull();
   });
 
   it('formats latin dates and percentage strings', () => {

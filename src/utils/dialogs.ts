@@ -22,10 +22,9 @@ function ensureDialogElements(): DialogElements | null {
   if (typeof document === 'undefined') return null;
   if (dialogElements) return dialogElements;
 
-  const overlay = document.createElement('div');
+  const overlay = document.createElement('dialog');
   overlay.id = 'modal-app-dialog';
   overlay.className = 'modal-overlay';
-  overlay.style.display = 'none';
   overlay.innerHTML = `
     <div class="modal">
       <h3 class="modal-title" id="app-dialog-title">Confirmar</h3>
@@ -41,7 +40,9 @@ function ensureDialogElements(): DialogElements | null {
   const title = overlay.querySelector('#app-dialog-title') as HTMLElement | null;
   const message = overlay.querySelector('#app-dialog-message') as HTMLElement | null;
   const cancelButton = overlay.querySelector('#btn-app-dialog-cancel') as HTMLButtonElement | null;
-  const confirmButton = overlay.querySelector('#btn-app-dialog-confirm') as HTMLButtonElement | null;
+  const confirmButton = overlay.querySelector(
+    '#btn-app-dialog-confirm',
+  ) as HTMLButtonElement | null;
   if (!title || !message || !cancelButton || !confirmButton) return null;
 
   bindModalEvents(overlay, [cancelButton]);

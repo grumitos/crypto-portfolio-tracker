@@ -28,24 +28,24 @@ describe('animated-output', () => {
     animationMocks.setAnimatedText.mockReset();
     animationMocks.stopValueAnimation.mockReset();
 
-    animationMocks.setAnimatedNumber.mockImplementation((
-      _map: WeakMap<HTMLElement, number>,
-      el: HTMLElement | null,
-      end: number,
-      formatter: (value: number) => string,
-    ) => {
-      if (!el) return;
-      el.dataset.numericValue = String(end);
-      el.textContent = formatter(end);
-    });
-    animationMocks.setAnimatedText.mockImplementation((
-      _map: WeakMap<HTMLElement, number>,
-      el: HTMLElement | null,
-      text: string,
-    ) => {
-      if (!el) return;
-      el.textContent = text;
-    });
+    animationMocks.setAnimatedNumber.mockImplementation(
+      (
+        _map: WeakMap<HTMLElement, number>,
+        el: HTMLElement | null,
+        end: number,
+        formatter: (value: number) => string,
+      ) => {
+        if (!el) return;
+        el.dataset.numericValue = String(end);
+        el.textContent = formatter(end);
+      },
+    );
+    animationMocks.setAnimatedText.mockImplementation(
+      (_map: WeakMap<HTMLElement, number>, el: HTMLElement | null, text: string) => {
+        if (!el) return;
+        el.textContent = text;
+      },
+    );
   });
 
   it('stops both numeric and text animations', () => {
@@ -66,7 +66,11 @@ describe('animated-output', () => {
     expect(animationMocks.setAnimatedNumber).toHaveBeenCalledTimes(1);
     const call = animationMocks.setAnimatedNumber.mock.calls[0];
     const formatter = call[3] as (next: number) => string;
-    const options = call[4] as { enabled: boolean; durationMs: number; allowRememberedStart: boolean };
+    const options = call[4] as {
+      enabled: boolean;
+      durationMs: number;
+      allowRememberedStart: boolean;
+    };
     expect(formatter(10)).toBe('$10.00');
     expect(options).toEqual({ enabled: true, durationMs: 420, allowRememberedStart: false });
   });
@@ -79,9 +83,16 @@ describe('animated-output', () => {
 
     expect(animationMocks.setAnimatedNumber).toHaveBeenCalledTimes(2);
 
-    const signedFormatter = animationMocks.setAnimatedNumber.mock.calls[0][3] as (next: number) => string;
-    const unsignedFormatter = animationMocks.setAnimatedNumber.mock.calls[1][3] as (next: number) => string;
-    const unsignedOptions = animationMocks.setAnimatedNumber.mock.calls[1][4] as { durationMs: number; enabled: boolean };
+    const signedFormatter = animationMocks.setAnimatedNumber.mock.calls[0][3] as (
+      next: number,
+    ) => string;
+    const unsignedFormatter = animationMocks.setAnimatedNumber.mock.calls[1][3] as (
+      next: number,
+    ) => string;
+    const unsignedOptions = animationMocks.setAnimatedNumber.mock.calls[1][4] as {
+      durationMs: number;
+      enabled: boolean;
+    };
 
     expect(signedFormatter(2)).toBe('+2.00%');
     expect(unsignedFormatter(2)).toBe('2.00%');
@@ -97,7 +108,11 @@ describe('animated-output', () => {
 
     expect(animationMocks.setAnimatedNumber).not.toHaveBeenCalled();
     expect(animationMocks.setAnimatedText).toHaveBeenCalledTimes(1);
-    const options = animationMocks.setAnimatedText.mock.calls[0][3] as { mode: string; className: string; enabled: boolean };
+    const options = animationMocks.setAnimatedText.mock.calls[0][3] as {
+      mode: string;
+      className: string;
+      enabled: boolean;
+    };
     expect(options).toEqual({ enabled: true, mode: 'fade', className: 'text-swap' });
     expect(el.dataset.numericValue).toBeUndefined();
     expect(el.textContent).toBe('---');
@@ -125,11 +140,23 @@ describe('animated-output', () => {
     expect(animationMocks.stopValueAnimation).toHaveBeenCalledTimes(2);
     expect(animationMocks.setAnimatedText).toHaveBeenCalledTimes(2);
 
-    const fadeOptions = animationMocks.setAnimatedText.mock.calls[0][3] as { mode: string; className: string };
-    const scrambleOptions = animationMocks.setAnimatedText.mock.calls[1][3] as { mode: string; className: string; durationMs: number };
+    const fadeOptions = animationMocks.setAnimatedText.mock.calls[0][3] as {
+      mode: string;
+      className: string;
+    };
+    const scrambleOptions = animationMocks.setAnimatedText.mock.calls[1][3] as {
+      mode: string;
+      className: string;
+      durationMs: number;
+    };
 
     expect(fadeOptions).toEqual({ enabled: true, mode: 'fade', className: 'text-swap' });
-    expect(scrambleOptions).toEqual({ enabled: false, mode: 'scramble', className: 'text-swap', durationMs: 700 });
+    expect(scrambleOptions).toEqual({
+      enabled: false,
+      mode: 'scramble',
+      className: 'text-swap',
+      durationMs: 700,
+    });
     expect(el.dataset.numericValue).toBeUndefined();
   });
 

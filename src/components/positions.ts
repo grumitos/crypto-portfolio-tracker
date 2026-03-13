@@ -1,4 +1,11 @@
-import { loadState, addPosition, updatePosition, deletePosition, generateId, replacePositions } from '../utils/storage';
+import {
+  loadState,
+  addPosition,
+  updatePosition,
+  deletePosition,
+  generateId,
+  replacePositions,
+} from '../utils/storage';
 import { formatUSD } from '../utils/calculator';
 import { formatISODateLocal, parseISODateLocal, todayISODateLocal } from '../utils/date';
 import {
@@ -16,7 +23,11 @@ import {
   parseImportedPositions as parseImportedPositionsFromText,
   DEFAULT_ASSET_POOL,
 } from './positions.parser';
-import { formatTimeHHMM, renderPositionGroup, updateRemainingTimesInPlace } from './positions.table';
+import {
+  formatTimeHHMM,
+  renderPositionGroup,
+  updateRemainingTimesInPlace,
+} from './positions.table';
 import type { DualPosition, Direction } from '../types';
 import { ONE_SECOND_MS } from '../utils/constants';
 import { subscribeToMarketTicks } from '../utils/market-poller';
@@ -42,15 +53,19 @@ const ASSET_POOL: string[] = [...DEFAULT_ASSET_POOL];
 const SUBSCRIPTION_ASSETS = [...ASSET_POOL];
 const ALLOWED_ASSETS = new Set<string>(ASSET_POOL);
 const SPOT_STRIP_EXCLUDED_ASSETS = new Set<string>(['USDT', 'USDC']);
+const SPOT_STRIP_ASSET_ORDER = ['BTC', 'ETH', 'BNB', 'SOL'];
 const RESULT_NUMBER_ANIM_MS = 560;
+const SPOT_VALUE_SKELETON_WIDTH = '72px';
+const SPOT_CHANGE_SKELETON_WIDTH = '56px';
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
 const spotStripValueAnimationByElement = new WeakMap<HTMLElement, number>();
+const spotStripChangeAnimationByElement = new WeakMap<HTMLElement, number>();
 
 interface SpotAssetData {
   asset: string;
-  exposureUsd: number;
   spotPrice: number;
+  changePercent24h: number | null;
 }
 
 // normalizeAssetSymbol is imported from '../utils/market' (aliased normalizeAsset)
@@ -60,32 +75,31 @@ function isSpotStripAsset(asset: string): boolean {
   return Boolean(normalized) && !SPOT_STRIP_EXCLUDED_ASSETS.has(normalized);
 }
 
-function uniqueAssetsFromPositions(positions: DualPosition[]): string[] {
-  return Array.from(new Set(
-    positions
-      .map((position) => normalizeAssetSymbol(position.asset))
-      .filter(Boolean),
-  )).sort((a, b) => a.localeCompare(b));
+function getSpotStripAssets(positions: DualPosition[]): string[] {
+  const seen = new Set<string>(SPOT_STRIP_ASSET_ORDER);
+  const extras: string[] = [];
+
+  // Add any position assets not in the fixed order, alphabetically
+  positions.forEach((position) => {
+    const asset = normalizeAssetSymbol(position.asset);
+    if (!asset || !isSpotStripAsset(asset) || seen.has(asset)) return;
+    seen.add(asset);
+    extras.push(asset);
+  });
+  extras.sort((a, b) => a.localeCompare(b));
+
+  return [...SPOT_STRIP_ASSET_ORDER, ...extras];
 }
 
-function getSpotStripAssets(positions: DualPosition[]): string[] {
-  const assets: string[] = [];
-  const seen = new Set<string>();
-  ASSET_POOL.forEach((asset) => {
-    if (!isSpotStripAsset(asset)) return;
-    const normalized = normalizeAssetSymbol(asset);
-    if (!normalized || seen.has(normalized)) return;
-    seen.add(normalized);
-    assets.push(normalized);
+function sortSpotAssets(assets: string[]): string[] {
+  return [...assets].sort((a, b) => {
+    const ai = SPOT_STRIP_ASSET_ORDER.indexOf(a);
+    const bi = SPOT_STRIP_ASSET_ORDER.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
   });
-
-  uniqueAssetsFromPositions(positions).forEach((asset) => {
-    if (!isSpotStripAsset(asset)) return;
-    if (seen.has(asset)) return;
-    seen.add(asset);
-    assets.push(asset);
-  });
-  return assets;
 }
 
 function setStatText(el: HTMLElement | null, text: string, animate: boolean): void {
@@ -102,25 +116,21 @@ function setStatText(el: HTMLElement | null, text: string, animate: boolean): vo
 function setStatCurrency(el: HTMLElement | null, value: number, animate: boolean): void {
   if (!el) return;
   stopValueAnimation(textAnimationByElement, el);
-  setAnimatedNumber(
-    valueAnimationByElement,
-    el,
-    value,
-    (next) => formatUSD(next),
-    { enabled: animate, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
-  );
+  setAnimatedNumber(valueAnimationByElement, el, value, (next) => formatUSD(next), {
+    enabled: animate,
+    durationMs: RESULT_NUMBER_ANIM_MS,
+    allowRememberedStart: false,
+  });
 }
 
 function setStatPercent(el: HTMLElement | null, value: number, animate: boolean): void {
   if (!el) return;
   stopValueAnimation(textAnimationByElement, el);
-  setAnimatedNumber(
-    valueAnimationByElement,
-    el,
-    value,
-    (next) => `${next.toFixed(2)}%`,
-    { enabled: animate, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
-  );
+  setAnimatedNumber(valueAnimationByElement, el, value, (next) => `${next.toFixed(2)}%`, {
+    enabled: animate,
+    durationMs: RESULT_NUMBER_ANIM_MS,
+    allowRememberedStart: false,
+  });
 }
 
 function setSpotValue(el: HTMLElement | null, value: number): void {
@@ -134,11 +144,53 @@ function setSpotValue(el: HTMLElement | null, value: number): void {
   }
 
   el.classList.remove('text-muted');
+  setAnimatedNumber(spotStripValueAnimationByElement, el, value, (next) => formatUSD(next), {
+    enabled: true,
+    durationMs: RESULT_NUMBER_ANIM_MS,
+    allowRememberedStart: false,
+  });
+}
+
+function formatSpotChange(value: number): string {
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+}
+
+function setSpotChange(el: HTMLElement | null, value: number | null): void {
+  if (!el) return;
+  const cardEl = el.closest('.positions-spot-card');
+
+  const isValid = typeof value === 'number' && Number.isFinite(value);
+  if (!isValid) {
+    stopValueAnimation(spotStripChangeAnimationByElement, el);
+    delete el.dataset.numericValue;
+    el.textContent = 'N/D';
+    el.classList.remove('text-gain', 'text-loss');
+    el.classList.add('text-muted');
+    cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
+    return;
+  }
+
+  const next = value as number;
+  el.classList.remove('text-gain', 'text-loss', 'text-muted');
+  if (next > 0) {
+    el.classList.add('text-gain');
+  } else if (next < 0) {
+    el.classList.add('text-loss');
+  } else {
+    el.classList.add('text-muted');
+  }
+
+  cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
+  if (next > 0) cardEl?.classList.add('is-gain');
+  else if (next < 0) cardEl?.classList.add('is-loss');
+  else cardEl?.classList.add('is-flat');
+
   setAnimatedNumber(
-    spotStripValueAnimationByElement,
+    spotStripChangeAnimationByElement,
     el,
-    value,
-    (next) => formatUSD(next),
+    next,
+    (current) => formatSpotChange(current),
     { enabled: true, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
   );
 }
@@ -148,35 +200,28 @@ function setSpotLoading(el: HTMLElement | null): void {
   stopValueAnimation(spotStripValueAnimationByElement, el);
   delete el.dataset.numericValue;
   el.classList.remove('text-muted');
-  el.innerHTML = skeletonSpan('58px');
+  el.innerHTML = skeletonSpan(SPOT_VALUE_SKELETON_WIDTH);
+}
+
+function setSpotChangeLoading(el: HTMLElement | null): void {
+  if (!el) return;
+  const cardEl = el.closest('.positions-spot-card');
+  stopValueAnimation(spotStripChangeAnimationByElement, el);
+  delete el.dataset.numericValue;
+  el.classList.remove('text-gain', 'text-loss', 'text-muted');
+  el.innerHTML = skeletonSpan(SPOT_CHANGE_SKELETON_WIDTH);
+  cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
 }
 
 function buildSpotAssetData(
   spotAssets: string[],
-  positions: DualPosition[],
   snapshot: AssetPriceSnapshot,
-  usdByPositionId: Record<string, number>,
 ): SpotAssetData[] {
-  const exposureByAsset = new Map<string, number>();
-  spotAssets.forEach((asset) => {
-    exposureByAsset.set(asset, 0);
-  });
-
-  positions.forEach((position) => {
-    const asset = normalizeAssetSymbol(position.asset);
-    if (!asset) return;
-    const exposureUsd = usdByPositionId[position.id] ?? 0;
-    exposureByAsset.set(asset, (exposureByAsset.get(asset) ?? 0) + exposureUsd);
-  });
-
-  return [...exposureByAsset.entries()].map(([asset, exposureUsd]) => ({
+  return sortSpotAssets(spotAssets).map((asset) => ({
     asset,
-    exposureUsd,
     spotPrice: snapshot.priceByAsset[asset] ?? 0,
-  })).sort((a, b) => {
-    if (b.exposureUsd !== a.exposureUsd) return b.exposureUsd - a.exposureUsd;
-    return a.asset.localeCompare(b.asset);
-  });
+    changePercent24h: snapshot.changePercent24hByAsset?.[asset] ?? null,
+  }));
 }
 
 function bindSpotCardLogo(cardEl: HTMLElement, asset: string): void {
@@ -214,13 +259,19 @@ function createSpotCard(asset: string): HTMLElement {
   card.className = 'positions-spot-card';
   card.id = `positions-spot-${asset}`;
   card.innerHTML = `
-    <span class="positions-spot-logo-wrap">
-      <img class="positions-spot-logo" loading="lazy" decoding="async">
-      <span class="positions-spot-fallback mono"></span>
+    <span class="positions-spot-header">
+      <span class="positions-spot-logo-wrap">
+        <img class="positions-spot-logo" loading="lazy" decoding="async">
+        <span class="positions-spot-fallback mono"></span>
+      </span>
+      <span class="positions-spot-symbol mono">${safeAsset}</span>
     </span>
     <span class="positions-spot-meta">
-      <span class="positions-spot-symbol mono">${safeAsset}</span>
-      <span class="positions-spot-value mono" id="positions-spot-value-${asset}">${skeletonSpan('58px')}</span>
+      <span class="positions-spot-value mono" id="positions-spot-value-${asset}">${skeletonSpan(SPOT_VALUE_SKELETON_WIDTH)}</span>
+      <span class="positions-spot-change-row">
+        <span class="positions-spot-change mono" id="positions-spot-change-${asset}">${skeletonSpan(SPOT_CHANGE_SKELETON_WIDTH)}</span>
+        <span class="positions-spot-change-window mono">24h</span>
+      </span>
     </span>
   `;
   bindSpotCardLogo(card, asset);
@@ -231,7 +282,6 @@ function updateSpotStrip(
   container: HTMLElement,
   positions: DualPosition[],
   snapshot: AssetPriceSnapshot | null,
-  usdByPositionId: Record<string, number> = {},
 ): void {
   const stripEl = container.querySelector('#positions-spot-strip') as HTMLElement | null;
   if (!stripEl) return;
@@ -243,15 +293,9 @@ function updateSpotStrip(
   }
 
   const stripAssets = getSpotStripAssets(positions);
-  if (!snapshot && stripAssets.length === 0) {
-    stripEl.replaceChildren();
-    stripEl.style.display = 'none';
-    return;
-  }
+  const orderedAssets = sortSpotAssets(stripAssets);
 
-  const hydratedAssets = snapshot
-    ? buildSpotAssetData(stripAssets, positions, snapshot, usdByPositionId)
-    : [];
+  const hydratedAssets = snapshot ? buildSpotAssetData(orderedAssets, snapshot) : [];
   if (snapshot && hydratedAssets.length === 0) {
     stripEl.replaceChildren();
     stripEl.style.display = 'none';
@@ -262,19 +306,23 @@ function updateSpotStrip(
   const fragment = document.createDocumentFragment();
 
   if (snapshot) {
-    hydratedAssets.forEach(({ asset, spotPrice }) => {
+    hydratedAssets.forEach(({ asset, spotPrice, changePercent24h }) => {
       const existing = stripEl.querySelector(`#positions-spot-${asset}`) as HTMLElement | null;
       const card = existing ?? createSpotCard(asset);
       const valueEl = card.querySelector(`#positions-spot-value-${asset}`) as HTMLElement | null;
+      const changeEl = card.querySelector(`#positions-spot-change-${asset}`) as HTMLElement | null;
       setSpotValue(valueEl, spotPrice);
+      setSpotChange(changeEl, changePercent24h);
       fragment.appendChild(card);
     });
   } else {
-    stripAssets.forEach((asset) => {
+    orderedAssets.forEach((asset) => {
       const existing = stripEl.querySelector(`#positions-spot-${asset}`) as HTMLElement | null;
       const card = existing ?? createSpotCard(asset);
       const valueEl = card.querySelector(`#positions-spot-value-${asset}`) as HTMLElement | null;
+      const changeEl = card.querySelector(`#positions-spot-change-${asset}`) as HTMLElement | null;
       setSpotLoading(valueEl);
+      setSpotChangeLoading(changeEl);
       fragment.appendChild(card);
     });
   }
@@ -286,9 +334,11 @@ function createUnavailableSpotSnapshot(positions: DualPosition[]): AssetPriceSna
   const assets = getSpotStripAssets(positions);
   const priceByAsset: Record<string, number> = {};
   const sourceByAsset: Record<string, 'unavailable'> = {};
+  const changePercent24hByAsset: Record<string, number | null> = {};
   assets.forEach((asset) => {
     priceByAsset[asset] = 0;
     sourceByAsset[asset] = 'unavailable';
+    changePercent24hByAsset[asset] = null;
   });
 
   return {
@@ -297,6 +347,7 @@ function createUnavailableSpotSnapshot(positions: DualPosition[]): AssetPriceSna
     marketLastUpdatedAt: null,
     hasStalePrices: false,
     hasUnavailablePrices: assets.length > 0,
+    changePercent24hByAsset,
   };
 }
 
@@ -306,8 +357,8 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const activeCount = positions.length;
 
   // Separate by direction
-  const buyLow = positions.filter(p => p.direction === 'buy-low');
-  const sellHigh = positions.filter(p => p.direction === 'sell-high');
+  const buyLow = positions.filter((p) => p.direction === 'buy-low');
+  const sellHigh = positions.filter((p) => p.direction === 'sell-high');
 
   container.innerHTML = `
     <div class="section">
@@ -347,22 +398,28 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
       </div>
 
       <!-- Spot prices -->
-      <div class="positions-spot-strip" id="positions-spot-strip" style="display:none"></div>
+      <div class="positions-spot-strip-wrap">
+        <div class="positions-spot-strip" id="positions-spot-strip" style="display:none"></div>
+      </div>
 
       <!-- Positions table -->
-      ${positions.length > 0 ? `
+      ${
+        positions.length > 0
+          ? `
         ${buyLow.length > 0 ? renderPositionGroup('Buy Low', buyLow) : ''}
         ${sellHigh.length > 0 ? renderPositionGroup('Sell High', sellHigh) : ''}
-      ` : `
+      `
+          : `
         <div class="card empty-state">
           <p>No tienes posiciones registradas.</p>
           <p>Agrega tus posiciones activas de Dual Investment.</p>
         </div>
-      `}
+      `
+      }
     </div>
 
     <!-- Add/Edit modal -->
-    <div id="modal-position" class="modal-overlay" style="display:none">
+    <dialog id="modal-position" class="modal-overlay">
       <div class="modal">
         <h3 class="modal-title" id="modal-position-title">Nueva posicion</h3>
         <input type="hidden" id="input-position-id" value="">
@@ -382,13 +439,13 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
           <div class="form-group">
             <label>Activo</label>
             <select id="input-asset">
-              ${ASSET_POOL.map(a => `<option value="${a}" ${a === 'ETH' ? 'selected' : ''}>${a}</option>`).join('')}
+              ${ASSET_POOL.map((a) => `<option value="${a}" ${a === 'ETH' ? 'selected' : ''}>${a}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
             <label>Moneda de suscripcion</label>
             <select id="input-sub-asset">
-              ${SUBSCRIPTION_ASSETS.map(a => `<option value="${a}" ${a === 'USDT' ? 'selected' : ''}>${a}</option>`).join('')}
+              ${SUBSCRIPTION_ASSETS.map((a) => `<option value="${a}" ${a === 'USDT' ? 'selected' : ''}>${a}</option>`).join('')}
             </select>
           </div>
         </div>
@@ -423,7 +480,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
         <div class="form-group">
           <label>Fecha de liquidacion</label>
           <div class="duration-presets">
-            ${DURATION_PRESETS.map(p => `<button class="preset-btn" data-days="${p.days}">${p.label}</button>`).join('')}
+            ${DURATION_PRESETS.map((p) => `<button class="preset-btn" data-days="${p.days}">${p.label}</button>`).join('')}
           </div>
           <div class="grid-2 position-datetime-inputs" style="margin-top:var(--space-xs)">
             <input type="date" id="input-settlement-date">
@@ -436,9 +493,9 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
           <button class="btn btn-primary" id="btn-save-position">Guardar</button>
         </div>
       </div>
-    </div>
+    </dialog>
 
-    <div id="modal-bulk-import" class="modal-overlay" style="display:none">
+    <dialog id="modal-bulk-import" class="modal-overlay">
       <div class="modal">
         <h3 class="modal-title">Pegar posiciones (Binance)</h3>
         <div class="form-group">
@@ -453,7 +510,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
           <button class="btn btn-primary" id="btn-apply-bulk-import">Reemplazar</button>
         </div>
       </div>
-    </div>
+    </dialog>
   `;
 
   bindPositionEvents(container, onStateChange);
@@ -468,7 +525,9 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
       if (remainingTicker) return;
       remainingTicker = setInterval(() => {
         if (disposed || !container.isConnected) return;
-        const stillHasSubMinute = updateRemainingTimesInPlace(container, latestKnownPositions, { subMinuteOnly: true });
+        const stillHasSubMinute = updateRemainingTimesInPlace(container, latestKnownPositions, {
+          subMinuteOnly: true,
+        });
         if (!stillHasSubMinute && remainingTicker) {
           clearInterval(remainingTicker);
           remainingTicker = null;
@@ -486,7 +545,11 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
     if (disposed || !container.isConnected) return;
     const { positions: latestPositions } = loadState();
     latestKnownPositions = latestPositions;
-    const hasSubMinuteCountdown = await hydratePositionMarketData(container, latestPositions, forceRefresh);
+    const hasSubMinuteCountdown = await hydratePositionMarketData(
+      container,
+      latestPositions,
+      forceRefresh,
+    );
     syncRemainingTicker(hasSubMinuteCountdown);
   });
 
@@ -518,13 +581,18 @@ async function hydratePositionMarketData(
   const hasSubMinuteCountdown = updateRemainingTimesInPlace(container, positions);
 
   try {
-    const assetUniverse = Array.from(new Set([
-      ...getSpotStripAssets(positions),
-      ...positions
-        .map((position) => normalizeAssetSymbol(position.subscriptionAsset))
-        .filter(Boolean),
-    ]));
-    const snapshot = await getAssetPriceSnapshot(assetUniverse, { forceRefresh });
+    const assetUniverse = Array.from(
+      new Set([
+        ...getSpotStripAssets(positions),
+        ...positions
+          .map((position) => normalizeAssetSymbol(position.subscriptionAsset))
+          .filter(Boolean),
+      ]),
+    );
+    const snapshot = await getAssetPriceSnapshot(assetUniverse, {
+      forceRefresh,
+      includeChangePercent24h: true,
+    });
     const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);
     registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
 
@@ -552,7 +620,7 @@ async function hydratePositionMarketData(
       showApiErrorBanner('No se pudo actualizar precios de mercado.');
     }
 
-    updateSpotStrip(container, positions, snapshot, metrics.usdByPositionId);
+    updateSpotStrip(container, positions, snapshot);
 
     positions.forEach((position) => {
       const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;
@@ -563,7 +631,9 @@ async function hydratePositionMarketData(
 
       if (position.components && position.amount > 0) {
         position.components.forEach((c) => {
-          const cRowEl = container.querySelector(`#position-usd-${position.id}-comp-${c.id}`) as HTMLElement | null;
+          const cRowEl = container.querySelector(
+            `#position-usd-${position.id}-comp-${c.id}`,
+          ) as HTMLElement | null;
           if (!cRowEl) return;
           const ratio = c.amount / position.amount;
           const cUsdValue = usdValue * ratio;
@@ -589,6 +659,7 @@ export function parseImportedPositions(raw: string): DualPosition[] {
   return parseImportedPositionsFromText(raw);
 }
 
+
 function bindPositionEvents(container: HTMLElement, onStateChange: () => void): void {
   const modal = container.querySelector('#modal-position') as HTMLElement;
   const bulkImportModal = container.querySelector('#modal-bulk-import') as HTMLElement;
@@ -597,11 +668,11 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   // ── Direction toggle ──
   const dirBtns = container.querySelectorAll('.dir-btn');
   const dirInput = container.querySelector('#input-direction') as HTMLInputElement;
-  dirBtns.forEach(btn => {
+  dirBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const direction = (btn as HTMLElement).dataset.dir;
       if (!direction) return;
-      dirBtns.forEach(b => b.classList.remove('active'));
+      dirBtns.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       dirInput.value = direction;
     });
@@ -615,25 +686,24 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   const settlementInput = container.querySelector('#input-settlement-date') as HTMLInputElement;
   const settlementTimeInput = container.querySelector('#input-settlement-time') as HTMLInputElement;
 
-  container.querySelectorAll('.preset-btn').forEach(btn => {
+  container.querySelectorAll('.preset-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const rawDays = (btn as HTMLElement).dataset.days;
       const days = Number.parseInt(rawDays ?? '', 10);
       if (!Number.isFinite(days)) return;
-      const entryDate = parseISODateLocal(entryInput.value)
-        ?? parseISODateLocal(todayISODateLocal())
-        ?? new Date();
+      const entryDate =
+        parseISODateLocal(entryInput.value) ?? parseISODateLocal(todayISODateLocal()) ?? new Date();
       const settlement = new Date(entryDate);
       settlement.setDate(settlement.getDate() + days);
       settlementInput.value = formatISODateLocal(settlement);
 
-      container.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
     });
   });
 
   entryInput.addEventListener('change', () => {
-    container.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    container.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
   });
 
   // ── Edit-mode toggle ──
@@ -647,22 +717,25 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   // ── Helper: open edit modal for a position ──
   const openEditModal = (id: string): void => {
     const state = loadState();
-    const pos = state.positions.find(p => p.id === id);
+    const pos = state.positions.find((p) => p.id === id);
     if (!pos) return;
 
-    (container.querySelector('#modal-position-title') as HTMLElement).textContent = 'Editar posicion';
+    (container.querySelector('#modal-position-title') as HTMLElement).textContent =
+      'Editar posicion';
     (container.querySelector('#input-position-id') as HTMLInputElement).value = pos.id;
 
     dirInput.value = pos.direction;
-    dirBtns.forEach(b => {
+    dirBtns.forEach((b) => {
       b.classList.toggle('active', (b as HTMLElement).dataset.dir === pos.direction);
     });
 
     assetInput.value = pos.asset;
-    (container.querySelector('#input-sub-asset') as HTMLSelectElement).value = pos.subscriptionAsset;
+    (container.querySelector('#input-sub-asset') as HTMLSelectElement).value =
+      pos.subscriptionAsset;
     (container.querySelector('#input-amount') as HTMLInputElement).value = pos.amount.toString();
     (container.querySelector('#input-apr') as HTMLInputElement).value = pos.apr.toString();
-    (container.querySelector('#input-target') as HTMLInputElement).value = pos.targetPrice.toString();
+    (container.querySelector('#input-target') as HTMLInputElement).value =
+      pos.targetPrice.toString();
     entryInput.value = pos.entryDate;
     entryTimeInput.value = pos.entryTime ?? '';
     settlementInput.value = pos.settlementDate;
@@ -674,7 +747,8 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   // ── Open add modal ──
   container.querySelector('#btn-add-position')?.addEventListener('click', () => {
     clearPositionForm(container);
-    (container.querySelector('#modal-position-title') as HTMLElement).textContent = 'Nueva posicion';
+    (container.querySelector('#modal-position-title') as HTMLElement).textContent =
+      'Nueva posicion';
     const today = todayISODateLocal();
     entryInput.value = today;
     entryTimeInput.value = formatTimeHHMM(new Date());
@@ -689,14 +763,16 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   });
 
   // ── Component sub-row toggle ──
-  container.querySelectorAll<HTMLElement>('[data-toggle-components]').forEach(toggle => {
-    toggle.addEventListener('click', (e) => {
+  container.querySelectorAll<HTMLElement>('[data-toggle-components]').forEach((toggle) => {
+    const handleToggle = (e: Event) => {
       e.stopPropagation();
       const toggleRow = toggle.closest('tr');
       if (!toggleRow) return;
       const chevron = toggle.querySelector('.pos-components-chevron') as HTMLElement | null;
       let sibling = toggleRow.nextElementSibling;
-      const isExpanding = sibling?.classList.contains('pos-sub-row') && (sibling as HTMLElement).style.display === 'none';
+      const isExpanding =
+        sibling?.classList.contains('pos-sub-row') &&
+        (sibling as HTMLElement).style.display === 'none';
       while (sibling && sibling.classList.contains('pos-sub-row')) {
         (sibling as HTMLElement).style.display = isExpanding ? '' : 'none';
         sibling = sibling.nextElementSibling;
@@ -704,12 +780,20 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
       if (chevron) {
         chevron.style.transform = isExpanding ? 'rotate(90deg)' : '';
       }
+      toggle.setAttribute('aria-expanded', String(isExpanding));
       toggleRow.classList.toggle('pos-toggle-expanded', isExpanding);
+    };
+    toggle.addEventListener('click', handleToggle);
+    toggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleToggle(e);
+      }
     });
   });
 
   // ── Row click in edit-mode ──
-  container.querySelectorAll<HTMLElement>('tr[data-id]').forEach(row => {
+  container.querySelectorAll<HTMLElement>('tr[data-id]').forEach((row) => {
     row.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('.btn-del-pos')) return;
       if ((e.target as HTMLElement).closest('[data-ignore-row-edit="true"]')) return;
@@ -721,7 +805,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   });
 
   // ── Delete buttons ──
-  container.querySelectorAll('.btn-del-pos').forEach(btn => {
+  container.querySelectorAll('.btn-del-pos').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const id = (btn as HTMLElement).dataset.id;
       if (!id) return;
@@ -739,7 +823,9 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
 
   // ── Cancel mappings ──
   bindModalEvents(modal, [container.querySelector('#btn-cancel-position') as HTMLElement]);
-  bindModalEvents(bulkImportModal, [container.querySelector('#btn-cancel-bulk-import') as HTMLElement]);
+  bindModalEvents(bulkImportModal, [
+    container.querySelector('#btn-cancel-bulk-import') as HTMLElement,
+  ]);
 
   container.querySelector('#btn-apply-bulk-import')?.addEventListener('click', async () => {
     const parsed = parseImportedPositions(bulkImportInput.value);
@@ -765,16 +851,24 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     const id = (container.querySelector('#input-position-id') as HTMLInputElement).value;
     const direction = dirInput.value as Direction;
     const asset = assetInput.value.toUpperCase().trim();
-    const subscriptionAsset = (container.querySelector('#input-sub-asset') as HTMLSelectElement).value;
+    const subscriptionAsset = (container.querySelector('#input-sub-asset') as HTMLSelectElement)
+      .value;
     const amount = parseFloat((container.querySelector('#input-amount') as HTMLInputElement).value);
     const apr = parseFloat((container.querySelector('#input-apr') as HTMLInputElement).value);
-    const targetPrice = parseFloat((container.querySelector('#input-target') as HTMLInputElement).value) || 0;
+    const targetPrice =
+      parseFloat((container.querySelector('#input-target') as HTMLInputElement).value) || 0;
     const entryDate = entryInput.value;
     const entryTime = normalizeTime(entryTimeInput.value);
     const settlementDate = settlementInput.value;
     const settlementTime = normalizeTime(settlementTimeInput.value);
 
-    if (!asset || !Number.isFinite(amount) || !Number.isFinite(apr) || !entryDate || !settlementDate) {
+    if (
+      !asset ||
+      !Number.isFinite(amount) ||
+      !Number.isFinite(apr) ||
+      !entryDate ||
+      !settlementDate
+    ) {
       await showAlertDialog('Completa todos los campos requeridos.');
       return;
     }
@@ -815,7 +909,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
 function clearPositionForm(container: HTMLElement): void {
   (container.querySelector('#input-position-id') as HTMLInputElement).value = '';
   (container.querySelector('#input-direction') as HTMLInputElement).value = 'buy-low';
-  container.querySelectorAll('.dir-btn').forEach(b => {
+  container.querySelectorAll('.dir-btn').forEach((b) => {
     b.classList.toggle('active', (b as HTMLElement).dataset.dir === 'buy-low');
   });
   (container.querySelector('#input-asset') as HTMLSelectElement).value = 'ETH';
@@ -827,5 +921,5 @@ function clearPositionForm(container: HTMLElement): void {
   (container.querySelector('#input-entry-time') as HTMLInputElement).value = '';
   (container.querySelector('#input-settlement-date') as HTMLInputElement).value = '';
   (container.querySelector('#input-settlement-time') as HTMLInputElement).value = '';
-  container.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  container.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
 }

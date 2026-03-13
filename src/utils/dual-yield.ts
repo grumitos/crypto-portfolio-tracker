@@ -20,18 +20,12 @@ function parseLocalDateTime(dateIso: string, time: string): Date | null {
   const parsedTime = normalizeTime(time);
   if (!date || !parsedTime) return null;
   const [hours, minutes] = parsedTime.split(':').map(Number);
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    hours,
-    minutes,
-    0,
-    0,
-  );
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes, 0, 0);
 }
 
-export function resolveDualEntryAt(position: Pick<DualPosition, 'entryDate' | 'entryTime'>): Date | null {
+export function resolveDualEntryAt(
+  position: Pick<DualPosition, 'entryDate' | 'entryTime'>,
+): Date | null {
   const explicitTime = normalizeTime(position.entryTime);
   if (explicitTime) {
     return parseLocalDateTime(position.entryDate, explicitTime);
@@ -39,7 +33,9 @@ export function resolveDualEntryAt(position: Pick<DualPosition, 'entryDate' | 'e
   return parseISODateLocal(position.entryDate);
 }
 
-export function resolveDualSettlementAt(position: Pick<DualPosition, 'settlementDate' | 'settlementTime'>): Date | null {
+export function resolveDualSettlementAt(
+  position: Pick<DualPosition, 'settlementDate' | 'settlementTime'>,
+): Date | null {
   const explicitTime = normalizeTime(position.settlementTime);
   if (explicitTime) {
     return parseLocalDateTime(position.settlementDate, explicitTime);
@@ -58,7 +54,9 @@ export function calculateDualBilledDays(subscriptionAt: Date, settlementAt: Date
   return Math.max(1, setDay - subDay);
 }
 
-export function calculateDualProjectedBilledDays(position: Pick<DualPosition, 'entryDate' | 'entryTime' | 'settlementDate' | 'settlementTime'>): number {
+export function calculateDualProjectedBilledDays(
+  position: Pick<DualPosition, 'entryDate' | 'entryTime' | 'settlementDate' | 'settlementTime'>,
+): number {
   const subscriptionAt = resolveDualEntryAt(position);
   const settlementAt = resolveDualSettlementAt(position);
   if (!subscriptionAt || !settlementAt) return 0;
@@ -85,11 +83,20 @@ export function calculateDualYield(aprPercentage: number, billedDays: number): n
   return Math.floor(rawYield * YIELD_TRUNC_SCALE) / YIELD_TRUNC_SCALE;
 }
 
-export function calculateDualProfitFromBilledDays(amount: number, aprPercentage: number, billedDays: number): number {
+export function calculateDualProfitFromBilledDays(
+  amount: number,
+  aprPercentage: number,
+  billedDays: number,
+): number {
   return amount * calculateDualYield(aprPercentage, billedDays);
 }
 
-export function calculateDualProjectedProfit(position: Pick<DualPosition, 'amount' | 'apr' | 'entryDate' | 'entryTime' | 'settlementDate' | 'settlementTime'>): number {
+export function calculateDualProjectedProfit(
+  position: Pick<
+    DualPosition,
+    'amount' | 'apr' | 'entryDate' | 'entryTime' | 'settlementDate' | 'settlementTime'
+  >,
+): number {
   const billedDays = calculateDualProjectedBilledDays(position);
   return calculateDualProfitFromBilledDays(position.amount, position.apr, billedDays);
 }

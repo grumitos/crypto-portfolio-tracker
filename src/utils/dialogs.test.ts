@@ -22,8 +22,12 @@ describe('dialogs', () => {
     const root = getDialogRoot();
 
     expect(root.style.display).toBe('flex');
-    expect((root.querySelector('#app-dialog-message') as HTMLElement).textContent).toBe('Mensaje de prueba');
-    expect((root.querySelector('#btn-app-dialog-cancel') as HTMLElement).style.display).toBe('none');
+    expect((root.querySelector('#app-dialog-message') as HTMLElement).textContent).toBe(
+      'Mensaje de prueba',
+    );
+    expect((root.querySelector('#btn-app-dialog-cancel') as HTMLElement).style.display).toBe(
+      'none',
+    );
 
     (root.querySelector('#btn-app-dialog-confirm') as HTMLButtonElement).click();
     await expect(pending).resolves.toBeUndefined();

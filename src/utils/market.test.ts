@@ -4,6 +4,8 @@ import type { AssetPriceSnapshot } from './market';
 
 const BINANCE_GLOBAL_URL = 'https://api.binance.com/api/v3/ticker/price';
 const BINANCE_US_URL = 'https://api.binance.us/api/v3/ticker/price';
+const BINANCE_GLOBAL_24H_URL = 'https://api.binance.com/api/v3/ticker/24hr';
+const BINANCE_US_24H_URL = 'https://api.binance.us/api/v3/ticker/24hr';
 
 function jsonResponse(
   payload: unknown,
@@ -79,10 +81,12 @@ describe('market utils', () => {
   });
 
   it('resolves direct USDT pair and supports object ticker payload', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      symbol: 'ETHUSDT',
-      price: '2500.5',
-    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        symbol: 'ETHUSDT',
+        price: '2500.5',
+      }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
 
@@ -110,10 +114,12 @@ describe('market utils', () => {
   });
 
   it('parses batched array payloads for multiple assets', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([
-      { symbol: 'ETHUSDT', price: '2000' },
-      { symbol: 'SOLUSDT', price: '150' },
-    ]));
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { symbol: 'ETHUSDT', price: '2000' },
+        { symbol: 'SOLUSDT', price: '150' },
+      ]),
+    );
 
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
@@ -125,10 +131,12 @@ describe('market utils', () => {
   });
 
   it('returns price snapshot with sources and market timestamp', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([
-      { symbol: 'ETHUSDT', price: '2000' },
-      { symbol: 'SOLUSDT', price: '150' },
-    ]));
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { symbol: 'ETHUSDT', price: '2000' },
+        { symbol: 'SOLUSDT', price: '150' },
+      ]),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
 
@@ -141,14 +149,43 @@ describe('market utils', () => {
     expect(snapshot.hasUnavailablePrices).toBe(false);
   });
 
+  it('includes 24h change percent map when requested', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url.startsWith(BINANCE_GLOBAL_URL)) {
+        return jsonResponse([{ symbol: 'ETHUSDT', price: '2000' }]);
+      }
+      if (url.startsWith(BINANCE_GLOBAL_24H_URL)) {
+        return jsonResponse([{ symbol: 'ETHUSDT', priceChangePercent: '3.25' }]);
+      }
+      if (url.startsWith(BINANCE_US_URL) || url.startsWith(BINANCE_US_24H_URL)) {
+        return failResponse(500);
+      }
+      return failResponse(500);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const market = await import('./market');
+
+    const snapshot = await market.getAssetPriceSnapshot(['ETH'], {
+      forceRefresh: true,
+      includeChangePercent24h: true,
+    });
+
+    expect(snapshot.priceByAsset.ETH).toBe(2000);
+    expect(snapshot.changePercent24hByAsset?.ETH).toBe(3.25);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('uses fresh cache on repeated calls within TTL', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-21T00:00:00.000Z'));
 
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      symbol: 'ETHUSDT',
-      price: '2050',
-    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        symbol: 'ETHUSDT',
+        price: '2050',
+      }),
+    );
 
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
@@ -162,7 +199,8 @@ describe('market utils', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-21T00:00:00.000Z'));
 
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce(jsonResponse({ symbol: 'ETHUSDT', price: '2000' }))
       .mockResolvedValueOnce(jsonResponse({ symbol: 'ETHUSDT', price: '2100' }));
 
@@ -182,7 +220,8 @@ describe('market utils', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-21T00:00:00.000Z'));
 
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce(jsonResponse({ symbol: 'ETHUSDT', price: '1800' }))
       .mockResolvedValue(failResponse());
 
@@ -224,10 +263,10 @@ describe('market utils', () => {
       hasUnavailablePrices: false,
     };
 
-    const metrics = market.calculatePositionMetricsFromSnapshot([
-      makePosition('usdt', 'USDT', 100, 10),
-      makePosition('eth', 'ETH', 0.5, 20),
-    ], snapshot);
+    const metrics = market.calculatePositionMetricsFromSnapshot(
+      [makePosition('usdt', 'USDT', 100, 10), makePosition('eth', 'ETH', 0.5, 20)],
+      snapshot,
+    );
 
     expect(metrics.totalUsd).toBeCloseTo(1100, 8);
     expect(metrics.weightedApr).toBeCloseTo((10 * 100 + 20 * 1000) / 1100, 8);
@@ -289,7 +328,11 @@ describe('market utils', () => {
             reject(new DOMException('Aborted', 'AbortError'));
             return;
           }
-          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
         });
       }
       if (url.startsWith(BINANCE_US_URL)) {
@@ -330,19 +373,25 @@ describe('market utils', () => {
     await market.getAssetPriceSnapshot(['ETH'], { forceRefresh: true });
     await market.getAssetPriceSnapshot(['ETH'], { forceRefresh: true });
 
-    const globalCalls = fetchMock.mock.calls.filter((call) => String(call[0]).startsWith(BINANCE_GLOBAL_URL));
-    const usCalls = fetchMock.mock.calls.filter((call) => String(call[0]).startsWith(BINANCE_US_URL));
+    const globalCalls = fetchMock.mock.calls.filter((call) =>
+      String(call[0]).startsWith(BINANCE_GLOBAL_URL),
+    );
+    const usCalls = fetchMock.mock.calls.filter((call) =>
+      String(call[0]).startsWith(BINANCE_US_URL),
+    );
 
     expect(globalCalls).toHaveLength(1);
     expect(usCalls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('accepts numeric ticker prices and ignores malformed symbols', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([
-      { symbol: 'ETHUSDT', price: 2100.75 },
-      { symbol: 'INVALID SYMBOL', price: '1000' },
-      { symbol: 'BTCUSDT', price: 'bad' },
-    ]));
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { symbol: 'ETHUSDT', price: 2100.75 },
+        { symbol: 'INVALID SYMBOL', price: '1000' },
+        { symbol: 'BTCUSDT', price: 'bad' },
+      ]),
+    );
 
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
@@ -357,7 +406,8 @@ describe('market utils', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-21T00:00:00.000Z'));
 
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce(jsonResponse({ symbol: 'ETHUSDT', price: '1800' }))
       .mockResolvedValue(failResponse());
 
@@ -376,14 +426,18 @@ describe('market utils', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-21T00:00:00.000Z'));
 
-    const assets = Array.from({ length: 270 }, (_, index) => `A${index.toString(36).toUpperCase().padStart(2, '0')}`);
+    const assets = Array.from(
+      { length: 270 },
+      (_, index) => `A${index.toString(36).toUpperCase().padStart(2, '0')}`,
+    );
     const oldestAsset = assets[0];
     const firstPayload = assets.map((asset, index) => ({
       symbol: `${asset}USDT`,
       price: String(100 + index),
     }));
 
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce(jsonResponse(firstPayload))
       .mockResolvedValue(failResponse());
 

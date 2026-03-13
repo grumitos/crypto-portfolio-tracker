@@ -6,9 +6,12 @@ import { formatISODateLocal } from './date';
  */
 function periodsPerYear(freq: CompoundFrequency): number {
   switch (freq) {
-    case 'daily': return 365;
-    case 'weekly': return 52;
-    case 'biweekly': return 26;
+    case 'daily':
+      return 365;
+    case 'weekly':
+      return 52;
+    case 'biweekly':
+      return 26;
   }
 }
 
@@ -17,9 +20,12 @@ function periodsPerYear(freq: CompoundFrequency): number {
  */
 function daysPerPeriod(freq: CompoundFrequency): number {
   switch (freq) {
-    case 'daily': return 1;
-    case 'weekly': return 7;
-    case 'biweekly': return 14;
+    case 'daily':
+      return 1;
+    case 'weekly':
+      return 7;
+    case 'biweekly':
+      return 14;
   }
 }
 
@@ -114,20 +120,23 @@ export function weightedAverageAPR(positions: DualPosition[]): number {
  * Calculate daily earnings at given APR.
  */
 export function dailyEarnings(capital: number, apr: number): number {
-  return capital * (apr / 100) / 365;
+  return (capital * (apr / 100)) / 365;
 }
 
 /**
  * Calculate monthly earnings at given APR (nominal run-rate).
  */
 export function monthlyEarnings(capital: number, apr: number): number {
-  return capital * (apr / 100) / 12;
+  return (capital * (apr / 100)) / 12;
 }
 
 /**
  * Calculate effective APY and equivalent effective daily compounded rate.
  */
-export function compoundedRateMetrics(apr: number, frequency: CompoundFrequency): {
+export function compoundedRateMetrics(
+  apr: number,
+  frequency: CompoundFrequency,
+): {
   dailyCompoundedPct: number;
   apyPct: number;
 } {
@@ -184,7 +193,11 @@ export function formatPct(n: number, decimals = 2): string {
  * Estimate days remaining to reach goal based on current APR.
  * Uses compound interest with daily compounding.
  */
-export function estimateDaysToGoal(currentBalance: number, apr: number, goal: number): number | null {
+export function estimateDaysToGoal(
+  currentBalance: number,
+  apr: number,
+  goal: number,
+): number | null {
   if (currentBalance >= goal) return 0;
   if (currentBalance <= 0 || apr <= 0 || goal <= currentBalance) return null;
 

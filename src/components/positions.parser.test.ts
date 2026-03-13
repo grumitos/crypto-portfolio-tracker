@@ -189,8 +189,8 @@ Holding
 
     const parsed = parseImportedPositions(raw);
     expect(parsed).toHaveLength(2);
-    expect(parsed.every(p => p.asset === 'ETH')).toBe(true);
-    expect(parsed.map(p => p.amount).sort((a, b) => a - b)).toEqual([40, 60]);
+    expect(parsed.every((p) => p.asset === 'ETH')).toBe(true);
+    expect(parsed.map((p) => p.amount).sort((a, b) => a - b)).toEqual([40, 60]);
   });
 
   it('returns empty arrays for empty and malformed imports', () => {

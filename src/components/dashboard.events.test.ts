@@ -30,10 +30,14 @@ describe('dashboard events', () => {
 
   it('opens and closes balance/settings modals', () => {
     const container = renderDashboardEventsFixture();
-    bindDashboardEvents(container, {
-      onSaveBalance: vi.fn(),
-      onSaveSettings: vi.fn(),
-    }, (value) => Number(value));
+    bindDashboardEvents(
+      container,
+      {
+        onSaveBalance: vi.fn(),
+        onSaveSettings: vi.fn(),
+      },
+      (value) => Number(value),
+    );
 
     const balanceModal = container.querySelector('#modal-balance') as HTMLElement;
     const settingsModal = container.querySelector('#modal-settings') as HTMLElement;

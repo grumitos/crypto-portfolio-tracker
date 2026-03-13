@@ -5,105 +5,104 @@ let snapshotRects: Map<string, DOMRect> | null = null;
 let isViewSwitch = false;
 
 export function getCurrentView(): View {
-    return currentView;
+  return currentView;
 }
 
 export function initRouter(onNavigate: (view: View) => void): void {
-    window.addEventListener('hashchange', () => {
-        const hash = window.location.hash.slice(1) as View;
-        if (['dashboard', 'positions', 'simulator', 'calculadora'].includes(hash)) {
-            navigateTo(hash, onNavigate);
-        }
-    });
-
+  window.addEventListener('hashchange', () => {
     const hash = window.location.hash.slice(1) as View;
     if (['dashboard', 'positions', 'simulator', 'calculadora'].includes(hash)) {
-        currentView = hash;
+      navigateTo(hash, onNavigate);
     }
+  });
+
+  const hash = window.location.hash.slice(1) as View;
+  if (['dashboard', 'positions', 'simulator', 'calculadora'].includes(hash)) {
+    currentView = hash;
+  }
 }
 
 export function navigateTo(view: View, onNavigate: (view: View) => void): void {
-    if (view === currentView) return;
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (view === currentView) return;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    if (!prefersReduced) {
-        const container = document.getElementById('view-container');
-        if (container) {
-            const rects = new Map<string, DOMRect>();
-            container.querySelectorAll<HTMLElement>('[data-shared-card]').forEach(el => {
-                const key = el.dataset.sharedCard;
-                if (key) rects.set(key, el.getBoundingClientRect());
-            });
-            snapshotRects = rects.size > 0 ? rects : null;
-        }
+  if (!prefersReduced) {
+    const container = document.getElementById('view-container');
+    if (container) {
+      const rects = new Map<string, DOMRect>();
+      container.querySelectorAll<HTMLElement>('[data-shared-card]').forEach((el) => {
+        const key = el.dataset.sharedCard;
+        if (key) rects.set(key, el.getBoundingClientRect());
+      });
+      snapshotRects = rects.size > 0 ? rects : null;
     }
+  }
 
-    isViewSwitch = true;
-    currentView = view;
+  isViewSwitch = true;
+  currentView = view;
 
-    if (!prefersReduced && 'startViewTransition' in document) {
-        document.startViewTransition!(() => onNavigate(view));
-    } else {
-        onNavigate(view);
-    }
+  if (!prefersReduced && 'startViewTransition' in document) {
+    document.startViewTransition!(() => onNavigate(view));
+  } else {
+    onNavigate(view);
+  }
 }
 
 export function handleTransitionEntry(container: HTMLElement): void {
-    if (!isViewSwitch) return;
-    isViewSwitch = false;
+  if (!isViewSwitch) return;
+  isViewSwitch = false;
 
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReduced) { snapshotRects = null; return; }
-
-    const oldRects = snapshotRects;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) {
     snapshotRects = null;
-    const movedKeys = new Set<string>();
+    return;
+  }
 
-    if (oldRects && oldRects.size > 0) {
-        container.querySelectorAll<HTMLElement>('[data-shared-card]').forEach(el => {
-            const key = el.dataset.sharedCard;
-            if (!key) return;
-            const from = oldRects.get(key);
-            if (!from) return;
+  const oldRects = snapshotRects;
+  snapshotRects = null;
+  const movedKeys = new Set<string>();
 
-            const to = el.getBoundingClientRect();
-            const dx = from.left - to.left;
-            const dy = from.top - to.top;
+  if (oldRects && oldRects.size > 0) {
+    container.querySelectorAll<HTMLElement>('[data-shared-card]').forEach((el) => {
+      const key = el.dataset.sharedCard;
+      if (!key) return;
+      const from = oldRects.get(key);
+      if (!from) return;
 
-            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-            movedKeys.add(key);
+      const to = el.getBoundingClientRect();
+      const dx = from.left - to.left;
+      const dy = from.top - to.top;
 
-            el.animate(
-                [
-                    { transform: `translate(${dx}px, ${dy}px)`, opacity: 1 },
-                    { transform: 'translate(0, 0)', opacity: 1 },
-                ],
-                {
-                    duration: 360,
-                    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                    fill: 'none',
-                },
-            );
-        });
-    }
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      movedKeys.add(key);
 
-    let delay = 0;
-    container.querySelectorAll<HTMLElement>('.card, .stat-card, .positions-spot-card').forEach(el => {
-        const key = el.dataset.sharedCard;
-        if (key && movedKeys.has(key)) return;
+      el.animate(
+        [
+          { transform: `translate(${dx}px, ${dy}px)`, opacity: 1 },
+          { transform: 'translate(0, 0)', opacity: 1 },
+        ],
+        {
+          duration: 360,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+          fill: 'none',
+        },
+      );
+    });
+  }
 
-        el.animate(
-            [
-                { opacity: 0 },
-                { opacity: 1 },
-            ],
-            {
-                duration: 320,
-                delay,
-                easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                fill: 'backwards',
-            },
-        );
-        delay += 40;
+  let delay = 0;
+  container
+    .querySelectorAll<HTMLElement>('.card, .stat-card, .positions-spot-card')
+    .forEach((el) => {
+      const key = el.dataset.sharedCard;
+      if (key && movedKeys.has(key)) return;
+
+      el.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 320,
+        delay,
+        easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        fill: 'backwards',
+      });
+      delay += 40;
     });
 }

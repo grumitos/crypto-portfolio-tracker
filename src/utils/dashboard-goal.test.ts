@@ -10,7 +10,10 @@ import {
 describe('dashboard-goal utils', () => {
   it('defaults to both legends enabled', () => {
     expect(sanitizeDashboardLegendState(undefined)).toEqual({ be: true, goal: true });
-    expect(sanitizeDashboardLegendState({ be: false, goal: false })).toEqual({ be: true, goal: true });
+    expect(sanitizeDashboardLegendState({ be: false, goal: false })).toEqual({
+      be: true,
+      goal: true,
+    });
   });
 
   it('resolves mode correctly from legend state', () => {
@@ -20,8 +23,14 @@ describe('dashboard-goal utils', () => {
   });
 
   it('prevents disabling the last active legend', () => {
-    expect(toggleDashboardLegend({ be: true, goal: false }, 'be')).toEqual({ be: true, goal: false });
-    expect(toggleDashboardLegend({ be: false, goal: true }, 'goal')).toEqual({ be: false, goal: true });
+    expect(toggleDashboardLegend({ be: true, goal: false }, 'be')).toEqual({
+      be: true,
+      goal: false,
+    });
+    expect(toggleDashboardLegend({ be: false, goal: true }, 'goal')).toEqual({
+      be: false,
+      goal: true,
+    });
   });
 
   it('uses breakeven target in BE-only mode', () => {

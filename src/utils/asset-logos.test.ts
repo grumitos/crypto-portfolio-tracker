@@ -5,15 +5,22 @@ describe('asset logos', () => {
   it('returns local primary and remote fallback for known assets', () => {
     const logo = resolveAssetLogoSources('eth');
 
-    expect(logo.primarySrc.startsWith('data:image/svg+xml') || logo.primarySrc.includes('/src/assets/crypto/eth.svg')).toBe(true);
-    expect(logo.fallbackSrc).toBe('https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/eth.svg');
+    expect(
+      logo.primarySrc.startsWith('data:image/svg+xml') ||
+        logo.primarySrc.includes('/src/assets/crypto/eth.svg'),
+    ).toBe(true);
+    expect(logo.fallbackSrc).toBe(
+      'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/eth.svg',
+    );
     expect(logo.alt).toBe('ETH logo');
   });
 
   it('returns remote primary and no fallback for unknown assets', () => {
     const logo = resolveAssetLogoSources('XRP');
 
-    expect(logo.primarySrc).toBe('https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/xrp.svg');
+    expect(logo.primarySrc).toBe(
+      'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/xrp.svg',
+    );
     expect(logo.fallbackSrc).toBeNull();
     expect(logo.alt).toBe('XRP logo');
   });

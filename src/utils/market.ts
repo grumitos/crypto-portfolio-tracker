@@ -3,9 +3,11 @@ import { dailyEarnings as calculateDailyEarnings } from './calculator';
 
 const STABLE_ASSETS = new Set(['USD', 'USDT', 'USDC', 'FDUSD', 'BUSD']);
 const priceCache = new Map<string, { value: number; ts: number }>();
+const changePercent24hCache = new Map<string, { value: number; ts: number }>();
 const CACHE_TTL_MS = 60_000;
 const STALE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const PRICE_CACHE_MAX_ENTRIES = 256;
+const CHANGE_CACHE_MAX_ENTRIES = 256;
 const BINANCE_FETCH_TIMEOUT_MS = 6000;
 const DEFAULT_RATE_LIMIT_BLOCK_MS = 60_000;
 const DEFAULT_BINANCE_TICKER_ENDPOINTS = [
@@ -33,11 +35,20 @@ function resolveTickerEndpoints(): string[] {
   return Array.from(new Set(endpoints));
 }
 
+function toTicker24hEndpoint(endpoint: string): string {
+  const trimmed = endpoint.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.replace(/\/ticker\/price\/?$/i, '/ticker/24hr');
+}
+
 const BINANCE_TICKER_ENDPOINTS = resolveTickerEndpoints();
+const BINANCE_TICKER_24H_ENDPOINTS = BINANCE_TICKER_ENDPOINTS.map(toTicker24hEndpoint);
 const endpointBlockedUntilByUrl = new Map<string, number>();
 let preferredEndpointIndex = 0;
+let preferred24hEndpointIndex = 0;
 const tickerInFlight = new Map<string, Promise<number | null>>();
 const tickerBatchInFlight = new Map<string, Promise<Map<string, number>>>();
+const ticker24hBatchInFlight = new Map<string, Promise<Map<string, number>>>();
 
 export type PriceSource = 'stable' | 'cache-fresh' | 'live' | 'cache-stale' | 'unavailable';
 
@@ -49,6 +60,7 @@ interface ResolvedAssetPrice {
 
 interface ResolveAssetsOptions {
   forceRefresh?: boolean;
+  includeChangePercent24h?: boolean;
 }
 
 export interface AssetPriceSnapshot {
@@ -57,6 +69,7 @@ export interface AssetPriceSnapshot {
   marketLastUpdatedAt: number | null;
   hasStalePrices: boolean;
   hasUnavailablePrices: boolean;
+  changePercent24hByAsset?: Record<string, number | null>;
 }
 
 export interface PositionMetrics {
@@ -108,6 +121,17 @@ function parseTickerPrice(value: unknown): number | null {
   return null;
 }
 
+function parseTickerChangePercent(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function parseTickerRows(payload: unknown): Map<string, number> {
   const rows = Array.isArray(payload) ? payload : [payload];
   const result = new Map<string, number>();
@@ -118,6 +142,21 @@ function parseTickerRows(payload: unknown): Map<string, number> {
     const price = parseTickerPrice(row.price);
     if (!symbol || price === null) continue;
     result.set(symbol, price);
+  }
+
+  return result;
+}
+
+function parseTicker24hRows(payload: unknown): Map<string, number> {
+  const rows = Array.isArray(payload) ? payload : [payload];
+  const result = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!isRecord(row)) continue;
+    const symbol = parseTickerSymbol(row.symbol);
+    const changePercent = parseTickerChangePercent(row.priceChangePercent);
+    if (!symbol || changePercent === null) continue;
+    result.set(symbol, changePercent);
   }
 
   return result;
@@ -145,9 +184,10 @@ function isRateLimited(response: Response): boolean {
 }
 
 function endpointOrder(now: number): number[] {
-  const preferred = preferredEndpointIndex >= 0 && preferredEndpointIndex < BINANCE_TICKER_ENDPOINTS.length
-    ? preferredEndpointIndex
-    : 0;
+  const preferred =
+    preferredEndpointIndex >= 0 && preferredEndpointIndex < BINANCE_TICKER_ENDPOINTS.length
+      ? preferredEndpointIndex
+      : 0;
   const ordered = [
     preferred,
     ...BINANCE_TICKER_ENDPOINTS.map((_, index) => index).filter((index) => index !== preferred),
@@ -169,6 +209,29 @@ function blockEndpoint(baseUrl: string, response: Response): void {
 function markEndpointHealthy(index: number): void {
   preferredEndpointIndex = index;
   endpointBlockedUntilByUrl.delete(BINANCE_TICKER_ENDPOINTS[index]);
+}
+
+function endpoint24hOrder(now: number): number[] {
+  const preferred =
+    preferred24hEndpointIndex >= 0 &&
+    preferred24hEndpointIndex < BINANCE_TICKER_24H_ENDPOINTS.length
+      ? preferred24hEndpointIndex
+      : 0;
+  const ordered = [
+    preferred,
+    ...BINANCE_TICKER_24H_ENDPOINTS.map((_, index) => index).filter((index) => index !== preferred),
+  ];
+
+  return ordered.filter((index) => {
+    const baseUrl = BINANCE_TICKER_24H_ENDPOINTS[index];
+    const blockedUntil = endpointBlockedUntilByUrl.get(baseUrl) ?? 0;
+    return blockedUntil <= now;
+  });
+}
+
+function mark24hEndpointHealthy(index: number): void {
+  preferred24hEndpointIndex = index;
+  endpointBlockedUntilByUrl.delete(BINANCE_TICKER_24H_ENDPOINTS[index]);
 }
 
 async function fetchWithTimeout(url: string): Promise<Response | null> {
@@ -219,6 +282,38 @@ async function fetchTickerRowsWithFallback(query: string): Promise<Map<string, n
   return new Map();
 }
 
+async function fetchTicker24hRowsWithFallback(query: string): Promise<Map<string, number>> {
+  const now = Date.now();
+  const order = endpoint24hOrder(now);
+  if (order.length === 0) return new Map();
+
+  for (const index of order) {
+    const baseUrl = BINANCE_TICKER_24H_ENDPOINTS[index];
+    const response = await fetchWithTimeout(`${baseUrl}?${query}`);
+    if (!response) continue;
+
+    if (!response.ok) {
+      if (isRateLimited(response)) {
+        blockEndpoint(baseUrl, response);
+      }
+      continue;
+    }
+
+    try {
+      const rows = parseTicker24hRows(await response.json());
+      mark24hEndpointHealthy(index);
+      return rows;
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.warn('[market] invalid ticker 24h payload', { baseUrl, err });
+      }
+      continue;
+    }
+  }
+
+  return new Map();
+}
+
 async function fetchTicker(symbol: string): Promise<number | null> {
   const normalized = symbol.toUpperCase().trim();
   if (!normalized) return null;
@@ -241,7 +336,9 @@ async function fetchTicker(symbol: string): Promise<number | null> {
 }
 
 async function fetchTickersBatch(symbols: string[]): Promise<Map<string, number>> {
-  const normalized = Array.from(new Set(symbols.map((symbol) => symbol.toUpperCase().trim()).filter(Boolean))).sort();
+  const normalized = Array.from(
+    new Set(symbols.map((symbol) => symbol.toUpperCase().trim()).filter(Boolean)),
+  ).sort();
   if (normalized.length === 0) return new Map();
 
   const batchKey = normalized.join('|');
@@ -249,9 +346,10 @@ async function fetchTickersBatch(symbols: string[]): Promise<Map<string, number>
   if (inflight) return inflight;
 
   const request = (async (): Promise<Map<string, number>> => {
-    const query = normalized.length === 1
-      ? `symbol=${encodeURIComponent(normalized[0])}`
-      : `symbols=${encodeURIComponent(JSON.stringify(normalized))}`;
+    const query =
+      normalized.length === 1
+        ? `symbol=${encodeURIComponent(normalized[0])}`
+        : `symbols=${encodeURIComponent(JSON.stringify(normalized))}`;
     return fetchTickerRowsWithFallback(query);
   })();
 
@@ -263,30 +361,81 @@ async function fetchTickersBatch(symbols: string[]): Promise<Map<string, number>
   }
 }
 
+async function fetchTickers24hBatch(symbols: string[]): Promise<Map<string, number>> {
+  const normalized = Array.from(
+    new Set(symbols.map((symbol) => symbol.toUpperCase().trim()).filter(Boolean)),
+  ).sort();
+  if (normalized.length === 0) return new Map();
+
+  const batchKey = normalized.join('|');
+  const inflight = ticker24hBatchInFlight.get(batchKey);
+  if (inflight) return inflight;
+
+  const request = (async (): Promise<Map<string, number>> => {
+    const query =
+      normalized.length === 1
+        ? `symbol=${encodeURIComponent(normalized[0])}`
+        : `symbols=${encodeURIComponent(JSON.stringify(normalized))}`;
+    return fetchTicker24hRowsWithFallback(query);
+  })();
+
+  ticker24hBatchInFlight.set(batchKey, request);
+  try {
+    return await request;
+  } finally {
+    ticker24hBatchInFlight.delete(batchKey);
+  }
+}
+
 function rememberPrice(asset: string, value: number): ResolvedAssetPrice {
   const ts = Date.now();
+  // Re-insert to maintain LRU order (most recently used at the end).
+  priceCache.delete(asset);
   priceCache.set(asset, { value, ts });
   prunePriceCache(ts);
   return { value, ts, source: 'live' };
 }
 
-function prunePriceCache(now = Date.now()): void {
-  for (const [asset, entry] of priceCache.entries()) {
+function rememberChangePercent24h(asset: string, value: number): { value: number; ts: number } {
+  const ts = Date.now();
+  changePercent24hCache.delete(asset);
+  changePercent24hCache.set(asset, { value, ts });
+  pruneChangePercent24hCache(ts);
+  return { value, ts };
+}
+
+/**
+ * Prune a cache Map: remove stale entries, then evict oldest by insertion order (LRU).
+ * Map.keys().next() gives the oldest key since Map preserves insertion order,
+ * and setCacheEntry() re-inserts on update to keep order fresh.
+ */
+function pruneCache(
+  cache: Map<string, { value: number; ts: number }>,
+  maxEntries: number,
+  now = Date.now(),
+): void {
+  for (const [key, entry] of cache.entries()) {
     if (now - entry.ts > STALE_CACHE_MAX_AGE_MS) {
-      priceCache.delete(asset);
+      cache.delete(key);
     }
   }
 
-  const overflow = priceCache.size - PRICE_CACHE_MAX_ENTRIES;
+  let overflow = cache.size - maxEntries;
   if (overflow <= 0) return;
 
-  // Evict the oldest timestamp entries first to keep cache bounded.
-  const oldestFirst = [...priceCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
-  for (let i = 0; i < overflow; i += 1) {
-    const key = oldestFirst[i]?.[0];
-    if (!key) break;
-    priceCache.delete(key);
+  for (const key of cache.keys()) {
+    if (overflow <= 0) break;
+    cache.delete(key);
+    overflow -= 1;
   }
+}
+
+function prunePriceCache(now = Date.now()): void {
+  pruneCache(priceCache, PRICE_CACHE_MAX_ENTRIES, now);
+}
+
+function pruneChangePercent24hCache(now = Date.now()): void {
+  pruneCache(changePercent24hCache, CHANGE_CACHE_MAX_ENTRIES, now);
 }
 
 function staleOrUnavailable(asset: string): ResolvedAssetPrice {
@@ -343,7 +492,7 @@ async function resolveAssetsUSD(
 
   const btcPairs = unresolvedForBtc.map((asset) => `${asset}BTC`);
   const viaBtcBatch = await fetchTickersBatch([...btcPairs, 'BTCUSDT']);
-  const btcUsdt = viaBtcBatch.get('BTCUSDT') ?? await fetchTicker('BTCUSDT');
+  const btcUsdt = viaBtcBatch.get('BTCUSDT') ?? (await fetchTicker('BTCUSDT'));
   const stillUnresolved: string[] = [];
 
   for (const asset of unresolvedForBtc) {
@@ -377,11 +526,61 @@ async function resolveAssetsUSD(
   return resolved;
 }
 
+async function resolveAssets24hChangePercent(
+  assets: string[],
+  options: ResolveAssetsOptions = {},
+): Promise<Record<string, number | null>> {
+  pruneChangePercent24hCache();
+
+  const unique = Array.from(new Set(assets.map(normalizeAsset).filter(Boolean)));
+  const resolved: Record<string, number | null> = {};
+  const missing: string[] = [];
+  const now = Date.now();
+  const forceRefresh = options.forceRefresh === true;
+
+  for (const asset of unique) {
+    if (isStable(asset)) {
+      resolved[asset] = 0;
+      continue;
+    }
+
+    const cached = changePercent24hCache.get(asset);
+    if (!forceRefresh && cached && now - cached.ts < CACHE_TTL_MS) {
+      resolved[asset] = cached.value;
+      continue;
+    }
+
+    missing.push(asset);
+  }
+
+  if (missing.length === 0) return resolved;
+
+  const symbols = missing.map((asset) => `${asset}USDT`);
+  const fetched = await fetchTickers24hBatch(symbols);
+
+  for (const asset of missing) {
+    const value = fetched.get(`${asset}USDT`);
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      resolved[asset] = rememberChangePercent24h(asset, value).value;
+      continue;
+    }
+
+    const stale = changePercent24hCache.get(asset);
+    resolved[asset] = stale ? stale.value : null;
+  }
+
+  return resolved;
+}
+
 export async function getAssetPriceSnapshot(
   assets: string[],
   options: ResolveAssetsOptions = {},
 ): Promise<AssetPriceSnapshot> {
   const resolvedByAsset = await resolveAssetsUSD(assets, options);
+  const changePercent24hByAsset =
+    options.includeChangePercent24h === true
+      ? await resolveAssets24hChangePercent(assets, options)
+      : undefined;
   const priceByAsset = Object.fromEntries(
     Object.entries(resolvedByAsset).map(([asset, info]) => [asset, info.value] as const),
   );
@@ -397,7 +596,10 @@ export async function getAssetPriceSnapshot(
     sourceByAsset,
     marketLastUpdatedAt: marketTimestamps.length > 0 ? Math.max(...marketTimestamps) : null,
     hasStalePrices: Object.values(resolvedByAsset).some((entry) => entry.source === 'cache-stale'),
-    hasUnavailablePrices: Object.values(resolvedByAsset).some((entry) => entry.source === 'unavailable'),
+    hasUnavailablePrices: Object.values(resolvedByAsset).some(
+      (entry) => entry.source === 'unavailable',
+    ),
+    changePercent24hByAsset,
   };
 }
 

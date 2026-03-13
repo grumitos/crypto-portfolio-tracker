@@ -5,11 +5,21 @@ import { renderSimulator } from './components/simulator';
 import { renderCalculadora } from './components/calculadora';
 import { initTheme, toggleTheme, getResolvedTheme } from './utils/theme';
 import { syncApiLastUpdatedLabel } from './utils/api-status';
-import { iconDashboard, iconLayers, iconTrendingUp, iconCalculator, iconArchive, iconSun, iconMoon } from './utils/icons';
+import {
+  iconDashboard,
+  iconLayers,
+  iconTrendingUp,
+  iconCalculator,
+  iconArchive,
+  iconSun,
+  iconMoon,
+} from './utils/icons';
 import type { View } from './types';
 import { renderBackupModal, bindBackupEvents } from './components/backup';
 import { enhanceNumberSteppers } from './utils/number-stepper';
 import { getCurrentView, initRouter, navigateTo, handleTransitionEntry } from './utils/router';
+import { onStorageChange } from './utils/storage';
+import { openModal } from './utils/modal-manager';
 
 let disposeActiveView: (() => void) | null = null;
 
@@ -27,7 +37,7 @@ function init(): void {
   app.innerHTML = `
     <header class="app-header">
       <div class="app-brand">
-        <div class="app-title">Crypto <span>Portfolio Tracker</span></div>
+        <h1 class="app-title">Crypto <span>Portfolio Tracker</span></h1>
         <div class="app-last-update" id="app-last-update">Actualizado: pendiente</div>
       </div>
       <nav class="nav">
@@ -44,7 +54,7 @@ function init(): void {
   `;
 
   // Nav events (bound once)
-  app.querySelectorAll('.nav-btn[data-view]').forEach(btn => {
+  app.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const nextView = (btn as HTMLElement).dataset.view as View;
       if (nextView === getCurrentView()) return;
@@ -71,12 +81,49 @@ function init(): void {
 
   initRouter((view) => renderView(app, view));
   renderView(app, getCurrentView());
+
+  // Re-render when another tab modifies localStorage
+  onStorageChange(() => renderView(app, getCurrentView()));
+
+  // Keyboard shortcuts (bound once)
+  const viewKeys: Record<string, View> = {
+    '1': 'dashboard',
+    '2': 'positions',
+    '3': 'simulator',
+    '4': 'calculadora',
+  };
+
+  document.addEventListener('keydown', (e) => {
+    // Ignore when typing in an input/textarea/select
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    // Ctrl+S / Cmd+S → open backup modal
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      openModal(app.querySelector('#modal-backup'));
+      return;
+    }
+
+    // 1-4 → navigate views
+    const view = viewKeys[e.key];
+    if (view && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (view !== getCurrentView()) {
+        window.location.hash = view;
+      }
+    }
+  });
 }
 
 function updateActiveNavButton(app: HTMLElement, view: View): void {
-  app.querySelectorAll('.nav-btn[data-view]').forEach(btn => {
+  app.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
     const isActive = (btn as HTMLElement).dataset.view === view;
     btn.classList.toggle('active', isActive);
+    if (isActive) {
+      btn.setAttribute('aria-current', 'page');
+    } else {
+      btn.removeAttribute('aria-current');
+    }
   });
 }
 
@@ -111,3 +158,9 @@ function renderView(app: HTMLElement, view: View): void {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}

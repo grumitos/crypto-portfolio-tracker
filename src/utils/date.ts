@@ -18,11 +18,7 @@ export function parseISODateLocal(value: string): Date | null {
   const [year, month, day] = value.split('-').map(Number);
   if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
   const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
     return null;
   }
   return date;
@@ -53,7 +49,10 @@ export function parseBinanceDualSettlementUTC(value: string): Date | null {
   return new Date(Date.UTC(year, month - 1, day, BINANCE_DUAL_SETTLEMENT_HOUR_UTC, 0, 0, 0));
 }
 
-export function isBinanceDualSettlementReached(settlementDate: string, now: Date = new Date()): boolean {
+export function isBinanceDualSettlementReached(
+  settlementDate: string,
+  now: Date = new Date(),
+): boolean {
   const settlementAt = parseBinanceDualSettlementUTC(settlementDate);
   if (!settlementAt) return false;
   return now.getTime() >= settlementAt.getTime();

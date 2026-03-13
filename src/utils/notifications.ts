@@ -4,6 +4,14 @@ const API_ERROR_HIDE_DELAY_MS = 5500;
 
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
+function hideBanner(banner: HTMLElement): void {
+  banner.classList.remove(API_ERROR_VISIBLE_CLASS);
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+}
+
 function ensureApiErrorBanner(): HTMLElement | null {
   if (typeof document === 'undefined') return null;
 
@@ -15,17 +23,27 @@ function ensureApiErrorBanner(): HTMLElement | null {
   banner.className = 'api-error-banner';
   banner.setAttribute('role', 'status');
   banner.setAttribute('aria-live', 'polite');
+
+  const text = document.createElement('span');
+  text.className = 'api-error-banner-text';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'api-error-banner-close';
+  closeBtn.setAttribute('aria-label', 'Cerrar');
+  closeBtn.textContent = '\u00d7';
+  closeBtn.addEventListener('click', () => hideBanner(banner));
+
+  banner.append(text, closeBtn);
   document.body.appendChild(banner);
   return banner;
 }
 
-export function showApiErrorBanner(
-  message = 'No se pudo actualizar precios desde la API.'
-): void {
+export function showApiErrorBanner(message = 'No se pudo actualizar precios desde la API.'): void {
   const banner = ensureApiErrorBanner();
   if (!banner) return;
 
-  banner.textContent = message;
+  const text = banner.querySelector('.api-error-banner-text');
+  if (text) text.textContent = message;
   banner.classList.add(API_ERROR_VISIBLE_CLASS);
 
   if (hideTimer) clearTimeout(hideTimer);

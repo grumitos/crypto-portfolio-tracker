@@ -28,7 +28,8 @@ describe('notifications utils', () => {
     notifications.showApiErrorBanner('fallo 2');
 
     const banner = document.getElementById('api-error-banner') as HTMLElement;
-    expect(banner.textContent).toBe('fallo 2');
+    const text = banner.querySelector('.api-error-banner-text') as HTMLElement;
+    expect(text.textContent).toBe('fallo 2');
     expect(banner.classList.contains('is-visible')).toBe(true);
   });
 

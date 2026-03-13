@@ -26,6 +26,17 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
       </div>
       <div class="table-container">
         <table class="positions-table">
+          <colgroup>
+            <col class="col-pos-asset">
+            <col class="col-pos-amount">
+            <col class="col-pos-apr">
+            <col class="col-pos-usd">
+            <col class="col-pos-target">
+            <col class="col-pos-subscription">
+            <col class="col-pos-settlement">
+            <col class="col-pos-earnings">
+            <col class="col-pos-remaining">
+          </colgroup>
           <thead>
             <tr>
               <th>Activo</th>
@@ -95,21 +106,22 @@ function renderComponentRows(parent: DualPosition): string {
   const toggleRow = `
     <tr class="pos-toggle-row" data-ignore-row-edit="true">
       <td colspan="9" class="pos-toggle-cell">
-        <span class="pos-components-summary mono" data-toggle-components>
-          <span class="pos-components-chevron">▸</span>
+        <span class="pos-components-summary mono" data-toggle-components tabindex="0" role="button" aria-expanded="false">
+          <span class="pos-components-chevron" aria-hidden="true">▸</span>
           Ver desglose (${components.length})
         </span>
       </td>
     </tr>
   `;
 
-  const subRows = sorted.map((c) => {
-    const tempPos: DualPosition = { ...parent, ...c };
-    const cDaysDisplay = formatRemainingTime(tempPos);
-    const cEarned = calculateDualProjectedProfit(tempPos);
-    const cEarnedStr = formatAmount(cEarned, subscriptionAsset);
+  const subRows = sorted
+    .map((c) => {
+      const tempPos: DualPosition = { ...parent, ...c };
+      const cDaysDisplay = formatRemainingTime(tempPos);
+      const cEarned = calculateDualProjectedProfit(tempPos);
+      const cEarnedStr = formatAmount(cEarned, subscriptionAsset);
 
-    return `
+      return `
     <tr class="pos-sub-row" style="display:none" data-ignore-row-edit="true">
       <td></td>
       <td class="mono">${formatAmount(c.amount, subscriptionAsset)}</td>
@@ -124,7 +136,8 @@ function renderComponentRows(parent: DualPosition): string {
       </td>
     </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   return toggleRow + subRows;
 }
@@ -204,15 +217,16 @@ function productLabel(position: DualPosition): string {
 
 function productLabelHtml(position: DualPosition): string {
   const label = escapeHtml(productLabel(position));
-  const logoAsset = position.direction === 'sell-high'
-    ? position.subscriptionAsset
-    : position.asset;
+  const logoAsset =
+    position.direction === 'sell-high' ? position.subscriptionAsset : position.asset;
 
   const sources = resolveAssetLogoSources(logoAsset);
   const monogram = createAssetMonogram(logoAsset);
 
   const safePrimarySrc = escapeHtml(sources.primarySrc);
-  const safeFallbackAttr = sources.fallbackSrc ? `data-fallback="${escapeHtml(sources.fallbackSrc)}"` : '';
+  const safeFallbackAttr = sources.fallbackSrc
+    ? `data-fallback="${escapeHtml(sources.fallbackSrc)}"`
+    : '';
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
   return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap"><img class="pos-pair-logo" src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async" onerror="this.dataset.fallback?(this.src=this.dataset.fallback,delete this.dataset.fallback):(this.style.display='none',this.nextElementSibling.style.display='inline-flex')"><span class="pos-pair-fallback mono" style="display:none">${safeMonogram}</span></span>${label}</span>`;
@@ -230,7 +244,9 @@ export function updateRemainingTimesInPlace(
     if (isMainSubMinute) hasSubMinuteCountdown = true;
 
     if (!subMinuteOnly || isMainSubMinute) {
-      const remainingEl = container.querySelector(`#position-remaining-${position.id}`) as HTMLElement | null;
+      const remainingEl = container.querySelector(
+        `#position-remaining-${position.id}`,
+      ) as HTMLElement | null;
       if (!remainingEl) return;
       const nextHtml = formatRemainingTime(position);
       if (remainingEl.innerHTML !== nextHtml) remainingEl.innerHTML = nextHtml;
@@ -243,7 +259,9 @@ export function updateRemainingTimesInPlace(
         if (isComponentSubMinute) hasSubMinuteCountdown = true;
         if (subMinuteOnly && !isComponentSubMinute) return;
 
-        const cRemainingEl = container.querySelector(`#position-remaining-${position.id}-comp-${c.id}`) as HTMLElement | null;
+        const cRemainingEl = container.querySelector(
+          `#position-remaining-${position.id}-comp-${c.id}`,
+        ) as HTMLElement | null;
         if (!cRemainingEl) return;
         const cNextHtml = formatRemainingTime(tempPos);
         if (cRemainingEl.innerHTML !== cNextHtml) cRemainingEl.innerHTML = cNextHtml;

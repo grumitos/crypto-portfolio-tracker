@@ -42,6 +42,14 @@ tr:hover .pos-row-actions {
   pointer-events: auto;
 }
 
+@media (hover: none) {
+  .editing-mode .pos-row-actions {
+    position: static;
+    background: none;
+    padding-left: 0;
+  }
+}
+
 .editing-mode tr[data-id] {
   cursor: pointer;
 }
@@ -71,8 +79,32 @@ table {
 }
 
 .positions-table {
-  table-layout: auto;
-  min-width: 900px;
+  table-layout: fixed;
+  min-width: 940px;
+}
+
+.positions-table col.col-pos-amount {
+  width: 11%;
+}
+
+.positions-table col.col-pos-apr {
+  width: 8%;
+}
+
+.positions-table col.col-pos-usd {
+  width: 12%;
+}
+
+.positions-table col.col-pos-target {
+  width: 9%;
+}
+
+.positions-table col.col-pos-subscription {
+  width: 12%;
+}
+
+.positions-table col.col-pos-settlement {
+  width: 12%;
 }
 
 .position-datetime-inputs {
@@ -138,7 +170,9 @@ table {
   user-select: none;
   padding: 4px 10px 4px 6px;
   border-radius: 4px;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .pos-components-summary:hover {
@@ -264,12 +298,12 @@ td.mono {
   border-right: 1px solid var(--border);
 }
 
-.dir-btn.active[data-dir="buy-low"] {
+.dir-btn.active[data-dir='buy-low'] {
   background: var(--color-gain-muted);
   color: var(--color-gain);
 }
 
-.dir-btn.active[data-dir="sell-high"] {
+.dir-btn.active[data-dir='sell-high'] {
   background: var(--color-loss-muted);
   color: var(--color-loss);
 }

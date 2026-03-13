@@ -23,12 +23,15 @@ describe('storage', () => {
   });
 
   it('infers sell sync source and sanitizes purchases when loading calculadora state', () => {
-    localStorage.setItem('crypto-calculadora', JSON.stringify({
-      sellPrice: '615.50',
-      sellPct: '0.98',
-      sellSyncSource: null,
-      purchases: [{ id: 'bad', qty: '1.25<script>', price: '600.45\"' }],
-    }));
+    localStorage.setItem(
+      'crypto-calculadora',
+      JSON.stringify({
+        sellPrice: '615.50',
+        sellPct: '0.98',
+        sellSyncSource: null,
+        purchases: [{ id: 'bad', qty: '1.25<script>', price: '600.45"' }],
+      }),
+    );
 
     const state = loadCalcState();
 
@@ -56,28 +59,33 @@ describe('storage', () => {
   });
 
   it('sanitizes malformed position values from persisted app state', () => {
-    localStorage.setItem('crypto-portfolio-tracker', JSON.stringify({
-      portfolio: {
-        totalInvested: 'bad',
-        currentBalance: '-100',
-        goalAmount: 0,
-        lastUpdated: 'not-a-date',
-        balanceHistory: [{ date: 'not-a-date', balance: 'oops' }],
-      },
-      positions: [{
-        id: '<bad-id>',
-        asset: '<script>alert(1)</script>',
-        direction: 'invalid',
-        subscriptionAsset: 'usdt',
-        amount: '-10',
-        targetPrice: '-20',
-        entryDate: '2026-02-20',
-        entryTime: '25:99',
-        settlementDate: '2026-02-18',
-        settlementTime: '03:70',
-        apr: '-5',
-      }],
-    }));
+    localStorage.setItem(
+      'crypto-portfolio-tracker',
+      JSON.stringify({
+        portfolio: {
+          totalInvested: 'bad',
+          currentBalance: '-100',
+          goalAmount: 0,
+          lastUpdated: 'not-a-date',
+          balanceHistory: [{ date: 'not-a-date', balance: 'oops' }],
+        },
+        positions: [
+          {
+            id: '<bad-id>',
+            asset: '<script>alert(1)</script>',
+            direction: 'invalid',
+            subscriptionAsset: 'usdt',
+            amount: '-10',
+            targetPrice: '-20',
+            entryDate: '2026-02-20',
+            entryTime: '25:99',
+            settlementDate: '2026-02-18',
+            settlementTime: '03:70',
+            apr: '-5',
+          },
+        ],
+      }),
+    );
 
     const state = loadState();
     const position = state.positions[0];
@@ -99,19 +107,21 @@ describe('storage', () => {
     const original = loadState();
     expect(original.positions).toHaveLength(0);
 
-    replacePositions([{
-      id: 'bulk_1',
-      asset: 'ETH',
-      direction: 'buy-low',
-      subscriptionAsset: 'USDT',
-      amount: 10,
-      targetPrice: 1900,
-      entryDate: '2026-02-19',
-      entryTime: '08:05',
-      settlementDate: '2026-02-20',
-      settlementTime: '03:00',
-      apr: 100.5,
-    }]);
+    replacePositions([
+      {
+        id: 'bulk_1',
+        asset: 'ETH',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 10,
+        targetPrice: 1900,
+        entryDate: '2026-02-19',
+        entryTime: '08:05',
+        settlementDate: '2026-02-20',
+        settlementTime: '03:00',
+        apr: 100.5,
+      },
+    ]);
 
     const next = loadState();
     expect(next.positions).toHaveLength(1);
@@ -121,41 +131,43 @@ describe('storage', () => {
   });
 
   it('preserves grouped components when importing aggregated positions', () => {
-    replacePositions([{
-      id: 'agg_1',
-      asset: 'SOL',
-      direction: 'sell-high',
-      subscriptionAsset: 'SOL',
-      amount: 227.02692984,
-      targetPrice: 82,
-      entryDate: '2026-02-27',
-      entryTime: '22:59',
-      settlementDate: '2026-02-28',
-      settlementTime: '07:59',
-      apr: 321.12,
-      components: [
-        {
-          id: 'leg_1',
-          amount: 40.87873348,
-          targetPrice: 82,
-          entryDate: '2026-02-27',
-          entryTime: '23:00',
-          settlementDate: '2026-02-28',
-          settlementTime: '07:59',
-          apr: 200.33,
-        },
-        {
-          id: 'leg_2',
-          amount: 186.14819636,
-          targetPrice: 82,
-          entryDate: '2026-02-27',
-          entryTime: '22:59',
-          settlementDate: '2026-02-28',
-          settlementTime: '07:59',
-          apr: 347.65,
-        },
-      ],
-    }]);
+    replacePositions([
+      {
+        id: 'agg_1',
+        asset: 'SOL',
+        direction: 'sell-high',
+        subscriptionAsset: 'SOL',
+        amount: 227.02692984,
+        targetPrice: 82,
+        entryDate: '2026-02-27',
+        entryTime: '22:59',
+        settlementDate: '2026-02-28',
+        settlementTime: '07:59',
+        apr: 321.12,
+        components: [
+          {
+            id: 'leg_1',
+            amount: 40.87873348,
+            targetPrice: 82,
+            entryDate: '2026-02-27',
+            entryTime: '23:00',
+            settlementDate: '2026-02-28',
+            settlementTime: '07:59',
+            apr: 200.33,
+          },
+          {
+            id: 'leg_2',
+            amount: 186.14819636,
+            targetPrice: 82,
+            entryDate: '2026-02-27',
+            entryTime: '22:59',
+            settlementDate: '2026-02-28',
+            settlementTime: '07:59',
+            apr: 347.65,
+          },
+        ],
+      },
+    ]);
 
     const next = loadState();
     expect(next.positions).toHaveLength(1);
@@ -171,7 +183,9 @@ describe('storage', () => {
     updateBalance(2000);
 
     const state = loadState();
-    const todayEntries = state.portfolio.balanceHistory.filter((entry) => entry.date === '2026-02-21');
+    const todayEntries = state.portfolio.balanceHistory.filter(
+      (entry) => entry.date === '2026-02-21',
+    );
     expect(todayEntries).toHaveLength(1);
     expect(todayEntries[0].balance).toBe(2000);
 
@@ -201,7 +215,9 @@ describe('storage', () => {
     state.portfolio.currentBalance = 777;
     saveState(state);
 
-    expect(() => importBackup(JSON.stringify({ foo: 'bar' }))).toThrow('Formato de backup no valido');
+    expect(() => importBackup(JSON.stringify({ foo: 'bar' }))).toThrow(
+      'Formato de backup no valido',
+    );
     expect(loadState().portfolio.currentBalance).toBe(777);
   });
 
@@ -237,21 +253,24 @@ describe('storage', () => {
   });
 
   it('deduplicates and sorts balance history during sanitization', () => {
-    localStorage.setItem('crypto-portfolio-tracker', JSON.stringify({
-      portfolio: {
-        totalInvested: 1000,
-        currentBalance: 500,
-        goalAmount: 1500,
-        savings: 500,
-        lastUpdated: '2026-02-21',
-        balanceHistory: [
-          { date: '2026-02-20', balance: 400 },
-          { date: '2026-02-19', balance: 300 },
-          { date: '2026-02-20', balance: 450 },
-        ],
-      },
-      positions: [],
-    }));
+    localStorage.setItem(
+      'crypto-portfolio-tracker',
+      JSON.stringify({
+        portfolio: {
+          totalInvested: 1000,
+          currentBalance: 500,
+          goalAmount: 1500,
+          savings: 500,
+          lastUpdated: '2026-02-21',
+          balanceHistory: [
+            { date: '2026-02-20', balance: 400 },
+            { date: '2026-02-19', balance: 300 },
+            { date: '2026-02-20', balance: 450 },
+          ],
+        },
+        positions: [],
+      }),
+    );
 
     const state = loadState();
     expect(state.portfolio.balanceHistory.map((entry) => entry.date)).toEqual([

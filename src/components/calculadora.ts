@@ -28,7 +28,10 @@ const FEE_PRESETS: Record<FeePreset, { maker: number; label: string }> = {
 
 function fmtNum(value: number, decimals: number): string {
   if (!Number.isFinite(value)) return '-';
-  return value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 
 // ── State management ──
@@ -173,14 +176,18 @@ export function renderCalculadora(container: HTMLElement): () => void {
               </div>
             </div>
 
-            ${state.purchases.length > 0 ? `
+            ${
+              state.purchases.length > 0
+                ? `
               <div class="calc-purchase-header">
                 <span>Cantidad</span>
                 <span>Precio (USD)</span>
                 <span>Total (USD)</span>
                 <span></span>
               </div>
-            ` : ''}
+            `
+                : ''
+            }
 
             <div id="calc-purchases-list"></div>
 
@@ -235,7 +242,10 @@ export function renderCalculadora(container: HTMLElement): () => void {
 
   return () => {
     cancelScheduledRecalculate();
-    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
   };
 }
 
@@ -249,8 +259,10 @@ function renderPurchaseRows(container: HTMLElement): void {
   for (const purchase of state.purchases) {
     const qty = parseNum(purchase.qty);
     const price = roundTo(parseNum(purchase.price), 2);
-    const total = Number.isFinite(qty) && qty > 0 && Number.isFinite(price) && price > 0
-      ? roundTo(qty * price, 2) : NaN;
+    const total =
+      Number.isFinite(qty) && qty > 0 && Number.isFinite(price) && price > 0
+        ? roundTo(qty * price, 2)
+        : NaN;
 
     const row = document.createElement('div');
     row.className = 'calc-purchase-row';
@@ -425,7 +437,7 @@ function bindPurchaseListEvents(container: HTMLElement): void {
     if (!el.dataset.purchaseId || !el.dataset.field) return;
     const id = parseInt(el.dataset.purchaseId, 10);
     const field = el.dataset.field as 'qty' | 'price';
-    const purchase = state.purchases.find(p => p.id === id);
+    const purchase = state.purchases.find((p) => p.id === id);
     if (purchase && field) {
       purchase[field] = el.value;
       const row = el.closest('.calc-purchase-row') as HTMLElement;
@@ -434,8 +446,10 @@ function bindPurchaseListEvents(container: HTMLElement): void {
         if (totalInput) {
           const qty = parseNum(purchase.qty);
           const price = roundTo(parseNum(purchase.price), 2);
-          const total = Number.isFinite(qty) && qty > 0 && Number.isFinite(price) && price > 0
-            ? roundTo(qty * price, 2) : NaN;
+          const total =
+            Number.isFinite(qty) && qty > 0 && Number.isFinite(price) && price > 0
+              ? roundTo(qty * price, 2)
+              : NaN;
           totalInput.value = Number.isFinite(total) ? fmtNum(total, 2) : '-';
         }
       }
@@ -448,7 +462,7 @@ function bindPurchaseListEvents(container: HTMLElement): void {
     const btn = (e.target as HTMLElement).closest('[data-remove-id]') as HTMLElement | null;
     if (!btn) return;
     const id = parseInt(btn.dataset.removeId || '0', 10);
-    state.purchases = state.purchases.filter(p => p.id !== id);
+    state.purchases = state.purchases.filter((p) => p.id !== id);
     renderPurchaseRows(container);
     cancelScheduledRecalculate();
     recalculate(container, { animate: true });
@@ -494,13 +508,10 @@ function setCalcMetricNumber(
 ): void {
   if (!el) return;
   stopValueAnimation(calcTextAnimationByElement, el);
-  setAnimatedNumber(
-    calcValueAnimationByElement,
-    el,
-    value,
-    formatter,
-    { enabled: animate, durationMs: CALC_RESULT_ANIM_MS },
-  );
+  setAnimatedNumber(calcValueAnimationByElement, el, value, formatter, {
+    enabled: animate,
+    durationMs: CALC_RESULT_ANIM_MS,
+  });
 }
 
 function cancelScheduledRecalculate(): void {
@@ -572,7 +583,12 @@ function recalculate(container: HTMLElement, options: { animate?: boolean } = {}
   const sellPriceInput = container.querySelector('#calc-sell-price') as HTMLInputElement;
   let sellPriceActual = roundTo(parseNum(sellPriceInput.value), 2);
   const currentSellPct = parseNum(state.sellPct);
-  if (state.sellSyncSource === 'percent' && Number.isFinite(currentSellPct) && Number.isFinite(basePrice) && basePrice > 0) {
+  if (
+    state.sellSyncSource === 'percent' &&
+    Number.isFinite(currentSellPct) &&
+    Number.isFinite(basePrice) &&
+    basePrice > 0
+  ) {
     const synced = roundTo(basePrice * (1 + currentSellPct / 100), 2);
     if (Number.isFinite(synced)) sellPriceActual = synced;
   }
@@ -590,10 +606,15 @@ function recalculate(container: HTMLElement, options: { animate?: boolean } = {}
   // Fee total display
   const feeMultiplier = computeFeeMultiplier(makerPct, 2);
   let feeUsd: number;
-  if (Number.isFinite(capital) && capital > 0 && Number.isFinite(achieved.achievedR) && Number.isFinite(feeMultiplier)) {
+  if (
+    Number.isFinite(capital) &&
+    capital > 0 &&
+    Number.isFinite(achieved.achievedR) &&
+    Number.isFinite(feeMultiplier)
+  ) {
     feeUsd = capital * (1 + achieved.achievedR) * (1 - feeMultiplier);
   } else {
-    feeUsd = Number.isFinite(capital) ? capital * (makerPct * 2 / 100) : NaN;
+    feeUsd = Number.isFinite(capital) ? capital * ((makerPct * 2) / 100) : NaN;
   }
   const feeTotalEl = container.querySelector('#calc-fee-total') as HTMLElement;
   if (feeTotalEl) {
@@ -669,7 +690,12 @@ function renderAchieved(container: HTMLElement, achieved: AchievedResults, anima
   if (moveEl) {
     setTone(moveEl, achieved.achievedMovement);
     if (Number.isFinite(achieved.achievedMovement)) {
-      setCalcMetricNumber(moveEl, achieved.achievedMovement, (next) => `${fmtNum(next, 3)} %`, animate);
+      setCalcMetricNumber(
+        moveEl,
+        achieved.achievedMovement,
+        (next) => `${fmtNum(next, 3)} %`,
+        animate,
+      );
     } else {
       setCalcMetricText(moveEl, '-', animate);
     }
@@ -714,7 +740,12 @@ function renderStrategy(container: HTMLElement, strategy: StrategyResults, anima
   if (cyclePctEl) {
     setTone(cyclePctEl, strategy.netPctCycle);
     if (Number.isFinite(strategy.netPctCycle)) {
-      setCalcMetricNumber(cyclePctEl, strategy.netPctCycle, (next) => `${fmtNum(next, 4)} %`, animate);
+      setCalcMetricNumber(
+        cyclePctEl,
+        strategy.netPctCycle,
+        (next) => `${fmtNum(next, 4)} %`,
+        animate,
+      );
     } else {
       setCalcMetricText(cyclePctEl, '-', animate);
     }
@@ -722,7 +753,12 @@ function renderStrategy(container: HTMLElement, strategy: StrategyResults, anima
   if (cycleUsdEl) {
     setTone(cycleUsdEl, strategy.netUsdCycle);
     if (Number.isFinite(strategy.netUsdCycle)) {
-      setCalcMetricNumber(cycleUsdEl, strategy.netUsdCycle, (next) => `$ ${fmtNum(next, 2)}`, animate);
+      setCalcMetricNumber(
+        cycleUsdEl,
+        strategy.netUsdCycle,
+        (next) => `$ ${fmtNum(next, 2)}`,
+        animate,
+      );
     } else {
       setCalcMetricText(cycleUsdEl, '-', animate);
     }
@@ -749,5 +785,8 @@ function updatePurchaseSummary(container: HTMLElement, totals: PurchaseTotals): 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave(): void {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { save(); saveTimer = null; }, 200);
+  saveTimer = setTimeout(() => {
+    save();
+    saveTimer = null;
+  }, 200);
 }

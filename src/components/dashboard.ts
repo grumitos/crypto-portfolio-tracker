@@ -13,11 +13,7 @@ import {
 } from '../utils/dashboard-goal';
 import { buildProjectionSnapshot } from '../utils/projection-milestones';
 import { subscribeToMarketTicks } from '../utils/market-poller';
-import {
-  setAnimatedNumber,
-  setAnimatedText,
-  stopValueAnimation,
-} from '../utils/animation';
+import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
 import { skeletonSpan } from '../utils/ui-helpers';
 import { sanitizeFrequency } from './simulator.state';
 import { parseFlexibleNumber } from '../utils/parse-number';
@@ -26,7 +22,12 @@ import {
   loadDashboardLegendState,
   saveDashboardLegendState,
 } from './dashboard.state';
-import type { AppState, CompoundFrequency, DashboardGoalMode, DashboardLegendState } from '../types';
+import type {
+  AppState,
+  CompoundFrequency,
+  DashboardGoalMode,
+  DashboardLegendState,
+} from '../types';
 
 const AUTO_BALANCE_SYNC_COOLDOWN_MS = 5000;
 const GOAL_NUMBER_ANIM_MS = 560;
@@ -79,16 +80,19 @@ function progressMarkerPct(target: number, scaleTarget: number): number {
   return clampProgress(progressPct(target, scaleTarget));
 }
 
-function setCurrencyOutput(el: HTMLElement | null, value: number, animate: boolean, durationMs = 800): void {
+function setCurrencyOutput(
+  el: HTMLElement | null,
+  value: number,
+  animate: boolean,
+  durationMs = 800,
+): void {
   if (!el) return;
   stopValueAnimation(textAnimationByElement, el);
-  setAnimatedNumber(
-    valueAnimationByElement,
-    el,
-    value,
-    (next) => formatUSD(next),
-    { enabled: animate, durationMs, allowRememberedStart: false },
-  );
+  setAnimatedNumber(valueAnimationByElement, el, value, (next) => formatUSD(next), {
+    enabled: animate,
+    durationMs,
+    allowRememberedStart: false,
+  });
 }
 
 function setPercentOutput(
@@ -111,22 +115,21 @@ function setPercentOutput(
 
 function animateTextSwap(el: HTMLElement | null, text: string, enabled: boolean): void {
   if (!el) return;
-  setAnimatedText(
-    textAnimationByElement,
-    el,
-    text,
-    { enabled, mode: 'fade', className: 'text-swap' },
-  );
+  setAnimatedText(textAnimationByElement, el, text, {
+    enabled,
+    mode: 'fade',
+    className: 'text-swap',
+  });
 }
 
 function animateTextScramble(el: HTMLElement | null, text: string, enabled: boolean): void {
   if (!el) return;
-  setAnimatedText(
-    textAnimationByElement,
-    el,
-    text,
-    { enabled, mode: 'scramble', className: 'text-swap', durationMs: 260 },
-  );
+  setAnimatedText(textAnimationByElement, el, text, {
+    enabled,
+    mode: 'scramble',
+    className: 'text-swap',
+    durationMs: 260,
+  });
 }
 
 function setStaticTextOutput(el: HTMLElement | null, text: string): void {
@@ -158,7 +161,12 @@ function estimateDaysToTargetWithProjectionSnapshot(
   invested: number,
   frequency: CompoundFrequency,
 ): number | null {
-  if (!Number.isFinite(capital) || !Number.isFinite(apr) || !Number.isFinite(target) || !Number.isFinite(invested)) {
+  if (
+    !Number.isFinite(capital) ||
+    !Number.isFinite(apr) ||
+    !Number.isFinite(target) ||
+    !Number.isFinite(invested)
+  ) {
     return null;
   }
   if (capital <= 0 || apr <= 0 || target <= 0) return null;
@@ -173,7 +181,12 @@ function modeToClass(mode: DashboardGoalMode): string {
   return 'mode-both';
 }
 
-function setDaysLabel(container: HTMLElement, value: string, highlight: boolean, animate = false): void {
+function setDaysLabel(
+  container: HTMLElement,
+  value: string,
+  highlight: boolean,
+  animate = false,
+): void {
   const daysEl = container.querySelector('#dashboard-days') as HTMLElement | null;
   const daysSepEl = container.querySelector('#dashboard-days-sep') as HTMLElement | null;
   if (!daysEl || !daysSepEl) return;
@@ -235,12 +248,17 @@ function updateGoalProgressVisual(
   const animateText = options.animateText === true;
 
   dashboardLegendState = sanitizeDashboardLegendState(dashboardLegendState);
-  const details = resolveDashboardGoalDetails(uiState.balance, uiState.invested, uiState.goal, dashboardLegendState);
+  const details = resolveDashboardGoalDetails(
+    uiState.balance,
+    uiState.invested,
+    uiState.goal,
+    dashboardLegendState,
+  );
 
-  let firstMilestonePct = 100;
-  let secondMilestonePct = 100;
-  let firstSolidPct = 0;
-  let secondSolidPct = 0;
+  let firstMilestonePct: number;
+  let secondMilestonePct: number;
+  let firstSolidPct: number;
+  let secondSolidPct: number;
 
   if (details.mode === 'both') {
     const progressScale = progressScaleTarget(uiState.invested, uiState.goal);
@@ -252,6 +270,7 @@ function updateGoalProgressVisual(
   } else {
     const singleTarget = details.targetAmount;
     const progressFill = clampProgress(progressPct(uiState.balance, singleTarget));
+    firstMilestonePct = 100;
     firstSolidPct = progressFill;
     secondSolidPct = 0;
     secondMilestonePct = 0;
@@ -265,10 +284,18 @@ function updateGoalProgressVisual(
   const currentEl = container.querySelector('#dash-prog-current') as HTMLElement | null;
   const targetLabelEl = container.querySelector('#dash-prog-target-label') as HTMLElement | null;
   const targetAmountEl = container.querySelector('#dash-prog-target-amount') as HTMLElement | null;
-  const remainingTextEl = container.querySelector('#dash-prog-remaining-text') as HTMLElement | null;
-  const remainingAmountEl = container.querySelector('#dash-prog-remaining-amount') as HTMLElement | null;
-  const remainingPrefixEl = container.querySelector('#dash-prog-remaining-prefix') as HTMLElement | null;
-  const remainingTargetEl = container.querySelector('#dash-prog-remaining-target') as HTMLElement | null;
+  const remainingTextEl = container.querySelector(
+    '#dash-prog-remaining-text',
+  ) as HTMLElement | null;
+  const remainingAmountEl = container.querySelector(
+    '#dash-prog-remaining-amount',
+  ) as HTMLElement | null;
+  const remainingPrefixEl = container.querySelector(
+    '#dash-prog-remaining-prefix',
+  ) as HTMLElement | null;
+  const remainingTargetEl = container.querySelector(
+    '#dash-prog-remaining-target',
+  ) as HTMLElement | null;
 
   if (!bar || !mutedFirst || !mutedSecond || !solidFirst || !solidSecond) return;
 
@@ -296,7 +323,12 @@ function updateGoalProgressVisual(
     animateTextSwap(remainingTextEl, 'Faltan', animateText);
     if (remainingAmountEl) {
       remainingAmountEl.style.display = 'inline';
-      setCurrencyOutput(remainingAmountEl, details.remainingAmount, animateNumbers, GOAL_NUMBER_ANIM_MS);
+      setCurrencyOutput(
+        remainingAmountEl,
+        details.remainingAmount,
+        animateNumbers,
+        GOAL_NUMBER_ANIM_MS,
+      );
     }
     if (remainingPrefixEl) remainingPrefixEl.style.display = 'inline';
     if (remainingTargetEl) {
@@ -488,7 +520,7 @@ export function renderDashboard(container: HTMLElement): () => void {
 
     </div>
 
-    <div id="modal-balance" class="modal-overlay" style="display:none">
+    <dialog id="modal-balance" class="modal-overlay">
       <div class="modal">
         <h3 class="modal-title">Ahorros</h3>
         <div class="form-group">
@@ -500,9 +532,9 @@ export function renderDashboard(container: HTMLElement): () => void {
           <button class="btn btn-primary" id="btn-save-balance">Guardar</button>
         </div>
       </div>
-    </div>
+    </dialog>
 
-    <div id="modal-settings" class="modal-overlay" style="display:none">
+    <dialog id="modal-settings" class="modal-overlay">
       <div class="modal">
         <h3 class="modal-title">Configuracion</h3>
         <div class="form-group">
@@ -518,39 +550,44 @@ export function renderDashboard(container: HTMLElement): () => void {
           <button class="btn btn-primary" id="btn-save-settings">Guardar</button>
         </div>
       </div>
-    </div>
+    </dialog>
   `;
 
-  bindDashboardEvents(container, {
-    onSaveBalance: (savings) => {
-      const before = loadState();
-      const basePositionsValue = before.positions.length > 0
-        ? before.portfolio.currentBalance - before.portfolio.savings
-        : 0;
-      const nextBalance = Math.max(0, Math.round((basePositionsValue + savings) * 100) / 100);
-      updatePortfolio({ savings });
-      const updatedState = updateBalance(nextBalance);
+  bindDashboardEvents(
+    container,
+    {
+      onSaveBalance: (savings) => {
+        const before = loadState();
+        const basePositionsValue =
+          before.positions.length > 0
+            ? before.portfolio.currentBalance - before.portfolio.savings
+            : 0;
+        const nextBalance = Math.max(0, Math.round((basePositionsValue + savings) * 100) / 100);
+        updatePortfolio({ savings });
+        const updatedState = updateBalance(nextBalance);
 
-      uiState.balance = updatedState.portfolio.currentBalance;
-      uiState.invested = updatedState.portfolio.totalInvested;
-      uiState.goal = updatedState.portfolio.goalAmount;
-      uiState.frequency = readSimulatorFrequency(uiState.frequency);
+        uiState.balance = updatedState.portfolio.currentBalance;
+        uiState.invested = updatedState.portfolio.totalInvested;
+        uiState.goal = updatedState.portfolio.goalAmount;
+        uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
-      updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
-      updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+        updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
+        updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+      },
+      onSaveSettings: (invested, goal) => {
+        const updatedState = updatePortfolio({ totalInvested: invested, goalAmount: goal });
+
+        uiState.balance = updatedState.portfolio.currentBalance;
+        uiState.invested = updatedState.portfolio.totalInvested;
+        uiState.goal = updatedState.portfolio.goalAmount;
+        uiState.frequency = readSimulatorFrequency(uiState.frequency);
+
+        updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
+        updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+      },
     },
-    onSaveSettings: (invested, goal) => {
-      const updatedState = updatePortfolio({ totalInvested: invested, goalAmount: goal });
-
-      uiState.balance = updatedState.portfolio.currentBalance;
-      uiState.invested = updatedState.portfolio.totalInvested;
-      uiState.goal = updatedState.portfolio.goalAmount;
-      uiState.frequency = readSimulatorFrequency(uiState.frequency);
-
-      updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
-      updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
-    },
-  }, parseFlexibleNumber);
+    parseFlexibleNumber,
+  );
   bindGoalLegendEvents(container, uiState);
   updateGoalProgressVisual(container, uiState, { animateNumbers: false, animateText: false });
 
@@ -565,7 +602,13 @@ export function renderDashboard(container: HTMLElement): () => void {
     if (disposed || !container.isConnected) return;
     const { positions: latestPositions } = loadState();
     const animateGoalSection = hasFirstMarketHydrationCompleted;
-    await hydrateDashboardMarketStats(container, latestPositions, uiState, forceRefresh, animateGoalSection);
+    await hydrateDashboardMarketStats(
+      container,
+      latestPositions,
+      uiState,
+      forceRefresh,
+      animateGoalSection,
+    );
     hasFirstMarketHydrationCompleted = true;
   });
 
@@ -635,9 +678,10 @@ async function hydrateDashboardMarketStats(
     const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
     const now = Date.now();
 
-    const shouldSyncBalance = metrics.totalUsd > 0
-      && Math.abs(totalBalance - storedBalance) >= 0.01
-      && now - lastAutoBalanceSyncAt > AUTO_BALANCE_SYNC_COOLDOWN_MS;
+    const shouldSyncBalance =
+      metrics.totalUsd > 0 &&
+      Math.abs(totalBalance - storedBalance) >= 0.01 &&
+      now - lastAutoBalanceSyncAt > AUTO_BALANCE_SYNC_COOLDOWN_MS;
 
     if (shouldSyncBalance) {
       lastAutoBalanceSyncAt = now;
@@ -693,7 +737,9 @@ async function hydrateDashboardMarketStats(
 }
 
 function bindGoalLegendEvents(container: HTMLElement, uiState: DashboardUiState): void {
-  const legendButtons = container.querySelectorAll<HTMLButtonElement>('.goal-progress-legend[data-legend]');
+  const legendButtons = container.querySelectorAll<HTMLButtonElement>(
+    '.goal-progress-legend[data-legend]',
+  );
   legendButtons.forEach((button) => {
     button.addEventListener('click', () => {
       const legend = button.dataset.legend;

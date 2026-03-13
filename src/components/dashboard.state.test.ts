@@ -37,13 +37,18 @@ describe('dashboard view state', () => {
   });
 
   it('sanitizes invalid persisted state to keep at least one legend active', () => {
-    localStorage.setItem(DASHBOARD_VIEW_KEY, JSON.stringify({ legend: { be: false, goal: false } }));
+    localStorage.setItem(
+      DASHBOARD_VIEW_KEY,
+      JSON.stringify({ legend: { be: false, goal: false } }),
+    );
     expect(loadDashboardLegendState({ be: true, goal: true })).toEqual({ be: true, goal: true });
   });
 
   it('saves and clears dashboard legend state', () => {
     saveDashboardLegendState({ be: false, goal: true });
-    expect(localStorage.getItem(DASHBOARD_VIEW_KEY)).toBe(JSON.stringify({ legend: { be: false, goal: true } }));
+    expect(localStorage.getItem(DASHBOARD_VIEW_KEY)).toBe(
+      JSON.stringify({ legend: { be: false, goal: true } }),
+    );
 
     clearDashboardLegendState();
     expect(localStorage.getItem(DASHBOARD_VIEW_KEY)).toBeNull();

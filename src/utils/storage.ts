@@ -9,6 +9,13 @@ import type {
 } from '../types';
 import { sanitizeISODate, todayISODateLocal } from './date';
 import { parseLooseNumber } from './parse-number';
+import { showApiErrorBanner } from './notifications';
+
+function notifyStorageError(): void {
+  showApiErrorBanner(
+    'No se pudieron guardar los datos. Almacenamiento local lleno o no disponible.',
+  );
+}
 
 export const STORAGE_KEY = 'crypto-portfolio-tracker';
 export const CALC_KEY = 'crypto-calculadora';
@@ -25,9 +32,7 @@ function getDefaultPortfolio(): PortfolioData {
     savings: 0,
     goalAmount: 0,
     lastUpdated: today,
-    balanceHistory: [
-      { date: today, balance: 0 }
-    ],
+    balanceHistory: [{ date: today, balance: 0 }],
   };
 }
 
@@ -79,7 +84,10 @@ function sanitizeDirection(value: unknown): DualPosition['direction'] {
 
 function sanitizeSymbol(value: unknown, fallback: string): string {
   if (typeof value !== 'string') return fallback;
-  const clean = value.toUpperCase().trim().replace(/[^A-Z0-9_-]/g, '');
+  const clean = value
+    .toUpperCase()
+    .trim()
+    .replace(/[^A-Z0-9_-]/g, '');
   return clean || fallback;
 }
 
@@ -89,7 +97,10 @@ function sanitizeId(value: unknown, fallback: string): string {
   return clean || fallback;
 }
 
-function sanitizeDateRange(entryRaw: unknown, settlementRaw: unknown): { entryDate: string; settlementDate: string } {
+function sanitizeDateRange(
+  entryRaw: unknown,
+  settlementRaw: unknown,
+): { entryDate: string; settlementDate: string } {
   const entryDate = sanitizeISODate(entryRaw, todayISODateLocal());
   const settlementDate = sanitizeISODate(settlementRaw, entryDate);
   return settlementDate < entryDate
@@ -103,7 +114,11 @@ function sanitizeTime(value: unknown): string | undefined {
   return HHMM_PATTERN.test(clean) ? clean : undefined;
 }
 
-function sanitizeBalanceHistory(rawHistory: unknown, fallbackDate: string, fallbackBalance: number): BalanceSnapshot[] {
+function sanitizeBalanceHistory(
+  rawHistory: unknown,
+  fallbackDate: string,
+  fallbackBalance: number,
+): BalanceSnapshot[] {
   if (!Array.isArray(rawHistory)) {
     return [{ date: fallbackDate, balance: fallbackBalance }];
   }
@@ -139,9 +154,8 @@ function sanitizePortfolio(rawPortfolio: unknown): PortfolioData {
   const totalInvested = sanitizePositive(record.totalInvested, defaults.totalInvested);
   const currentBalance = sanitizeNonNegative(record.currentBalance, defaults.currentBalance);
   // Migration: if savings is absent, fall back to currentBalance so existing data is preserved
-  const savings = 'savings' in record
-    ? sanitizeNonNegative(record.savings, currentBalance)
-    : currentBalance;
+  const savings =
+    'savings' in record ? sanitizeNonNegative(record.savings, currentBalance) : currentBalance;
   const goalAmount = sanitizePositive(record.goalAmount, totalInvested);
   const lastUpdated = sanitizeISODate(record.lastUpdated, defaults.lastUpdated);
   const balanceHistory = sanitizeBalanceHistory(record.balanceHistory, lastUpdated, currentBalance);
@@ -179,14 +193,20 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
   };
 }
 
-function sanitizePositionComponents(rawComponents: unknown, parentId: string): DualPositionComponent[] {
+function sanitizePositionComponents(
+  rawComponents: unknown,
+  parentId: string,
+): DualPositionComponent[] {
   if (!Array.isArray(rawComponents)) return [];
 
   const components: DualPositionComponent[] = [];
   rawComponents.forEach((item, index) => {
     const record = isRecord(item) ? item : {};
     const componentId = sanitizeId(record.id, `${parentId}_component_${index + 1}`);
-    const { entryDate, settlementDate } = sanitizeDateRange(record.entryDate, record.settlementDate);
+    const { entryDate, settlementDate } = sanitizeDateRange(
+      record.entryDate,
+      record.settlementDate,
+    );
     const amount = sanitizeNonNegative(record.amount, NaN);
     const apr = sanitizeNonNegative(record.apr, NaN);
     const targetPrice = sanitizeNonNegative(record.targetPrice, 0);
@@ -230,10 +250,7 @@ function isLegacyAppBackupPayload(raw: Record<string, unknown>): boolean {
   return true;
 }
 
-function inferSellSyncSource(
-  sellPrice: string,
-  sellPct: string,
-): 'price' | 'percent' | null {
+function inferSellSyncSource(sellPrice: string, sellPct: string): 'price' | 'percent' | null {
   const parsedSellPrice = parseLooseNumber(sellPrice);
   if (Number.isFinite(parsedSellPrice)) return 'price';
   const parsedSellPct = parseLooseNumber(sellPct);
@@ -270,12 +287,13 @@ function sanitizeCalcState(raw: Partial<CalculadoraState> | null | undefined): C
   const feePreset = merged.feePreset === 'futures' ? 'futures' : 'spot';
   const fdusdEnabled = feePreset === 'spot' && merged.fdusdEnabled === true;
 
-  const sellSyncSource = merged.sellSyncSource === 'price' || merged.sellSyncSource === 'percent'
-    ? merged.sellSyncSource
-    : inferSellSyncSource(
-      sanitizeNumericText(merged.sellPrice, defaults.sellPrice),
-      sanitizeNumericText(merged.sellPct, defaults.sellPct),
-    );
+  const sellSyncSource =
+    merged.sellSyncSource === 'price' || merged.sellSyncSource === 'percent'
+      ? merged.sellSyncSource
+      : inferSellSyncSource(
+          sanitizeNumericText(merged.sellPrice, defaults.sellPrice),
+          sanitizeNumericText(merged.sellPct, defaults.sellPct),
+        );
 
   return {
     price: sanitizeNumericText(merged.price, defaults.price),
@@ -312,6 +330,7 @@ export function saveState(state: AppState): void {
     if (import.meta.env.DEV) {
       console.warn('[storage] failed to save app state', err);
     }
+    notifyStorageError();
   }
 }
 
@@ -378,12 +397,16 @@ export function deletePosition(id: string): AppState {
 // ── Backup ──
 
 export function exportBackup(): string {
-  return JSON.stringify({
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    app: loadState(),
-    calculadora: loadCalcState(),
-  }, null, 2);
+  return JSON.stringify(
+    {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      app: loadState(),
+      calculadora: loadCalcState(),
+    },
+    null,
+    2,
+  );
 }
 
 const CURRENT_BACKUP_VERSION = 2;
@@ -460,5 +483,38 @@ export function saveCalcState(state: CalculadoraState): void {
     if (import.meta.env.DEV) {
       console.warn('[storage] failed to save calculadora state', err);
     }
+    notifyStorageError();
   }
+}
+
+// ── Cross-tab sync ──
+
+type StorageChangeListener = () => void;
+
+const storageChangeListeners: StorageChangeListener[] = [];
+
+/**
+ * Subscribe to cross-tab storage changes. The callback is invoked when another
+ * tab writes to the app's main storage key.
+ */
+export function onStorageChange(listener: StorageChangeListener): () => void {
+  storageChangeListeners.push(listener);
+  return () => {
+    const idx = storageChangeListeners.indexOf(listener);
+    if (idx >= 0) storageChangeListeners.splice(idx, 1);
+  };
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY || e.key === CALC_KEY) {
+      storageChangeListeners.forEach((fn) => {
+        try {
+          fn();
+        } catch {
+          /* subscriber error */
+        }
+      });
+    }
+  });
 }

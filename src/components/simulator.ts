@@ -90,7 +90,9 @@ function renderProjectionLoadingState(container: HTMLElement): void {
   const tableContainer = container.querySelector('#sim-table-container') as HTMLElement | null;
   const tableEl = container.querySelector('#sim-table') as HTMLElement | null;
   const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
-  const chartSkeleton = container.querySelector('#sim-projection-chart-skeleton') as HTMLElement | null;
+  const chartSkeleton = container.querySelector(
+    '#sim-projection-chart-skeleton',
+  ) as HTMLElement | null;
 
   if (tableContainer) tableContainer.style.display = 'block';
   if (canvas) canvas.style.display = 'none';
@@ -147,13 +149,11 @@ function setNumberOutput(
   }
 
   const end = value as number;
-  setAnimatedNumber(
-    valueAnimationByElement,
-    el,
-    end,
-    (next) => formatter(next),
-    { enabled: animate, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
-  );
+  setAnimatedNumber(valueAnimationByElement, el, end, (next) => formatter(next), {
+    enabled: animate,
+    durationMs: RESULT_NUMBER_ANIM_MS,
+    allowRememberedStart: false,
+  });
 }
 
 function setCurrencyOutput(
@@ -197,7 +197,12 @@ function setMilestoneOutputs(
     return;
   }
 
-  setTextOutput(dateEl, milestone.date ? formatDateLatin(milestone.date) : '---', animate, 'scramble');
+  setTextOutput(
+    dateEl,
+    milestone.date ? formatDateLatin(milestone.date) : '---',
+    animate,
+    'scramble',
+  );
   setDurationOutput(timeEl, milestone.days, animate);
 }
 
@@ -598,7 +603,8 @@ function runSimulation(
   const animate = options.animate !== false;
   const capital = parseFloat((container.querySelector('#sim-capital') as HTMLInputElement).value);
   const apr = parseFloat((container.querySelector('#sim-apr') as HTMLInputElement).value);
-  const frequency = (container.querySelector('#sim-frequency') as HTMLSelectElement).value as CompoundFrequency;
+  const frequency = (container.querySelector('#sim-frequency') as HTMLSelectElement)
+    .value as CompoundFrequency;
   const state = loadState();
   const goalInput = container.querySelector('#sim-goal') as HTMLInputElement | null;
   const goalHint = container.querySelector('#sim-goal-hint') as HTMLElement | null;
@@ -610,14 +616,13 @@ function runSimulation(
     goalHint.textContent = autoState.goal ? 'Meta del dashboard' : 'Valor personalizado';
   }
 
-  const rawGoal = autoState.goal
-    ? state.portfolio.goalAmount
-    : parseFloat(goalInput?.value ?? '');
+  const rawGoal = autoState.goal ? state.portfolio.goalAmount : parseFloat(goalInput?.value ?? '');
   const goalIsValid = Number.isFinite(rawGoal) && rawGoal > 0;
   const goal = goalIsValid ? rawGoal : 0;
   const invested = state.portfolio.totalInvested;
 
-  const hasInvalidCore = !Number.isFinite(capital) || !Number.isFinite(apr) || capital <= 0 || apr <= 0;
+  const hasInvalidCore =
+    !Number.isFinite(capital) || !Number.isFinite(apr) || capital <= 0 || apr <= 0;
   const hasInvalidBreakevenTarget = !Number.isFinite(invested) || invested <= 0;
 
   if (hasInvalidCore || hasInvalidBreakevenTarget) {
@@ -644,7 +649,14 @@ function runSimulation(
   const finalEl = container.querySelector('#sim-out-final') as HTMLElement | null;
 
   setMilestoneOutputs(beDateEl, beTimeEl, 'be', milestones.byMilestone.be, animate, true);
-  setMilestoneOutputs(goalDateEl, goalTimeEl, 'goal', milestones.byMilestone.goal, animate, goalIsValid);
+  setMilestoneOutputs(
+    goalDateEl,
+    goalTimeEl,
+    'goal',
+    milestones.byMilestone.goal,
+    animate,
+    goalIsValid,
+  );
 
   const dailyRunRate = calcDailyEarnings(capital, apr);
   const monthlyRunRate = calcMonthlyEarnings(capital, apr);
@@ -652,14 +664,23 @@ function runSimulation(
 
   setCurrencyOutput(dailyEl, dailyRunRate, animate, ' /dia');
   setCurrencyOutput(monthlyEl, monthlyRunRate, animate, ' /mes');
-  setTextOutput(rateEl, `${dailyCompoundedPct.toFixed(4)}% / ${apyPct.toFixed(2)}%`, animate, 'scramble');
+  setTextOutput(
+    rateEl,
+    `${dailyCompoundedPct.toFixed(4)}% / ${apyPct.toFixed(2)}%`,
+    animate,
+    'scramble',
+  );
   setCurrencyOutput(finalEl, snapshot.lastRow?.balance ?? null, animate);
 
-  const projectedRows = snapshot.rows.filter((row) => row.month >= 1 && row.month <= PROJECTION_MAX_MONTH);
+  const projectedRows = snapshot.rows.filter(
+    (row) => row.month >= 1 && row.month <= PROJECTION_MAX_MONTH,
+  );
   const tableContainer = container.querySelector('#sim-table-container') as HTMLElement | null;
   const tableEl = container.querySelector('#sim-table') as HTMLElement | null;
   const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
-  const chartSkeleton = container.querySelector('#sim-projection-chart-skeleton') as HTMLElement | null;
+  const chartSkeleton = container.querySelector(
+    '#sim-projection-chart-skeleton',
+  ) as HTMLElement | null;
   if (!tableContainer || !tableEl || projectedRows.length === 0) {
     if (tableContainer) tableContainer.style.display = 'none';
     if (canvas) canvas.style.display = 'none';
@@ -685,14 +706,15 @@ function runSimulation(
         </tr>
       </thead>
       <tbody>
-        ${projectedRows.map((row) => {
-    const rowClass = resolveProjectionRowClasses(
-      row.month,
-      milestones.primaryKey,
-      beCrossMonth,
-      goalCrossMonth,
-    );
-    return `
+        ${projectedRows
+          .map((row) => {
+            const rowClass = resolveProjectionRowClasses(
+              row.month,
+              milestones.primaryKey,
+              beCrossMonth,
+              goalCrossMonth,
+            );
+            return `
             <tr${rowClass ? ` class="${rowClass}"` : ''}>
               <td class="mono">${row.month}</td>
               <td>${formatDateLatin(row.date)}</td>
@@ -700,7 +722,8 @@ function runSimulation(
               <td class="mono ${row.earned > 0 ? 'text-gain' : ''}">${formatUSD(row.earned)}</td>
             </tr>
           `;
-  }).join('')}
+          })
+          .join('')}
       </tbody>
     </table>
   `;
@@ -747,17 +770,19 @@ async function renderProjectionChart(
     if (existingChart) existingChart.destroy();
 
     const cc = getChartColors();
-    const datasets: ChartDataset<'line', number[]>[] = [{
-      label: 'Balance proyectado',
-      data: rows.map((row) => row.balance),
-      borderColor: cc.line,
-      backgroundColor: cc.fill,
-      fill: true,
-      tension: 0.3,
-      pointRadius: rows.length > 30 ? 0 : 3,
-      pointBackgroundColor: cc.pointBg,
-      borderWidth: 1.5,
-    }];
+    const datasets: ChartDataset<'line', number[]>[] = [
+      {
+        label: 'Balance proyectado',
+        data: rows.map((row) => row.balance),
+        borderColor: cc.line,
+        backgroundColor: cc.fill,
+        fill: true,
+        tension: 0.3,
+        pointRadius: rows.length > 30 ? 0 : 3,
+        pointBackgroundColor: cc.pointBg,
+        borderWidth: 1.5,
+      },
+    ];
 
     if (targets.be > 0) {
       datasets.push({
@@ -786,7 +811,7 @@ async function renderProjectionChart(
     new Chart(context, {
       type: 'line',
       data: {
-        labels: rows.map((row) => row.month === 0 ? 'Hoy' : `M${row.month}`),
+        labels: rows.map((row) => (row.month === 0 ? 'Hoy' : `M${row.month}`)),
         datasets,
       },
       options: {
@@ -799,7 +824,8 @@ async function renderProjectionChart(
           },
           tooltip: {
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: $${(ctx.parsed?.y ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+              label: (ctx) =>
+                `${ctx.dataset.label}: $${(ctx.parsed?.y ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
             },
           },
         },

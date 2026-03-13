@@ -1,9 +1,4 @@
-import type {
-  AchievedResults,
-  Purchase,
-  PurchaseTotals,
-  StrategyResults,
-} from '../types';
+import type { AchievedResults, Purchase, PurchaseTotals, StrategyResults } from '../types';
 import { parseLooseNumber } from '../utils/parse-number';
 
 export function parseNum(value: string): number {
@@ -49,16 +44,24 @@ export function computeAchievedResults(
   basePrice: number,
   makerFeePct: number,
 ): AchievedResults {
-  const achievedR = Number.isFinite(sellPriceActual) && Number.isFinite(basePrice) && basePrice > 0
-    ? sellPriceActual / basePrice - 1 : NaN;
+  const achievedR =
+    Number.isFinite(sellPriceActual) && Number.isFinite(basePrice) && basePrice > 0
+      ? sellPriceActual / basePrice - 1
+      : NaN;
   const achievedMovement = Number.isFinite(achievedR) ? achievedR * 100 : NaN;
   const feeMultiplier = computeFeeMultiplier(makerFeePct, 2);
-  const achievedProfitPerTrade = Number.isFinite(achievedR) && Number.isFinite(capital) && capital > 0
-    ? capital * ((1 + achievedR) * feeMultiplier - 1) : NaN;
-  const achievedAnnualProfit = Number.isFinite(achievedProfitPerTrade) && Number.isFinite(trades) && trades > 0
-    ? achievedProfitPerTrade * trades : NaN;
-  const achievedApr = Number.isFinite(achievedAnnualProfit) && Number.isFinite(capital) && capital > 0
-    ? (achievedAnnualProfit / capital) * 100 : NaN;
+  const achievedProfitPerTrade =
+    Number.isFinite(achievedR) && Number.isFinite(capital) && capital > 0
+      ? capital * ((1 + achievedR) * feeMultiplier - 1)
+      : NaN;
+  const achievedAnnualProfit =
+    Number.isFinite(achievedProfitPerTrade) && Number.isFinite(trades) && trades > 0
+      ? achievedProfitPerTrade * trades
+      : NaN;
+  const achievedApr =
+    Number.isFinite(achievedAnnualProfit) && Number.isFinite(capital) && capital > 0
+      ? (achievedAnnualProfit / capital) * 100
+      : NaN;
 
   return { achievedR, achievedMovement, achievedProfitPerTrade, achievedAnnualProfit, achievedApr };
 }
@@ -77,18 +80,27 @@ export function computeStrategyResults(
 
   const validBase = Number.isFinite(basePrice) && basePrice > 0;
   const sellPrice = validBase && Number.isFinite(sell) ? basePrice * (1 + sell) : NaN;
-  const rebuyPrice = Number.isFinite(sellPrice) && Number.isFinite(rebuy) ? sellPrice * (1 - rebuy) : NaN;
+  const rebuyPrice =
+    Number.isFinite(sellPrice) && Number.isFinite(rebuy) ? sellPrice * (1 - rebuy) : NaN;
 
-  const netPct = Number.isFinite(sell) && Number.isFinite(feeMultiplier)
-    ? ((1 + sell) * feeMultiplier - 1) * 100 : NaN;
-  const netUsd = Number.isFinite(netPct) && Number.isFinite(capital) && capital > 0
-    ? (capital * netPct) / 100 : NaN;
+  const netPct =
+    Number.isFinite(sell) && Number.isFinite(feeMultiplier)
+      ? ((1 + sell) * feeMultiplier - 1) * 100
+      : NaN;
+  const netUsd =
+    Number.isFinite(netPct) && Number.isFinite(capital) && capital > 0
+      ? (capital * netPct) / 100
+      : NaN;
 
-  const cycleMultiplier = Number.isFinite(rebuy) && rebuy < 1 && Number.isFinite(feeMultiplier)
-    ? feeMultiplier / (1 - rebuy) : NaN;
+  const cycleMultiplier =
+    Number.isFinite(rebuy) && rebuy < 1 && Number.isFinite(feeMultiplier)
+      ? feeMultiplier / (1 - rebuy)
+      : NaN;
   const netPctCycle = Number.isFinite(cycleMultiplier) ? (cycleMultiplier - 1) * 100 : NaN;
-  const netUsdCycle = Number.isFinite(netPctCycle) && Number.isFinite(capital) && capital > 0
-    ? (capital * netPctCycle) / 100 : NaN;
+  const netUsdCycle =
+    Number.isFinite(netPctCycle) && Number.isFinite(capital) && capital > 0
+      ? (capital * netPctCycle) / 100
+      : NaN;
 
   return { sellPrice, rebuyPrice, netPct, netUsd, netPctCycle, netUsdCycle, feeTotalPct };
 }

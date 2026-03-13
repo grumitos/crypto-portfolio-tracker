@@ -1,15 +1,25 @@
 /* ── Modal / Overlay ── */
 .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--modal-scrim);
-  backdrop-filter: blur(8px);
+  border: none;
+  background: transparent;
+  padding: var(--space-lg);
+  max-width: 100vw;
+  max-height: 100vh;
+  width: 100%;
+  height: 100%;
+}
+
+/* When the dialog is open (via showModal()), use flex centering. */
+.modal-overlay[open] {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: var(--space-lg);
   animation: fadeIn 0.15s ease;
+}
+
+.modal-overlay::backdrop {
+  background: var(--modal-scrim);
+  backdrop-filter: blur(8px);
 }
 
 @keyframes fadeIn {

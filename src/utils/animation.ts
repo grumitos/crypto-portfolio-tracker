@@ -164,7 +164,9 @@ export function setAnimatedNumber(
   const rememberedStart = getRememberedNumber(stabilityKey);
   const start = Number.isFinite(liveStart)
     ? liveStart
-    : (allowRememberedStart && Number.isFinite(rememberedStart) ? (rememberedStart as number) : end);
+    : allowRememberedStart && Number.isFinite(rememberedStart)
+      ? (rememberedStart as number)
+      : end;
   const formattedEnd = formatter(end);
 
   if (!enabled) {
@@ -266,7 +268,10 @@ export function setAnimatedText(
     const progress = Math.min((timestamp - startedAt) / durationMs, 1);
     const eased = 1 - Math.pow(1 - progress, 3);
     const settledCount = Math.floor(finalLength * eased);
-    const dynamicLength = Math.max(0, Math.round(startLength + (finalLength - startLength) * eased));
+    const dynamicLength = Math.max(
+      0,
+      Math.round(startLength + (finalLength - startLength) * eased),
+    );
 
     let out = '';
     for (let i = 0; i < dynamicLength; i++) {
@@ -276,7 +281,10 @@ export function setAnimatedText(
       }
 
       const targetChar = i < finalLength ? finalText[i] : '';
-      out += randomScrambleChar(targetChar || DEFAULT_SCRAMBLE_CHARS[Math.floor(Math.random() * DEFAULT_SCRAMBLE_CHARS.length)]);
+      out += randomScrambleChar(
+        targetChar ||
+          DEFAULT_SCRAMBLE_CHARS[Math.floor(Math.random() * DEFAULT_SCRAMBLE_CHARS.length)],
+      );
     }
 
     el.textContent = out;

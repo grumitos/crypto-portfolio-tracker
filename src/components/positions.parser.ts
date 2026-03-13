@@ -128,8 +128,14 @@ function isPairLine(line: string, allowedAssets: Set<string>): boolean {
   return parsePairLine(line, allowedAssets) !== null;
 }
 
-function parsePairLine(line: string, allowedAssets: Set<string>): { left: string; right: string } | null {
-  const match = line.toUpperCase().replace(/\s+/g, '').match(/^([A-Z0-9]{2,10})-([A-Z0-9]{2,10})$/);
+function parsePairLine(
+  line: string,
+  allowedAssets: Set<string>,
+): { left: string; right: string } | null {
+  const match = line
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .match(/^([A-Z0-9]{2,10})-([A-Z0-9]{2,10})$/);
   if (!match) return null;
   const left = match[1];
   const right = match[2];
@@ -150,9 +156,7 @@ function isIgnoredImportLine(line: string): boolean {
 }
 
 function parseLooseNumber(value: string): number {
-  const clean = value
-    .replace(/,/g, '')
-    .replace(/[^\d.+-]/g, '');
+  const clean = value.replace(/,/g, '').replace(/[^\d.+-]/g, '');
   return Number.parseFloat(clean);
 }
 
@@ -167,26 +171,23 @@ function extractDateTimes(chunk: string[]): Array<{ date: string; time: string }
 }
 
 function parseDirectionText(value: string): Direction | null {
-  const normalized = normalizeText(value)
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const normalized = normalizeText(value).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
   if (
-    normalized.includes('buy low')
-    || normalized.includes('compra bajo')
-    || normalized.includes('comprar bajo')
-    || normalized.includes('compra barato')
-    || normalized.includes('comprar barato')
+    normalized.includes('buy low') ||
+    normalized.includes('compra bajo') ||
+    normalized.includes('comprar bajo') ||
+    normalized.includes('compra barato') ||
+    normalized.includes('comprar barato')
   ) {
     return 'buy-low';
   }
   if (
-    normalized.includes('sell high')
-    || normalized.includes('vende alto')
-    || normalized.includes('vender alto')
-    || normalized.includes('vende caro')
-    || normalized.includes('vender caro')
+    normalized.includes('sell high') ||
+    normalized.includes('vende alto') ||
+    normalized.includes('vender alto') ||
+    normalized.includes('vende caro') ||
+    normalized.includes('vender caro')
   ) {
     return 'sell-high';
   }
@@ -228,7 +229,9 @@ function isEarlierDateTime(
   currentDate: string,
   currentTime: string | undefined,
 ): boolean {
-  return toDateTimeSortKey(candidateDate, candidateTime) < toDateTimeSortKey(currentDate, currentTime);
+  return (
+    toDateTimeSortKey(candidateDate, candidateTime) < toDateTimeSortKey(currentDate, currentTime)
+  );
 }
 
 function isLaterDateTime(
@@ -237,7 +240,9 @@ function isLaterDateTime(
   currentDate: string,
   currentTime: string | undefined,
 ): boolean {
-  return toDateTimeSortKey(candidateDate, candidateTime) > toDateTimeSortKey(currentDate, currentTime);
+  return (
+    toDateTimeSortKey(candidateDate, candidateTime) > toDateTimeSortKey(currentDate, currentTime)
+  );
 }
 
 interface PositionAccumulator {
@@ -298,12 +303,26 @@ export function consolidatePositionsByPair(positions: DualPosition[]): DualPosit
     existing.aprWeightSum += position.apr * weight;
     existing.targetWeightSum += position.targetPrice * weight;
 
-    if (isEarlierDateTime(position.entryDate, position.entryTime, existing.entryDate, existing.entryTime)) {
+    if (
+      isEarlierDateTime(
+        position.entryDate,
+        position.entryTime,
+        existing.entryDate,
+        existing.entryTime,
+      )
+    ) {
       existing.entryDate = position.entryDate;
       existing.entryTime = position.entryTime;
     }
 
-    if (isLaterDateTime(position.settlementDate, position.settlementTime, existing.settlementDate, existing.settlementTime)) {
+    if (
+      isLaterDateTime(
+        position.settlementDate,
+        position.settlementTime,
+        existing.settlementDate,
+        existing.settlementTime,
+      )
+    ) {
       existing.settlementDate = position.settlementDate;
       existing.settlementTime = position.settlementTime;
     }

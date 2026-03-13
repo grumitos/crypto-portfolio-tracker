@@ -2,7 +2,7 @@
 export interface PortfolioData {
   totalInvested: number;
   currentBalance: number;
-  savings: number;        // cash / stablecoins outside positions (manual)
+  savings: number; // cash / stablecoins outside positions (manual)
   goalAmount: number;
   lastUpdated: string; // ISO date
   balanceHistory: BalanceSnapshot[];
@@ -29,16 +29,16 @@ export interface DualPositionComponent {
 
 export interface DualPosition {
   id: string;
-  asset: string;            // e.g. "ETH", "SOL", "BTC"
-  direction: Direction;      // buy-low or sell-high
+  asset: string; // e.g. "ETH", "SOL", "BTC"
+  direction: Direction; // buy-low or sell-high
   subscriptionAsset: string; // e.g. "USDT", "USDC", "SOL"
-  amount: number;            // subscription amount
+  amount: number; // subscription amount
   targetPrice: number;
-  entryDate: string;         // ISO date
-  entryTime?: string;        // local HH:mm
-  settlementDate: string;    // ISO date
-  settlementTime?: string;   // local HH:mm (optional fallback to Binance default)
-  apr: number;               // annual percentage rate
+  entryDate: string; // ISO date
+  entryTime?: string; // local HH:mm
+  settlementDate: string; // ISO date
+  settlementTime?: string; // local HH:mm (optional fallback to Binance default)
+  apr: number; // annual percentage rate
   components?: DualPositionComponent[]; // grouped source entries used for weighted aggregate rows
 }
 

@@ -140,9 +140,7 @@ export function buildProjectionSnapshot(params: SimulatorParams): ProjectionSnap
   };
 }
 
-function resolvePrimaryMilestoneKey(
-  targets: MilestoneTargetAmounts,
-): MilestoneKey {
+function resolvePrimaryMilestoneKey(targets: MilestoneTargetAmounts): MilestoneKey {
   return targets.be > targets.goal ? 'be' : 'goal';
 }
 

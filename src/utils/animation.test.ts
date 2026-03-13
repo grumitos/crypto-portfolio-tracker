@@ -51,11 +51,13 @@ describe('animation utils', () => {
     el.textContent = '0';
     const map = new WeakMap<HTMLElement, number>();
     let now = 0;
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      now += 16;
-      cb(now);
-      return now;
-    });
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        now += 16;
+        cb(now);
+        return now;
+      });
 
     setAnimatedNumber(map, el, 100, (next) => next.toFixed(0), {
       enabled: true,
@@ -77,14 +79,20 @@ describe('animation utils', () => {
     scrambleEl.textContent = 'Meta';
     const map = new WeakMap<HTMLElement, number>();
     let now = 0;
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      now += 16;
-      cb(now);
-      return now;
-    });
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        now += 16;
+        cb(now);
+        return now;
+      });
 
     setAnimatedText(map, fadeEl, 'BE', { enabled: true, mode: 'fade', className: 'text-swap' });
-    setAnimatedText(map, scrambleEl, 'breakeven', { enabled: true, mode: 'scramble', durationMs: 80 });
+    setAnimatedText(map, scrambleEl, 'breakeven', {
+      enabled: true,
+      mode: 'scramble',
+      durationMs: 80,
+    });
 
     expect(fadeEl.textContent).toBe('BE');
     expect(fadeEl.classList.contains('text-swap')).toBe(true);
@@ -130,11 +138,13 @@ describe('animation utils', () => {
     mockMatchMedia(false);
     const map = new WeakMap<HTMLElement, number>();
     let now = 0;
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      now += 16;
-      cb(now);
-      return now;
-    });
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        now += 16;
+        cb(now);
+        return now;
+      });
 
     const first = document.createElement('div');
     first.id = 'positions-apr';
@@ -162,11 +172,13 @@ describe('animation utils', () => {
     mockMatchMedia(false);
     const map = new WeakMap<HTMLElement, number>();
     let now = 0;
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      now += 16;
-      cb(now);
-      return now;
-    });
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        now += 16;
+        cb(now);
+        return now;
+      });
 
     const first = document.createElement('div');
     first.id = 'sim-out-apr';

@@ -57,7 +57,7 @@ describe('calculadora math helpers', () => {
     expect(strategy.netPct).toBeCloseTo(2, 8);
     expect(strategy.netUsd).toBeCloseTo(20, 8);
     expect(strategy.netPctCycle).toBeCloseTo((1 / 0.99 - 1) * 100, 8);
-    expect(strategy.netUsdCycle).toBeCloseTo(((1 / 0.99 - 1) * 1000), 8);
+    expect(strategy.netUsdCycle).toBeCloseTo((1 / 0.99 - 1) * 1000, 8);
   });
 
   it('returns NaN for invalid math inputs', () => {

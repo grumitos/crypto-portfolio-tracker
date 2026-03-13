@@ -72,13 +72,21 @@ describe('theme utils', () => {
 
     theme.setTheme('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe('#262624');
-    expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain('%23FAF9F5');
+    expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
+      '#262624',
+    );
+    expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain(
+      '%23FAF9F5',
+    );
 
     theme.toggleTheme();
     expect(document.documentElement.dataset.theme).toBeUndefined();
-    expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe('#FAF9F5');
-    expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain('%23141413');
+    expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
+      '#FAF9F5',
+    );
+    expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain(
+      '%23141413',
+    );
   });
 
   it('returns chart colors according to resolved theme', async () => {

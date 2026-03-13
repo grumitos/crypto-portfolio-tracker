@@ -33,17 +33,19 @@ interface SeedDashboardOptions {
 }
 
 function seedState(options: SeedDashboardOptions = {}): void {
-  const defaultPositions: AppState['positions'] = [{
-    id: 'p1',
-    asset: 'ETH',
-    direction: 'buy-low',
-    subscriptionAsset: 'USDT',
-    amount: 1,
-    targetPrice: 2200,
-    entryDate: '2026-02-20',
-    settlementDate: '2026-02-22',
-    apr: 40,
-  }];
+  const defaultPositions: AppState['positions'] = [
+    {
+      id: 'p1',
+      asset: 'ETH',
+      direction: 'buy-low',
+      subscriptionAsset: 'USDT',
+      amount: 1,
+      targetPrice: 2200,
+      entryDate: '2026-02-20',
+      settlementDate: '2026-02-22',
+      apr: 40,
+    },
+  ];
 
   const state: AppState = {
     portfolio: {
@@ -122,9 +124,17 @@ describe('dashboard legends', () => {
     expect(bar.classList.contains('mode-goal')).toBe(true);
     expect(beBtn.getAttribute('aria-pressed')).toBe('false');
     expect(goalBtn.getAttribute('aria-pressed')).toBe('true');
-    expect((container.querySelector('#dash-prog-target') as HTMLElement).textContent).toContain('Meta');
-    expect((container.querySelector('#dashboard-days') as HTMLElement).textContent?.trim().startsWith('~')).toBe(true);
-    expect((container.querySelector('#dashboard-days') as HTMLElement).textContent).not.toContain('Meta');
+    expect((container.querySelector('#dash-prog-target') as HTMLElement).textContent).toContain(
+      'Meta',
+    );
+    expect(
+      (container.querySelector('#dashboard-days') as HTMLElement).textContent
+        ?.trim()
+        .startsWith('~'),
+    ).toBe(true);
+    expect((container.querySelector('#dashboard-days') as HTMLElement).textContent).not.toContain(
+      'Meta',
+    );
 
     dispose();
     container.remove();
@@ -202,8 +212,12 @@ describe('dashboard legends', () => {
     expect(bar.classList.contains('mode-be')).toBe(true);
     expect(beBtn.getAttribute('aria-pressed')).toBe('true');
     expect(goalBtn.getAttribute('aria-pressed')).toBe('false');
-    expect((container.querySelector('#dash-prog-target') as HTMLElement).textContent).toContain('BE');
-    expect((container.querySelector('#dash-prog-solid-first') as HTMLElement).style.width).toBe('60%');
+    expect((container.querySelector('#dash-prog-target') as HTMLElement).textContent).toContain(
+      'BE',
+    );
+    expect((container.querySelector('#dash-prog-solid-first') as HTMLElement).style.width).toBe(
+      '60%',
+    );
 
     beBtn.click();
 
@@ -222,7 +236,11 @@ describe('dashboard legends', () => {
     await flushMicrotasks();
 
     expect(snapshotSpy).toHaveBeenCalled();
-    expect((container.querySelector('#dashboard-days') as HTMLElement).textContent?.trim().startsWith('~')).toBe(true);
+    expect(
+      (container.querySelector('#dashboard-days') as HTMLElement).textContent
+        ?.trim()
+        .startsWith('~'),
+    ).toBe(true);
 
     dispose();
     container.remove();
@@ -233,7 +251,8 @@ describe('dashboard legends', () => {
     document.body.appendChild(container);
     const dispose = renderDashboard(container);
 
-    const days = (container.querySelector('#dashboard-days') as HTMLElement).textContent?.trim() ?? '';
+    const days =
+      (container.querySelector('#dashboard-days') as HTMLElement).textContent?.trim() ?? '';
     expect(days).toBe('');
 
     dispose();
@@ -358,12 +377,14 @@ describe('dashboard legends', () => {
     mockMatchMedia(false);
 
     let rafTime = 0;
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      return setTimeout(() => {
-        rafTime += 16;
-        cb(rafTime);
-      }, 16) as unknown as number;
-    });
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        return setTimeout(() => {
+          rafTime += 16;
+          cb(rafTime);
+        }, 16) as unknown as number;
+      });
     const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
       clearTimeout(id);
     });

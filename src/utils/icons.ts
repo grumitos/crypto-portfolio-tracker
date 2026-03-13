@@ -10,11 +10,7 @@ const defaults = {
   strokeWidth: 1.5,
 };
 
-function svg(
-  paths: string,
-  size: IconSize = defaults.size,
-  cls = '',
-): string {
+function svg(paths: string, size: IconSize = defaults.size, cls = ''): string {
   const s = typeof size === 'number' ? `${size}px` : size;
   const classAttr = cls ? ` class="${cls}"` : '';
   return `<svg${classAttr} xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${defaults.stroke}" stroke-width="${defaults.strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -139,8 +135,5 @@ export function iconSun(size?: IconSize): string {
 }
 
 export function iconMoon(size?: IconSize): string {
-  return svg(
-    '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
-    size,
-  );
+  return svg('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>', size);
 }
