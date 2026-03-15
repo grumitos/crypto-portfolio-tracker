@@ -176,7 +176,7 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
 
     // Temporarily save to test
     const prevCreds = loadApiCredentials();
-    saveApiCredentials({ apiKey: key, apiSecret: secret, tradingPin: prevCreds?.tradingPin });
+    saveApiCredentials({ apiKey: key, apiSecret: secret });
 
     showStatus(statusEl, 'Probando conexion...', 'info');
 
@@ -184,11 +184,12 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
 
     if (result.success) {
       const perms = result.permissions.join(', ') || 'N/A';
-      const hasWithdraw = result.permissions.includes('WITHDRAW');
-      if (hasWithdraw) {
+      const hasWritePermissions =
+        result.permissions.includes('WITHDRAW') || result.permissions.includes('TRADE');
+      if (hasWritePermissions) {
         showStatus(
           statusEl,
-          `Conexion exitosa, pero tu API key tiene permiso WITHDRAW. Por seguridad, crea una nueva key sin este permiso. Permisos: ${perms}`,
+          `Conexion exitosa, pero tu API key no es de solo lectura. Por seguridad, usa una key sin permisos TRADE ni WITHDRAW. Permisos: ${perms}`,
           'warning',
         );
       } else {
@@ -239,8 +240,7 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     const secret = secretInput.value.trim();
 
     if (key && secret) {
-      const prevCreds = loadApiCredentials();
-      saveApiCredentials({ apiKey: key, apiSecret: secret, tradingPin: prevCreds?.tradingPin });
+      saveApiCredentials({ apiKey: key, apiSecret: secret });
       clearAllRuntimeCaches();
     } else if (selectedMode === 'auto') {
       showStatus(statusEl, 'API Key y Secret son requeridos para la lectura con Binance.', 'error');

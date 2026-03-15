@@ -159,7 +159,6 @@ export interface PositionsConfig {
 export interface BinanceApiCredentials {
   apiKey: string;
   apiSecret: string;
-  tradingPin?: string; // hashed PIN for Level 2
 }
 
 export type DualOptionType = 'CALL' | 'PUT';

@@ -1,18 +1,6 @@
 import type { DualProductScored, DualMarketFilters, DualMarketState, Direction } from '../../types';
-import {
-  fetchAccountBalances,
-  fetchDualProducts,
-  subscribeDualProduct,
-} from '../../utils/binance-client';
-import {
-  hasApiCredentials,
-  isTradingSessionActive,
-  activateTradingSession,
-  getTradingSessionRemainingMs,
-  hasTradingPin,
-  deactivateTradingSession,
-  isAutoMode,
-} from '../../utils/binance-auth';
+import { fetchDualProducts } from '../../utils/binance-client';
+import { hasApiCredentials } from '../../utils/binance-auth';
 import {
   scoreDualProducts,
   getTopRecommendations,
@@ -21,12 +9,10 @@ import {
 import { getAssetPriceSnapshot } from '../../utils/market';
 import { formatUSD } from '../../utils/calculator';
 import { escapeHtml, skeletonSpan } from '../../utils/ui-helpers';
-import { iconInfo, iconLock, iconRefreshCw, iconX } from '../../utils/icons';
+import { iconInfo, iconRefreshCw, iconX } from '../../utils/icons';
 import { openModal, closeModal, bindModalEvents } from '../../utils/modal-manager';
-import { showConfirmDialog, showAlertDialog } from '../../utils/dialogs';
 
 const DUAL_MARKET_STORAGE_KEY = 'crypto-dual-market';
-const SESSION_TICKER_MS = 1000;
 const DUAL_MARKET_PAGE_SIZE = 8;
 const DUAL_MARKET_ASSETS = ['BTC', 'ETH', 'BNB', 'SOL'] as const;
 
@@ -38,7 +24,6 @@ interface DualMarketContext {
   loading: boolean;
   error: string | null;
   currentPage: number;
-  sessionTickerId: ReturnType<typeof setInterval> | null;
   disposed: boolean;
   onClose: () => void;
 }
@@ -79,8 +64,6 @@ function safetyClass(distancePercent: number): string {
 function renderProductRow(
   product: DualProductScored,
   isTop: boolean,
-  tradingActive: boolean,
-  autoMode: boolean,
 ): string {
   const asset = product.optionType === 'CALL' ? product.investCoin : product.exercisedCoin;
   const dirClass = product.optionType === 'CALL' ? 'dm-dir-sell' : 'dm-dir-buy';
@@ -101,7 +84,7 @@ function renderProductRow(
         ${isTop ? '<span class="dm-star">★</span>' : ''}${scorePercent}
       </td>
       <td>
-        ${autoMode && tradingActive ? `<button class="btn btn-xs btn-primary dm-btn-subscribe" data-product-id="${escapeHtml(product.id)}">Suscribir</button>` : `<button class="btn btn-xs dm-btn-prefill" data-product-id="${escapeHtml(product.id)}">Usar</button>`}
+        <button class="btn btn-xs dm-btn-prefill" data-product-id="${escapeHtml(product.id)}">Usar</button>
       </td>
     </tr>
   `;
@@ -165,14 +148,12 @@ function renderTable(ctx: DualMarketContext): string {
     return `<div class="dm-empty text-muted">No hay productos disponibles con los filtros actuales.</div>`;
   }
 
-  const tradingActive = isTradingSessionActive();
-  const autoMode = isAutoMode();
   const totalPages = Math.max(1, Math.ceil(ctx.products.length / DUAL_MARKET_PAGE_SIZE));
   const currentPage = Math.min(ctx.currentPage, totalPages);
   const startIndex = (currentPage - 1) * DUAL_MARKET_PAGE_SIZE;
   const rows = ctx.products
     .slice(startIndex, startIndex + DUAL_MARKET_PAGE_SIZE)
-    .map((p) => renderProductRow(p, ctx.topIds.has(p.id), tradingActive, autoMode))
+    .map((p) => renderProductRow(p, ctx.topIds.has(p.id)))
     .join('');
 
   const pagination =
@@ -203,49 +184,6 @@ function renderTable(ctx: DualMarketContext): string {
       </table>
     </div>
     ${pagination}
-  `;
-}
-
-function renderTradingSessionBar(_ctx: DualMarketContext): string {
-  if (!hasApiCredentials() || !isAutoMode()) return '';
-
-  const hasPinSaved = hasTradingPin();
-  const sessionActive = isTradingSessionActive();
-
-  if (sessionActive) {
-    const remainMs = getTradingSessionRemainingMs();
-    const remainMin = Math.ceil(remainMs / 60_000);
-    return `
-      <div class="dm-session-bar dm-session-active">
-        <div class="dm-session-copy">
-          <span class="dm-session-indicator"></span>
-          <span>Trading activo — <span id="dm-session-timer">${remainMin} min</span> restante</span>
-        </div>
-        <div class="dm-session-actions">
-          <button class="btn btn-xs btn-danger" id="dm-btn-lock-trading">Bloquear</button>
-        </div>
-      </div>
-    `;
-  }
-
-  if (!hasPinSaved) {
-    return `
-      <div class="dm-session-bar dm-session-locked">
-        <span class="text-muted">Configura un PIN desde Config para habilitar suscripciones directas.</span>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="dm-session-bar dm-session-locked">
-      <div class="dm-session-copy">
-        <span class="dm-session-label">${iconLock(14)}Trading bloqueado</span>
-        <span class="dm-session-helper">Desbloquea una sesion temporal para suscribir productos.</span>
-      </div>
-      <div class="dm-session-actions">
-        <button class="btn btn-primary" id="dm-btn-unlock-trading">Desbloquear con PIN</button>
-      </div>
-    </div>
   `;
 }
 
@@ -291,7 +229,6 @@ export function openDualMarketModal(onPrefillPosition: (product: DualProductScor
 
   const cleanup = () => {
     ctx.disposed = true;
-    if (ctx.sessionTickerId) clearInterval(ctx.sessionTickerId);
     closeModal(dialog);
     dialog.remove();
   };
@@ -304,7 +241,6 @@ export function openDualMarketModal(onPrefillPosition: (product: DualProductScor
     loading: true,
     error: null,
     currentPage: 1,
-    sessionTickerId: null,
     disposed: false,
     onClose: cleanup,
   };
@@ -348,7 +284,6 @@ function renderModalContent(
       ${
         hasApi
           ? `
-        ${renderTradingSessionBar(ctx)}
         ${renderFilterBar(ctx.state.filters)}
         <div id="dm-table-container">${renderTable(ctx)}</div>
       `
@@ -380,9 +315,6 @@ function bindSectionEvents(
 
   // Filter changes
   bindFilterEvents(ctx, onPrefillPosition);
-
-  // Trading session
-  bindTradingSessionEvents(ctx, onPrefillPosition);
 
   // Product action buttons
   bindProductActions(ctx, onPrefillPosition);
@@ -438,124 +370,6 @@ function bindFilterEvents(
   maxDurEl?.addEventListener('input', applyFilters);
 }
 
-function bindTradingSessionEvents(
-  ctx: DualMarketContext,
-  onPrefillPosition: (product: DualProductScored) => void,
-): void {
-  ctx.container.querySelector('#dm-btn-unlock-trading')?.addEventListener('click', () => {
-    showPinDialog(ctx, onPrefillPosition);
-  });
-
-  ctx.container.querySelector('#dm-btn-lock-trading')?.addEventListener('click', () => {
-    deactivateTradingSession();
-    refreshModal(ctx, onPrefillPosition);
-  });
-
-  // Start session timer if active
-  if (isTradingSessionActive()) {
-    startSessionTicker(ctx, onPrefillPosition);
-  }
-}
-
-function startSessionTicker(
-  ctx: DualMarketContext,
-  onPrefillPosition: (product: DualProductScored) => void,
-): void {
-  if (ctx.sessionTickerId) clearInterval(ctx.sessionTickerId);
-
-  ctx.sessionTickerId = setInterval(() => {
-    if (ctx.disposed) {
-      if (ctx.sessionTickerId) clearInterval(ctx.sessionTickerId);
-      return;
-    }
-
-    const timerEl = ctx.container.querySelector('#dm-session-timer');
-    if (!timerEl) return;
-
-    if (!isTradingSessionActive()) {
-      if (ctx.sessionTickerId) clearInterval(ctx.sessionTickerId);
-      ctx.sessionTickerId = null;
-      refreshModal(ctx, onPrefillPosition);
-      return;
-    }
-
-    const remainMs = getTradingSessionRemainingMs();
-    const remainSec = Math.ceil(remainMs / 1000);
-    if (remainSec > 60) {
-      timerEl.textContent = `${Math.ceil(remainSec / 60)} min`;
-    } else {
-      timerEl.textContent = `${remainSec}s`;
-    }
-  }, SESSION_TICKER_MS);
-}
-
-async function showPinDialog(
-  ctx: DualMarketContext,
-  onPrefillPosition: (product: DualProductScored) => void,
-): Promise<void> {
-  // Create a temporary PIN input dialog
-  const dialog = document.createElement('dialog');
-  dialog.className = 'modal-overlay';
-  dialog.innerHTML = `
-    <div class="modal">
-      <h3 class="modal-title">Desbloquear Trading</h3>
-      <div class="form-group">
-        <label for="dm-pin-input">Ingresa tu PIN</label>
-        <input type="password" id="dm-pin-input" maxlength="6" pattern="[0-9]{4,6}"
-               inputmode="numeric" autocomplete="off" placeholder="••••">
-      </div>
-      <div id="dm-pin-error" class="form-feedback text-loss" hidden></div>
-      <div class="modal-actions">
-        <button class="btn" id="dm-pin-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="dm-pin-confirm">Desbloquear</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(dialog);
-  openModal(dialog);
-
-  const pinInput = dialog.querySelector('#dm-pin-input') as HTMLInputElement;
-  const errorEl = dialog.querySelector('#dm-pin-error') as HTMLElement;
-  pinInput.focus();
-
-  const cleanup = () => {
-    closeModal(dialog);
-    dialog.remove();
-  };
-
-  bindModalEvents(dialog, [dialog.querySelector('#dm-pin-cancel') as HTMLElement]);
-
-  dialog.querySelector('#dm-pin-cancel')?.addEventListener('click', cleanup);
-
-  dialog.querySelector('#dm-pin-confirm')?.addEventListener('click', async () => {
-    errorEl.hidden = true;
-    errorEl.textContent = '';
-    const pin = pinInput.value.trim();
-    if (!pin) {
-      errorEl.textContent = 'Ingresa el PIN';
-      errorEl.hidden = false;
-      return;
-    }
-
-    const success = await activateTradingSession(pin);
-    if (success) {
-      cleanup();
-      refreshModal(ctx, onPrefillPosition);
-    } else {
-      errorEl.textContent = 'PIN incorrecto';
-      errorEl.hidden = false;
-      pinInput.value = '';
-      pinInput.focus();
-    }
-  });
-
-  pinInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      dialog.querySelector<HTMLButtonElement>('#dm-pin-confirm')?.click();
-    }
-  });
-}
-
 function bindProductActions(
   ctx: DualMarketContext,
   onPrefillPosition: (product: DualProductScored) => void,
@@ -567,145 +381,6 @@ function bindProductActions(
       const product = ctx.products.find((p) => p.id === id);
       if (product) onPrefillPosition(product);
     });
-  });
-
-  // Subscribe buttons (Level 2)
-  ctx.container.querySelectorAll('.dm-btn-subscribe').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const id = (btn as HTMLElement).dataset.productId;
-      const product = ctx.products.find((p) => p.id === id);
-      if (!product) return;
-
-      if (!isTradingSessionActive()) {
-        await showAlertDialog('La sesion de trading ha expirado. Desbloquea con tu PIN.');
-        refreshModal(ctx, onPrefillPosition);
-        return;
-      }
-
-      // Show subscribe confirmation dialog
-      await showSubscribeDialog(product, ctx, onPrefillPosition);
-    });
-  });
-}
-
-async function showSubscribeDialog(
-  product: DualProductScored,
-  ctx: DualMarketContext,
-  onPrefillPosition: (product: DualProductScored) => void,
-): Promise<void> {
-  const asset = product.optionType === 'CALL' ? product.investCoin : product.exercisedCoin;
-  const dir = directionLabel(product.optionType);
-  const balanceInfo = await loadAssetBalance(product.investCoin);
-  const effectiveMax =
-    balanceInfo.available === null
-      ? product.maxAmount
-      : Math.max(0, Math.min(product.maxAmount, balanceInfo.available));
-
-  const dialog = document.createElement('dialog');
-  dialog.className = 'modal-overlay';
-  dialog.innerHTML = `
-    <div class="modal">
-      <h3 class="modal-title">Suscribir Dual Investment</h3>
-      <div class="dm-subscribe-summary">
-        <div class="dm-subscribe-row"><span>Activo</span><strong>${escapeHtml(asset)}</strong></div>
-        <div class="dm-subscribe-row"><span>Dirección</span><strong>${escapeHtml(dir)}</strong></div>
-        <div class="dm-subscribe-row"><span>Strike</span><strong>${formatUSD(product.strikePrice)}</strong></div>
-        <div class="dm-subscribe-row"><span>APR</span><strong>${product.apr.toFixed(2)}%</strong></div>
-        <div class="dm-subscribe-row"><span>Plazo</span><strong>${product.duration} dias</strong></div>
-      </div>
-      <div class="form-group form-group-top">
-        <div class="dm-subscribe-label-row">
-          <label for="dm-subscribe-amount">Monto (${escapeHtml(product.investCoin)})</label>
-          <button type="button" class="btn btn-xs" id="dm-subscribe-max" ${effectiveMax <= 0 ? 'disabled' : ''}>Max</button>
-        </div>
-        <div class="dm-subscribe-balance ${balanceInfo.available !== null && balanceInfo.available < product.minAmount ? 'text-loss' : 'text-muted'}">
-          ${balanceInfo.label}
-        </div>
-        <div class="dm-subscribe-input-row">
-          <input type="number" id="dm-subscribe-amount"
-                 min="${product.minAmount}" max="${effectiveMax > 0 ? effectiveMax : product.maxAmount}"
-                 step="${Math.pow(10, -product.purchaseDecimal)}"
-                 placeholder="Min: ${product.minAmount}">
-        </div>
-        <div class="text-muted hint-text">Min: ${product.minAmount} — Max producto: ${product.maxAmount}${balanceInfo.available !== null ? ` — Max usable: ${formatAssetAmount(effectiveMax, product.investCoin)}` : ''}</div>
-      </div>
-      <div id="dm-subscribe-error" class="form-feedback text-loss" hidden></div>
-      <div class="modal-actions">
-        <button class="btn" id="dm-subscribe-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="dm-subscribe-confirm">Confirmar suscripción</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(dialog);
-  openModal(dialog);
-
-  const amountInput = dialog.querySelector('#dm-subscribe-amount') as HTMLInputElement;
-  const errorEl = dialog.querySelector('#dm-subscribe-error') as HTMLElement;
-  const maxBtn = dialog.querySelector('#dm-subscribe-max') as HTMLButtonElement | null;
-
-  const cleanup = () => {
-    closeModal(dialog);
-    dialog.remove();
-  };
-
-  bindModalEvents(dialog, [dialog.querySelector('#dm-subscribe-cancel') as HTMLElement]);
-  dialog.querySelector('#dm-subscribe-cancel')?.addEventListener('click', cleanup);
-  maxBtn?.addEventListener('click', () => {
-    if (effectiveMax <= 0) return;
-    amountInput.value = String(effectiveMax);
-  });
-
-  dialog.querySelector('#dm-subscribe-confirm')?.addEventListener('click', async () => {
-    errorEl.hidden = true;
-    errorEl.textContent = '';
-    const amount = parseFloat(amountInput.value);
-    if (!Number.isFinite(amount) || amount < product.minAmount || amount > product.maxAmount) {
-      errorEl.textContent = `Monto invalido. Rango: ${product.minAmount} - ${product.maxAmount}`;
-      errorEl.hidden = false;
-      return;
-    }
-
-    if (balanceInfo.available !== null && amount > balanceInfo.available) {
-      errorEl.textContent = `Supera tu saldo disponible en ${product.investCoin}. Disponible: ${formatAssetAmount(balanceInfo.available, product.investCoin)}`;
-      errorEl.hidden = false;
-      return;
-    }
-
-    if (!isTradingSessionActive()) {
-      errorEl.textContent = 'Sesion de trading expirada. Vuelve a desbloquear.';
-      errorEl.hidden = false;
-      return;
-    }
-
-    const confirmed = await showConfirmDialog(
-      `¿Suscribir ${amount} ${product.investCoin} a Dual Investment ${directionLabel(product.optionType)} con strike ${formatUSD(product.strikePrice)}?`,
-      { title: 'Confirmar suscripción', confirmLabel: 'Suscribir', destructive: false },
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const btn = dialog.querySelector('#dm-subscribe-confirm') as HTMLButtonElement;
-      btn.disabled = true;
-      btn.textContent = 'Procesando...';
-
-      if (!product.orderId) {
-        throw new Error('Producto sin orderId. Actualiza el mercado e intenta otra vez.');
-      }
-
-      await subscribeDualProduct(product.id, product.orderId, amount);
-
-      cleanup();
-      await showAlertDialog('Suscripción exitosa. La posición aparecerá en tu listado.');
-      // Refresh products and positions
-      loadProducts(ctx, onPrefillPosition, true);
-    } catch (err) {
-      errorEl.textContent = `Error: ${err instanceof Error ? err.message : 'Error desconocido'}`;
-      errorEl.hidden = false;
-      const btn = dialog.querySelector('#dm-subscribe-confirm') as HTMLButtonElement;
-      btn.disabled = false;
-      btn.textContent = 'Confirmar suscripción';
-    }
   });
 }
 
@@ -813,29 +488,3 @@ function updateTableView(
   });
 }
 
-function formatAssetAmount(amount: number, asset: string): string {
-  return `${amount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${asset}`;
-}
-
-async function loadAssetBalance(
-  asset: string,
-): Promise<{ available: number | null; label: string }> {
-  try {
-    const balances = await fetchAccountBalances(false);
-    const match = balances.find((balance) => balance.asset === asset) ?? null;
-    const available = match ? match.free : 0;
-    const locked = match ? match.locked : 0;
-    return {
-      available,
-      label:
-        match !== null
-          ? `Disponible: ${formatAssetAmount(available, asset)}${locked > 0 ? ` · Bloqueado: ${formatAssetAmount(locked, asset)}` : ''}`
-          : `Disponible: 0 ${asset}`,
-    };
-  } catch {
-    return {
-      available: null,
-      label: `No se pudo cargar tu saldo actual en ${asset}.`,
-    };
-  }
-}

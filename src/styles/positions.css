@@ -780,44 +780,6 @@ td.mono {
   }
 }
 
-/* Subscribe dialog summary */
-.dm-subscribe-summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-sm);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-}
-
-.dm-subscribe-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--type-meta);
-}
-
-.dm-subscribe-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  margin-bottom: 4px;
-}
-
-.dm-subscribe-balance {
-  margin-bottom: var(--space-xs);
-  font-size: var(--type-label);
-}
-
-.dm-subscribe-input-row {
-  display: flex;
-  gap: var(--space-xs);
-}
-
-.dm-subscribe-input-row input {
-  width: 100%;
-}
-
 .dm-score-guide {
   display: flex;
   flex-direction: column;
@@ -976,10 +938,6 @@ td.mono {
     grid-template-columns: 1fr;
   }
 
-  .dm-subscribe-label-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 /* ── Mode toggle ── */

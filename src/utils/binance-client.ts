@@ -64,25 +64,22 @@ async function fetchSigned<T>(
   baseUrl: string,
   path: string,
   params: Record<string, string | number> = {},
-  method: 'GET' | 'POST' = 'GET',
 ): Promise<T> {
   const creds = loadApiCredentials();
   if (!creds) throw new Error('API credentials not configured');
 
   const qs = await signedParams(params, creds.apiSecret);
-  const url = method === 'GET' ? `${baseUrl}${path}?${qs}` : `${baseUrl}${path}`;
+  const url = `${baseUrl}${path}?${qs}`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
-      method,
+      method: 'GET',
       headers: {
         'X-MBX-APIKEY': creds.apiKey,
-        ...(method === 'POST' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
       },
-      ...(method === 'POST' ? { body: qs } : {}),
       signal: controller.signal,
     });
 
@@ -266,33 +263,6 @@ async function fetchDualProductsForPair(
     }
     return [];
   }
-}
-
-// ── Subscribe to Dual Investment (TRADE — Level 2) ──
-
-interface RawSubscribeResponse {
-  positionId: string;
-  investCoin: string;
-  exercisedCoin: string;
-  subscriptionAmount: string;
-}
-
-export async function subscribeDualProduct(
-  productId: string,
-  orderId: string,
-  amount: number,
-): Promise<RawSubscribeResponse> {
-  return fetchSigned<RawSubscribeResponse>(
-    SAPI_PROXY_BASE,
-    '/dci/product/subscribe',
-    {
-      id: productId,
-      orderId,
-      depositAmount: amount.toString(),
-      autoCompoundPlan: 'NONE',
-    },
-    'POST',
-  );
 }
 
 // ── Test API connection ──
