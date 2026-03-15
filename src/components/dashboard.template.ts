@@ -51,17 +51,26 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
       <div class="dashboard-balance-card-head">
         <span class="dashboard-balance-logo-wrap" data-asset-logo-root>
           <img class="dashboard-balance-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async">
-          <span class="dashboard-balance-fallback mono" data-asset-logo-fallback>${safeMonogram}</span>
+          <span class="dashboard-balance-fallback" data-asset-logo-fallback>${safeMonogram}</span>
         </span>
         <span class="dashboard-balance-card-meta">
-          <span class="dashboard-balance-asset mono">${safeAsset}</span>
+          <span class="dashboard-balance-asset">${safeAsset}</span>
           <span class="dashboard-balance-caption">${DASHBOARD_COPY.balanceBreakdownCaption}</span>
         </span>
       </div>
-      <div class="dashboard-balance-amount mono">${formatBalanceAmount(total)} ${safeAsset}</div>
+      <div class="dashboard-balance-amount">
+        <span class="dashboard-balance-amount-value mono">${formatBalanceAmount(total)}</span>
+        <span class="dashboard-balance-amount-asset">${safeAsset}</span>
+      </div>
       <div class="dashboard-balance-breakdown">
-        <span class="dashboard-balance-breakdown-item">${DASHBOARD_COPY.freeLabel} ${formatBalanceAmount(balance.free)}</span>
-        <span class="dashboard-balance-breakdown-item${balance.locked > 0 ? ' is-locked' : ''}">${DASHBOARD_COPY.lockedLabel} ${formatBalanceAmount(balance.locked)}</span>
+        <span class="dashboard-balance-breakdown-item">
+          <span class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.freeLabel}</span>
+          <span class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.free)}</span>
+        </span>
+        <span class="dashboard-balance-breakdown-item${balance.locked > 0 ? ' is-locked' : ''}">
+          <span class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.lockedLabel}</span>
+          <span class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.locked)}</span>
+        </span>
       </div>
     </article>
   `;
@@ -122,7 +131,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
         <article class="card dashboard-card" aria-labelledby="dash-balance-title">
           <div class="card-title" id="dash-balance-title">${DASHBOARD_COPY.balanceTitle}</div>
           <output class="big-number accent" id="dash-balance" aria-live="polite">${formatUSD(input.balance)}</output>
-          <div class="text-muted sub-text" id="dash-balance-date">${formatDateLatin(input.lastUpdatedIso)}</div>
+          <div class="mono text-muted sub-text" id="dash-balance-date">${formatDateLatin(input.lastUpdatedIso)}</div>
         </article>
         <article class="card dashboard-card" aria-labelledby="dash-pnl-title">
           <div class="card-title" id="dash-pnl-title">${DASHBOARD_COPY.pnlTitle}</div>
@@ -135,9 +144,9 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
         <div class="card-title" id="dashboard-goal-title">${DASHBOARD_COPY.goalTitle}</div>
         <div class="goal-progress-head">
           <output class="mono goal-progress-value" id="dash-prog-current" aria-live="polite">${formatUSD(input.balance)}</output>
-          <span class="mono text-secondary goal-progress-value goal-progress-target" id="dash-prog-target">
+          <span class="text-secondary goal-progress-value goal-progress-target" id="dash-prog-target">
             <span class="goal-progress-target-label" id="dash-prog-target-label">${DASHBOARD_COPY.defaultGoalLabel}</span>
-            <output id="dash-prog-target-amount" aria-live="polite">${formatUSD(input.goalAmount)}</output>
+            <output class="mono goal-progress-target-amount" id="dash-prog-target-amount" aria-live="polite">${formatUSD(input.goalAmount)}</output>
           </span>
         </div>
         <div

@@ -47,10 +47,16 @@ export function renderProjectionTable(
   formatCurrency: (value: number) => string,
 ): string {
   return `
-    <table>
+    <table class="sim-projection-table">
+      <colgroup>
+        <col class="sim-projection-col-month">
+        <col class="sim-projection-col-date">
+        <col class="sim-projection-col-balance">
+        <col class="sim-projection-col-earned">
+      </colgroup>
       <thead>
         <tr>
-          ${SIMULATOR_COPY.projectionHeaders.map((header) => `<th>${header}</th>`).join('')}
+          ${SIMULATOR_COPY.projectionHeaders.map((header) => `<th scope="col">${header}</th>`).join('')}
         </tr>
       </thead>
       <tbody>
@@ -58,10 +64,10 @@ export function renderProjectionTable(
           .map(
             (row) => `
               <tr${row.rowClass ? ` class="${row.rowClass}"` : ''}>
-                <td class="mono">${row.month}</td>
-                <td>${formatDate(row.date)}</td>
-                <td class="mono">${formatCurrency(row.balance)}</td>
-                <td class="mono ${row.earned > 0 ? 'text-gain' : ''}">${formatCurrency(row.earned)}</td>
+                <td class="mono sim-projection-cell-month">${row.month}</td>
+                <td class="mono sim-projection-cell-date">${formatDate(row.date)}</td>
+                <td class="mono sim-projection-cell-balance">${formatCurrency(row.balance)}</td>
+                <td class="mono sim-projection-cell-earned ${row.earned > 0 ? 'text-gain' : ''}">${formatCurrency(row.earned)}</td>
               </tr>
             `,
           )

@@ -1,7 +1,7 @@
 import {
   loadState,
 } from '../utils/storage';
-import { formatUSD } from '../utils/calculator';
+import { formatUSD, formatUSDCompact } from '../utils/calculator';
 import { normalizeAsset as normalizeAssetSymbol } from '../utils/market';
 import type { AssetPriceSnapshot, PositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
@@ -367,7 +367,7 @@ function applyPositionMarketData(
     const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;
     const usdValue = metrics.usdByPositionId[position.id] ?? 0;
     if (rowEl) {
-      rowEl.textContent = usdValue > 0 ? formatUSD(usdValue) : 'N/D';
+      rowEl.textContent = usdValue > 0 ? formatUSDCompact(usdValue) : 'N/D';
     }
 
     if (position.components && position.amount > 0) {
@@ -378,7 +378,7 @@ function applyPositionMarketData(
         if (!componentRowEl) return;
         const ratio = component.amount / position.amount;
         const componentUsdValue = usdValue * ratio;
-        componentRowEl.textContent = componentUsdValue > 0 ? formatUSD(componentUsdValue) : 'N/D';
+        componentRowEl.textContent = componentUsdValue > 0 ? formatUSDCompact(componentUsdValue) : 'N/D';
       });
     }
   });

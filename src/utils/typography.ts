@@ -50,6 +50,9 @@ export function applyTypographyConfig(config: TypographyConfig = DEFAULT_TYPOGRA
   }
 
   const root = document.documentElement;
+  root.style.setProperty('--font-family-ui', config.fontSans);
+  root.style.setProperty('--font-family-mono', config.fontMono);
+  root.style.setProperty('--font-family-data', config.fontSans);
   root.style.setProperty('--font-sans', config.fontSans);
   root.style.setProperty('--font-mono', config.fontMono);
 }

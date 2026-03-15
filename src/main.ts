@@ -29,8 +29,6 @@ import { rememberAutoPortfolioSnapshot, rememberBalanceSummary } from './utils/a
 
 let disposeActiveView: (() => void) | null = null;
 
-applyTypographyConfig();
-
 function themeIcon(): string {
   return getResolvedTheme() === 'dark' ? iconSun(15) : iconMoon(15);
 }
@@ -101,6 +99,10 @@ function init(): void {
 
   initRouter((view) => renderView(app, view));
   renderView(app, getCurrentView());
+
+  requestAnimationFrame(() => {
+    window.setTimeout(() => applyTypographyConfig(), 0);
+  });
 
   // Re-render when another tab modifies localStorage
   onStorageChange(() => renderView(app, getCurrentView()));

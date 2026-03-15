@@ -3,6 +3,22 @@
   background: color-mix(in srgb, var(--bg-card) 82%, var(--bg-secondary));
 }
 
+.calc-config-card .card-title,
+.calc-shell .card-title,
+.calc-signal-card .card-title {
+  font-size: var(--font-size-meta);
+}
+
+.calc-config-card .form-group label,
+.calc-shell .form-group label {
+  font-size: var(--font-size-meta);
+}
+
+.calc-config-card .hint-text,
+.calc-shell .hint-text {
+  font-size: var(--font-size-meta);
+}
+
 .calc-config-bar {
   display: grid;
   grid-template-columns: 1fr 1fr 0.7fr 1.3fr;
@@ -24,8 +40,8 @@
   position: absolute;
   left: 10px;
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--type-meta);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-meta);
   pointer-events: none;
   z-index: 1;
 }
@@ -97,7 +113,7 @@
 }
 
 .calc-metric-label {
-  font-size: var(--type-label);
+  font-size: var(--font-size-meta);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -105,10 +121,14 @@
 }
 
 .calc-metric-value {
-  font-size: var(--type-number-md);
+  font-size: var(--font-size-number-md);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+.calc-metric-card.calc-hero .calc-metric-value {
+  font-size: var(--font-size-number-lg);
 }
 
 /* Purchases */
@@ -119,7 +139,7 @@
   padding-bottom: var(--space-sm);
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--space-sm);
-  font-size: var(--type-label);
+  font-size: var(--font-size-meta);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -149,7 +169,7 @@
   .calc-purchase-header,
   .calc-purchase-row {
     grid-template-columns: 1fr 1fr 1fr 28px;
-    font-size: var(--type-label);
+    font-size: var(--font-size-overline);
   }
 }
 

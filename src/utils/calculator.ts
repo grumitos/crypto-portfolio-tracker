@@ -178,8 +178,19 @@ const usdFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
+const usdCompactFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
 export function formatUSD(n: number): string {
   return usdFormatter.format(n);
+}
+
+export function formatUSDCompact(n: number): string {
+  return usdCompactFormatter.format(n);
 }
 
 /**

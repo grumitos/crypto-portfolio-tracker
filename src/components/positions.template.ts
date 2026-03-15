@@ -75,9 +75,9 @@ export function renderSpotCardTemplate(asset: string): string {
     <span class="positions-spot-header">
       <span class="positions-spot-logo-wrap">
         <img class="positions-spot-logo" loading="lazy" decoding="async">
-        <span class="positions-spot-fallback mono"></span>
+        <span class="positions-spot-fallback"></span>
       </span>
-      <span class="positions-spot-symbol mono">${safeAsset}</span>
+      <span class="positions-spot-symbol">${safeAsset}</span>
     </span>
     <span class="positions-spot-meta">
       <span class="positions-spot-value mono" id="positions-spot-value-${asset}">${skeletonSpan(SPOT_VALUE_SKELETON_WIDTH)}</span>

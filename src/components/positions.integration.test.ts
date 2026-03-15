@@ -179,7 +179,7 @@ describe('positions integration', () => {
     expect(container.querySelector('#positions-apr')?.textContent).toContain('35.00%');
     expect(container.querySelector('#positions-capital')?.textContent).toContain('$400.00');
     expect(container.querySelector('#positions-daily')?.textContent).toContain('$0.40');
-    expect(container.querySelector('#position-usd-p1')?.textContent).toContain('$400.00');
+    expect(container.querySelector('#position-usd-p1')?.textContent).toContain('$400');
     expect(container.querySelector('#positions-spot-ETH')?.textContent).toContain('ETH');
     expect(container.querySelector('#positions-spot-value-ETH')?.textContent).toContain(
       '$2,000.00',

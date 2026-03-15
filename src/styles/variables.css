@@ -117,19 +117,35 @@
   --radius-full: 50%;
 
   /* ── Typography ── */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'SF Mono', ui-monospace, monospace;
-  --type-micro: 0.68rem;
-  --type-kicker: 0.72rem;
-  --type-label: 0.72rem;
-  --type-meta: 0.78rem;
-  --type-body-sm: 0.9rem;
-  --type-body-md: 0.98rem;
-  --type-title-sm: 0.96rem;
-  --type-number-sm: 0.98rem;
-  --type-number-md: 1.08rem;
-  --type-number-lg: 1.3rem;
-  --type-number-xl: 1.75rem;
+  --font-family-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-family-mono: 'SF Mono', ui-monospace, monospace;
+  --font-family-data: var(--font-family-ui);
+
+  --font-size-caption: 0.75rem;
+  --font-size-overline: 0.8125rem;
+  --font-size-meta: 0.875rem;
+  --font-size-body: 0.95rem;
+  --font-size-body-strong: 1.02rem;
+  --font-size-title: 1.05rem;
+  --font-size-number-sm: 1.05rem;
+  --font-size-number-md: 1.2rem;
+  --font-size-number-lg: 1.42rem;
+  --font-size-number-xl: 1.72rem;
+
+  /* ── Legacy aliases (keep compatibility while migrating) ── */
+  --font-sans: var(--font-family-ui);
+  --font-mono: var(--font-family-mono);
+  --type-micro: var(--font-size-caption);
+  --type-kicker: var(--font-size-overline);
+  --type-label: var(--font-size-overline);
+  --type-meta: var(--font-size-meta);
+  --type-body-sm: var(--font-size-body);
+  --type-body-md: var(--font-size-body-strong);
+  --type-title-sm: var(--font-size-title);
+  --type-number-sm: var(--font-size-number-sm);
+  --type-number-md: var(--font-size-number-md);
+  --type-number-lg: var(--font-size-number-lg);
+  --type-number-xl: var(--font-size-number-xl);
   --line-height-tight: 1.15;
   --line-height-snug: 1.3;
   --line-height-body: 1.45;

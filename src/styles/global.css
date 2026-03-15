@@ -25,7 +25,7 @@
   padding: var(--space-sm) var(--space-md);
   background: var(--accent-warm);
   color: var(--btn-primary-text);
-  font-size: var(--type-body-sm);
+  font-size: var(--font-size-body);
   font-weight: 500;
   border-radius: var(--radius-sm);
   text-decoration: none;
@@ -53,7 +53,7 @@ html[data-theme='dark'] {
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-family-ui);
   background:
     radial-gradient(circle at top center, color-mix(in srgb, var(--accent-warm-muted) 26%, transparent), transparent 42%),
     linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 28%, var(--bg-primary)) 0, var(--bg-primary) 180px);
@@ -99,7 +99,7 @@ body {
 }
 
 .app-title {
-  font-size: clamp(1.45rem, 2vw, 1.9rem);
+  font-size: clamp(1.34rem, 1.8vw, 1.76rem);
   font-weight: 650;
   color: var(--text-primary);
   letter-spacing: -0.045em;
@@ -124,7 +124,7 @@ body {
 }
 
 .app-last-update {
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   color: var(--text-muted);
   line-height: 1.2;
   letter-spacing: 0;
@@ -169,8 +169,8 @@ body {
   padding: 0 18px;
   border-radius: calc(var(--radius-lg) - 6px);
   cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: var(--type-body-sm);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body);
   font-weight: 500;
   transition:
     color 0.2s var(--ease-out),
@@ -252,8 +252,8 @@ body {
   min-height: var(--touch-target-size);
   padding: 0 14px;
   gap: 8px;
-  font-family: var(--font-sans);
-  font-size: var(--type-body-sm);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body);
   font-weight: 500;
 }
 
@@ -308,7 +308,7 @@ body {
 }
 
 .card-title {
-  font-size: var(--type-label);
+  font-size: var(--font-size-meta);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -437,8 +437,8 @@ body {
 
 /* ── Numbers ── */
 .big-number {
-  font-family: var(--font-mono);
-  font-size: var(--type-number-xl);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-number-xl);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
@@ -462,7 +462,7 @@ body {
 }
 
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -473,7 +473,7 @@ body {
 
 .form-group label {
   display: block;
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: 6px;
@@ -486,6 +486,7 @@ body {
 }
 
 input[type='text'],
+input[type='password'],
 input[type='number'],
 input[type='date'],
 input[type='time'],
@@ -497,14 +498,29 @@ select {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--type-body-sm);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-body);
   line-height: var(--line-height-snug);
   outline: none;
   transition:
     border-color 0.2s var(--ease-out),
     box-shadow 0.2s var(--ease-out);
+}
+
+input[type='text'],
+input[type='password'],
+textarea,
+select {
+  font-family: var(--font-family-ui);
+  font-variant-numeric: normal;
+}
+
+input[type='number'],
+input[type='date'],
+input[type='time'],
+input[inputmode='decimal'],
+.field-data {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 select {
@@ -646,8 +662,8 @@ select:focus-visible {
   border-radius: var(--radius-sm);
   background: var(--bg-card);
   color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--type-meta);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-meta);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -706,7 +722,7 @@ select:focus-visible {
 
 .btn-sm {
   padding: 6px 12px;
-  font-size: var(--type-kicker);
+  font-size: var(--font-size-overline);
   min-height: 36px;
 }
 
@@ -735,7 +751,7 @@ select:focus-visible {
   display: inline-block;
   padding: 2px 8px;
   border-radius: var(--radius-xs);
-  font-size: var(--type-micro);
+  font-size: var(--font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -810,8 +826,8 @@ select:focus-visible {
   flex: 0 0 148px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 4px;
+  padding: 8px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg-card);
@@ -826,20 +842,20 @@ select:focus-visible {
 .positions-spot-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .positions-spot-logo-wrap {
   position: relative;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
 }
 
 .positions-spot-logo,
 .positions-spot-fallback {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
 }
 
@@ -852,7 +868,7 @@ select:focus-visible {
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: var(--type-micro);
+  font-size: var(--font-size-caption);
   font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-secondary);
@@ -869,14 +885,14 @@ select:focus-visible {
 
 .positions-spot-symbol {
   color: var(--text-primary);
-  font-size: var(--type-meta);
+  font-size: var(--font-size-overline);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 
 .positions-spot-value {
   color: var(--text-secondary);
-  font-size: var(--type-body-sm);
+  font-size: var(--font-size-meta);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -888,7 +904,7 @@ select:focus-visible {
 }
 
 .positions-spot-change {
-  font-size: var(--type-label);
+  font-size: var(--font-size-caption);
   white-space: nowrap;
 }
 
@@ -905,7 +921,7 @@ select:focus-visible {
 }
 
 .positions-spot-change-window {
-  font-size: var(--type-micro);
+  font-size: var(--font-size-caption);
   letter-spacing: 0.04em;
   color: var(--text-muted);
   opacity: 0.8;
@@ -921,7 +937,7 @@ select:focus-visible {
 }
 
 .section-title {
-  font-size: clamp(1.15rem, 1.6vw, 1.45rem);
+  font-size: clamp(1.08rem, 1.35vw, 1.28rem);
   font-weight: 620;
   letter-spacing: -0.03em;
   line-height: 1.05;
@@ -949,7 +965,7 @@ select:focus-visible {
   border: 1px solid var(--btn-danger-border);
   background: var(--color-loss);
   color: var(--claude-dark-text);
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   font-weight: 500;
   line-height: var(--line-height-snug);
   text-align: center;
@@ -1024,8 +1040,8 @@ select:focus-visible {
 }
 
 .stat-value {
-  font-family: var(--font-mono);
-  font-size: var(--type-number-md);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-number-md);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   height: 1.5em;
@@ -1038,7 +1054,7 @@ select:focus-visible {
 }
 
 .stat-value.lg {
-  font-size: calc(var(--type-number-md) + 0.17rem);
+  font-size: var(--font-size-number-lg);
 }
 
 /* ── Responsive ── */
@@ -1063,7 +1079,7 @@ select:focus-visible {
 
   .nav-btn {
     padding: 6px 10px;
-    font-size: var(--type-kicker);
+    font-size: var(--font-size-overline);
     flex: 1;
     justify-content: center;
     min-height: 44px;
@@ -1078,7 +1094,7 @@ select:focus-visible {
   }
 
   .big-number {
-    font-size: var(--type-number-lg);
+    font-size: var(--font-size-number-lg);
   }
 
   .app-header {
@@ -1144,19 +1160,19 @@ select:focus-visible {
   }
 
   .positions-spot-symbol {
-    font-size: var(--type-micro);
+    font-size: var(--font-size-caption);
   }
 
   .positions-spot-value {
-    font-size: var(--type-kicker);
+    font-size: var(--font-size-overline);
   }
 
   .positions-spot-change {
-    font-size: var(--type-micro);
+    font-size: var(--font-size-caption);
   }
 
   .positions-spot-change-window {
-    font-size: var(--type-micro);
+    font-size: var(--font-size-caption);
   }
 
   .goal-progress-foot {
@@ -1223,7 +1239,8 @@ select:focus-visible {
 
   .positions-table tr[data-id] td::before {
     content: attr(data-label);
-    font-size: var(--type-micro);
+    font-size: var(--font-size-caption);
+    font-family: var(--font-family-ui);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1247,14 +1264,14 @@ select:focus-visible {
   }
 
   .positions-table tr[data-id] td[data-label='Activo'] > span {
-    font-size: var(--type-body-sm);
+    font-size: var(--font-size-body);
   }
 
   /* ── Monto: full width ── */
   .positions-table tr[data-id] td[data-label='Monto'] {
     grid-column: 1 / -1;
     border-bottom: 1px solid var(--border);
-    font-size: var(--type-body-sm);
+    font-size: var(--font-size-body);
   }
 
   /* ── Metrics grid rows ── */
@@ -1272,19 +1289,21 @@ select:focus-visible {
     border-bottom: 1px solid var(--border);
   }
 
-  .positions-table tr[data-id] td[data-label='Suscripción'] {
+  .positions-table tr[data-id] td[data-label='Suscripción'],
+  .positions-table tr[data-id] td[data-label='Suscripcion'] {
     border-bottom: 1px solid var(--border);
   }
 
   /* ── Dates side by side ── */
-  .positions-table tr[data-id] td[data-label='Liquidación'] {
+  .positions-table tr[data-id] td[data-label='Liquidación'],
+  .positions-table tr[data-id] td[data-label='Liquidacion'] {
     border-right: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
   }
 
   .positions-table tr[data-id] td[data-label='Ganancia'] {
     border-bottom: 1px solid var(--border);
-    font-size: var(--type-body-sm);
+    font-size: var(--font-size-body);
   }
 
   /* ── Restante: full width footer ── */
@@ -1295,6 +1314,7 @@ select:focus-visible {
     justify-content: space-between;
     background: var(--bg-secondary);
     padding: 8px 14px;
+    font-size: var(--font-size-body);
   }
 
   .positions-table tr[data-id] td[data-label='Restante']::before {
@@ -1359,15 +1379,15 @@ select:focus-visible {
   }
 
   .big-number {
-    font-size: var(--type-number-md);
+    font-size: var(--font-size-number-md);
   }
 
   .stat-value {
-    font-size: var(--type-body-md);
+    font-size: var(--font-size-body-strong);
   }
 
   .stat-value.lg {
-    font-size: var(--type-number-sm);
+    font-size: var(--font-size-number-sm);
   }
 
   .chart-container {
@@ -1435,20 +1455,20 @@ select:focus-visible {
 }
 
 .hint-text {
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   margin-top: 2px;
   line-height: var(--line-height-snug);
 }
 
 .sub-text {
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   margin-top: 6px;
   line-height: var(--line-height-snug);
 }
 
 .form-feedback {
   margin-bottom: var(--space-sm);
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   line-height: var(--line-height-snug);
 }
 
@@ -1488,7 +1508,7 @@ select:focus-visible {
 }
 
 .backup-panel-title {
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1507,7 +1527,7 @@ select:focus-visible {
 }
 
 .backup-import-label {
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1515,7 +1535,7 @@ select:focus-visible {
 }
 
 .backup-file-input {
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
   color: var(--text-secondary);
 }
 
@@ -1534,7 +1554,7 @@ select:focus-visible {
 
 .empty-state p {
   margin-bottom: var(--space-xs);
-  font-size: var(--type-body-sm);
+  font-size: var(--font-size-body);
   line-height: var(--line-height-body);
 }
 
@@ -1544,7 +1564,7 @@ select:focus-visible {
 }
 
 .empty-state p:last-child {
-  font-size: var(--type-meta);
+  font-size: var(--font-size-meta);
 }
 
 /* ── Auto/Manual mode badge ── */
@@ -1555,8 +1575,8 @@ select:focus-visible {
 }
 
 .auto-tag {
-  font-family: var(--font-mono);
-  font-size: var(--type-micro);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-caption);
   font-weight: 500;
   letter-spacing: 0.06em;
   padding: 2px 8px;
@@ -1624,7 +1644,7 @@ select:focus-visible {
   }
 
   table {
-    font-size: var(--type-kicker);
+    font-size: var(--font-size-overline);
   }
 
   td,
@@ -1689,6 +1709,6 @@ select:focus-visible {
   }
 
   .app-title {
-    font-size: var(--type-title-sm);
+    font-size: var(--font-size-title);
   }
 }

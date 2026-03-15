@@ -6,6 +6,20 @@
   background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-secondary));
 }
 
+.sim-parameters-card .card-title,
+.sim-results-card .card-title,
+.sim-projection-card .card-title {
+  font-size: var(--font-size-meta);
+}
+
+.sim-parameters-card .form-group label {
+  font-size: var(--font-size-meta);
+}
+
+.sim-parameters-card .hint-text {
+  font-size: var(--font-size-meta);
+}
+
 .sim-results-card {
   border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
   background:
@@ -25,8 +39,8 @@
 .sim-results-container {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
-  min-height: 260px;
+  gap: var(--space-md);
+  min-height: 0;
 }
 
 .sim-milestones-grid {
@@ -38,8 +52,8 @@
 .sim-milestone-col {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--panel-padding-compact);
+  gap: 6px;
+  padding: 0.82rem;
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--bg-card) 74%, var(--bg-secondary));
@@ -48,36 +62,120 @@
 .sim-result-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .sim-result-label {
-  font-size: var(--type-label);
+  font-size: var(--font-size-overline);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
+  line-height: 1.2;
 }
 
 .sim-result-value {
-  font-family: var(--font-mono);
+  font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
-  min-height: 1.6em;
+  min-height: 1.35em;
   display: flex;
   align-items: center;
+  line-height: 1.15;
 }
 
 .sim-result-value.big {
-  font-size: var(--type-number-lg);
+  font-size: var(--font-size-number-lg);
   font-weight: 500;
 }
 
 .sim-result-value.medium {
-  font-size: var(--type-number-md);
+  font-size: var(--font-size-number-sm);
 }
 
 .sim-result-value.small {
-  font-size: var(--type-body-sm);
+  font-size: var(--font-size-body);
+}
+
+.sim-projection-card .table-container {
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-secondary));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-card) 24%, transparent);
+}
+
+.sim-projection-card table {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  width: 100%;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.sim-projection-card th {
+  font-size: var(--font-size-meta);
+  font-family: var(--font-family-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 0.82rem 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 68%, transparent);
+  white-space: nowrap;
+}
+
+.sim-projection-card td {
+  font-size: var(--font-size-body);
+  padding: 0.86rem 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  background: transparent;
+  transition:
+    background-color 0.18s var(--ease-out),
+    color 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+
+.sim-projection-card tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sim-projection-card tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-secondary) 42%, transparent);
+}
+
+.sim-projection-card tbody tr:hover td {
+  background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
+}
+
+.sim-projection-col-month {
+  width: 72px;
+}
+
+.sim-projection-col-date {
+  width: 148px;
+}
+
+.sim-projection-col-balance,
+.sim-projection-col-earned {
+  width: auto;
+}
+
+.sim-projection-cell-month {
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.sim-projection-cell-balance,
+.sim-projection-cell-earned {
+  text-align: right;
+}
+
+.sim-projection-cell-date {
+  color: var(--text-primary);
 }
 
 .sim-projection-chart-skeleton {
@@ -170,23 +268,40 @@
 }
 
 .sim-row-cross-active td {
-  background: var(--color-gain-muted);
+  color: var(--text-primary);
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--accent-warm) 74%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--border) 82%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .sim-row-cross-be td {
-  background: var(--accent-warm-muted);
+  background: color-mix(in srgb, var(--accent-warm-muted) 92%, var(--bg-card));
 }
 
 .sim-row-cross-goal td {
-  background: var(--color-gain-muted);
+  background: color-mix(in srgb, var(--color-gain-muted) 88%, var(--bg-card));
 }
 
 .sim-row-cross-be.sim-row-cross-goal td {
-  background: color-mix(in srgb, var(--accent-warm-muted) 50%, var(--color-gain-muted));
+  background: color-mix(in srgb, var(--accent-warm-muted) 48%, var(--color-gain-muted));
 }
 
 @media (max-width: 768px) {
   .simulator-shell {
     grid-template-columns: 1fr;
+  }
+
+  .sim-projection-card table {
+    min-width: 560px;
+  }
+
+  .sim-projection-card th,
+  .sim-projection-card td {
+    padding: 0.74rem 0.72rem;
+  }
+
+  .sim-projection-col-date {
+    width: 132px;
   }
 }

@@ -74,7 +74,7 @@ function renderProductRow(
 
   return `
     <tr class="dm-product-row${isTop ? ' dm-recommended' : ''}" data-product-id="${escapeHtml(product.id)}">
-      <td class="mono">${escapeHtml(asset)}</td>
+      <td>${escapeHtml(asset)}</td>
       <td><span class="dm-dir-badge ${dirClass}">${directionLabel(product.optionType)}</span></td>
       <td class="mono">${formatUSD(product.strikePrice)}</td>
       <td class="mono ${safeClass}">${distSign}${product.distancePercent.toFixed(1)}%</td>
@@ -160,7 +160,7 @@ function renderTable(ctx: DualMarketContext): string {
     totalPages > 1
       ? `<div class="dm-pagination">
           <button type="button" class="btn btn-xs dm-page-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Anterior</button>
-          <span class="dm-page-status mono">Página ${currentPage} / ${totalPages}</span>
+          <span class="dm-page-status"><span class="dm-page-status-label">Página</span><span class="dm-page-status-value mono">${currentPage} / ${totalPages}</span></span>
           <button type="button" class="btn btn-xs dm-page-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente</button>
         </div>`
       : '';

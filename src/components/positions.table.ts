@@ -1,4 +1,4 @@
-import { formatDateLatin, formatUSD } from '../utils/calculator';
+import { formatDateLatin, formatUSDCompact } from '../utils/calculator';
 import {
   calculateDualElapsedBilledDays,
   calculateDualProjectedBilledDays,
@@ -21,7 +21,7 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
       <div class="flex-between positions-group-head">
         <div class="card-title form-group-inline">
           <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${safeTitle}</span>
-          <span class="positions-group-count text-muted sub-text">${groupSummary}</span>
+          <span class="positions-group-count">${groupSummary}</span>
         </div>
       </div>
       <div class="table-container">
@@ -81,17 +81,17 @@ function renderPositionRow(p: DualPosition): string {
       <td class="mono" id="position-usd-${p.id}" data-label="Equiv. USD">
         <span class="skeleton skeleton-number" style="width:60px"></span>
       </td>
-      <td class="mono" data-label="Target">${p.targetPrice > 0 ? p.targetPrice.toLocaleString() : '---'}</td>
-      <td class="text-secondary pos-datetime-cell" data-label="Suscripcion">${renderDateTimeCell(p.entryDate, p.entryTime, entryHint)}</td>
-      <td class="text-secondary pos-datetime-cell" data-label="Liquidacion">${renderDateTimeCell(p.settlementDate, p.settlementTime, settlementHint)}</td>
-      <td class="mono text-gain pos-earn-cell" data-label="Ganancia">+${projectedEarnedStr}</td>
+      <td class="mono" data-label="Target">${p.targetPrice > 0 ? formatCompactNumber(p.targetPrice) : '---'}</td>
+      <td class="pos-datetime-cell" data-label="Suscripcion">${renderDateTimeCell(p.entryDate, entryHint)}</td>
+      <td class="pos-datetime-cell" data-label="Liquidacion">${renderDateTimeCell(p.settlementDate, settlementHint)}</td>
+      <td class="mono pos-earn-cell" data-label="Ganancia">+${projectedEarnedStr}</td>
       <td class="pos-row-tail${hasComponents ? ' pos-row-tail-grouped' : ''}" data-label="Restante">
         <span class="pos-row-tail-content">
           <span id="position-remaining-${p.id}">${daysDisplay}</span>
           ${
             hasComponents
               ? `
-            <button type="button" class="pos-components-summary mono" data-toggle-components aria-expanded="false" aria-label="Ver desglose de la posicion">
+            <button type="button" class="pos-components-summary" data-toggle-components aria-expanded="false" aria-label="Ver desglose de la posicion">
               <span class="pos-components-chevron" aria-hidden="true">▸</span>
               Ver desglose (${p.components!.length})
             </button>
@@ -131,10 +131,10 @@ function renderComponentRows(parent: DualPosition): string {
       <td class="mono">${formatAmount(c.amount, subscriptionAsset)}</td>
       <td class="mono pos-emphasis">${c.apr.toFixed(2)}%</td>
       <td class="mono" id="position-usd-${parent.id}-comp-${c.id}"></td>
-      <td class="mono">${c.targetPrice > 0 ? c.targetPrice.toLocaleString() : '---'}</td>
-      <td class="text-secondary pos-datetime-cell">${renderDateTimeCell(c.entryDate, c.entryTime)}</td>
-      <td class="text-secondary pos-datetime-cell">${renderDateTimeCell(c.settlementDate, c.settlementTime)}</td>
-      <td class="mono text-gain pos-earn-cell">+${cEarnedStr}</td>
+      <td class="mono">${c.targetPrice > 0 ? formatCompactNumber(c.targetPrice) : '---'}</td>
+      <td class="pos-datetime-cell">${renderDateTimeCell(c.entryDate)}</td>
+      <td class="pos-datetime-cell">${renderDateTimeCell(c.settlementDate)}</td>
+      <td class="mono pos-earn-cell">+${cEarnedStr}</td>
       <td class="pos-row-tail">
         <span id="position-remaining-${parent.id}-comp-${c.id}">${cDaysDisplay}</span>
       </td>
@@ -151,12 +151,12 @@ function formatRemainingTime(position: DualPosition): string {
   const isSettled = isDualSettlementReached(position);
 
   if (isSettled) {
-    return '<span class="mono text-muted">Liquidada</span>';
+    return '<span class="mono pos-remaining-value pos-remaining-value--muted">Liquidada</span>';
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_MINUTE_MS) {
     const totalSecondsRemaining = Math.max(1, Math.ceil(remainingMs / ONE_SECOND_MS));
-    return `<span class="mono text-accent">${totalSecondsRemaining}s</span>`;
+    return `<span class="mono pos-remaining-value pos-remaining-value--accent">${totalSecondsRemaining}s</span>`;
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_DAY_MS) {
@@ -164,16 +164,16 @@ function formatRemainingTime(position: DualPosition): string {
     const hours = Math.floor(totalMinutesRemaining / 60);
     const minutes = totalMinutesRemaining % 60;
     const minutesLabel = String(minutes).padStart(2, '0');
-    return `<span class="mono text-accent">${hours}h ${minutesLabel}m</span>`;
+    return `<span class="mono pos-remaining-value pos-remaining-value--accent">${hours}h ${minutesLabel}m</span>`;
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0) {
     const totalHours = Math.floor(remainingMs / (60 * ONE_MINUTE_MS));
     const days = Math.floor(totalHours / 24);
     const hours = totalHours % 24;
-    const colorClass = days < 1 ? 'text-accent' : '';
+    const colorClass = days < 1 ? ' pos-remaining-value--accent' : '';
     const label = hours > 0 ? `${days}d ${hours}h` : `${days > 0 ? days : 1}d`;
-    return `<span class="mono ${colorClass}">${label}</span>`;
+    return `<span class="mono pos-remaining-value${colorClass}">${label}</span>`;
   }
 
   // Fallback for edge cases where settlement timestamp cannot be resolved.
@@ -182,11 +182,11 @@ function formatRemainingTime(position: DualPosition): string {
   const remainingDaysFallback = Math.max(0, totalDaysRaw - elapsedRaw);
   if (remainingDaysFallback > 0) {
     const roundedRemainingDays = Math.max(1, Math.ceil(remainingDaysFallback));
-    const colorClass = roundedRemainingDays <= 1 ? 'text-accent' : '';
-    return `<span class="mono ${colorClass}">${roundedRemainingDays}d</span>`;
+    const colorClass = roundedRemainingDays <= 1 ? ' pos-remaining-value--accent' : '';
+    return `<span class="mono pos-remaining-value${colorClass}">${roundedRemainingDays}d</span>`;
   }
 
-  return '<span class="mono text-muted">---</span>';
+  return '<span class="mono pos-remaining-value pos-remaining-value--muted">---</span>';
 }
 
 function getRemainingMsToSettlement(position: DualPosition): number {
@@ -199,14 +199,9 @@ function isSubMinuteCountdown(position: DualPosition): boolean {
   return Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_MINUTE_MS;
 }
 
-function renderDateTimeCell(date: string, time?: string, hint?: string | null): string {
+function renderDateTimeCell(date: string, hint?: string | null): string {
   const titleAttr = hint ? ` title="${escapeHtml(hint)}"` : '';
-  const parts = [`<span class="pos-date-value">${escapeHtml(formatDateLatin(date))}</span>`];
-  const normalizedTime = normalizeTime(time);
-  if (normalizedTime) {
-    parts.push(`<span class="pos-time-value mono">${escapeHtml(normalizedTime)}</span>`);
-  }
-  return `<span class="pos-datetime-wrap"${titleAttr}>${parts.join('')}</span>`;
+  return `<span class="pos-datetime-wrap"${titleAttr}><span class="pos-date-value">${escapeHtml(formatDateLatin(date))}</span></span>`;
 }
 
 function getDateTimeHint(
@@ -236,9 +231,16 @@ function getDateTimeHint(
 
 function formatAmount(amount: number, asset: string): string {
   if (asset === 'USDT' || asset === 'USDC') {
-    return formatUSD(amount).replace('$', '') + ' ' + asset;
+    return formatUSDCompact(amount).replace('$', '') + ' ' + asset;
   }
   return amount.toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' ' + asset;
+}
+
+function formatCompactNumber(value: number): string {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 function productLabel(position: DualPosition): string {
@@ -262,7 +264,7 @@ function productLabelHtml(position: DualPosition): string {
     : '';
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
-  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap" data-asset-logo-root><img class="pos-pair-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="pos-pair-fallback mono" data-asset-logo-fallback>${safeMonogram}</span></span>${label}</span>`;
+  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap" data-asset-logo-root><img class="pos-pair-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="pos-pair-fallback" data-asset-logo-fallback>${safeMonogram}</span></span>${label}</span>`;
 }
 
 export function updateRemainingTimesInPlace(

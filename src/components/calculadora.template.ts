@@ -162,7 +162,7 @@ export function renderPurchaseRow(
       </div>
     </div>
     <div class="form-group form-group-inline">
-      <input type="text" readonly class="calc-locked" value="${totalValue}" aria-label="Total calculado">
+      <input type="text" readonly class="calc-locked field-data" value="${totalValue}" aria-label="Total calculado">
     </div>
     <button type="button" class="btn btn-sm btn-danger calc-remove-btn" data-remove-id="${purchaseId}" aria-label="Eliminar posición">${iconX(14)}</button>
   `;
