@@ -10,7 +10,7 @@ vi.mock('./market', () => ({
 }));
 
 import { fetchAccountBalances, fetchDualPositions } from './binance-client';
-import { formatISODateLocal } from './date';
+import { formatISODateLocal, formatTimeHHMMLocal, resolveBinanceDualSettlementLocal } from './date';
 import { getAssetPriceSnapshot } from './market';
 import {
   clearBinanceSyncCaches,
@@ -106,6 +106,11 @@ describe('binance sync cache', () => {
     expect(snapshot.positions[0]?.entryTime).toBe(
       `${String(expected.getHours()).padStart(2, '0')}:${String(expected.getMinutes()).padStart(2, '0')}`,
     );
+    expect(snapshot.positions[0]?.entryTimeSource).toBe('binance_purchase_time');
+    expect(snapshot.positions[0]?.settlementTime).toBe(
+      formatTimeHHMMLocal(new Date('2026-03-16T08:00:00.000Z')),
+    );
+    expect(snapshot.positions[0]?.settlementTimeSource).toBe('binance_settle_date_rule');
   });
 
   it('falls back to settlement UTC minus duration instead of purchaseEndTime when purchaseTime is absent', async () => {
@@ -132,5 +137,29 @@ describe('binance sync cache', () => {
     expect(snapshot.positions[0]?.entryTime).toBe(
       `${String(expected.getHours()).padStart(2, '0')}:${String(expected.getMinutes()).padStart(2, '0')}`,
     );
+    expect(snapshot.positions[0]?.entryTimeSource).toBe('derived_settle_minus_duration');
+  });
+
+  it('maps settlement date and time using Binance default cutoff in local time', async () => {
+    vi.mocked(fetchDualPositions).mockResolvedValue([
+      {
+        id: '1',
+        investCoin: 'BNB',
+        exercisedCoin: 'USDT',
+        amount: 0.25,
+        strikePrice: 500,
+        duration: 3,
+        settleDate: '2026-03-20',
+        apr: 32,
+        optionType: 'CALL',
+        status: 'PURCHASE_SUCCESS',
+      },
+    ]);
+
+    const snapshot = await fetchBinancePortfolioSnapshot(true);
+    const expectedSettlement = resolveBinanceDualSettlementLocal('2026-03-20');
+
+    expect(snapshot.positions[0]?.settlementDate).toBe(expectedSettlement?.date);
+    expect(snapshot.positions[0]?.settlementTime).toBe(expectedSettlement?.time);
   });
 });

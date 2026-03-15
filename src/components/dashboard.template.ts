@@ -112,9 +112,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
 
   return `
     <section class="section dashboard-section" aria-labelledby="dashboard-heading">
-      <div class="section-header dashboard-header">
-        <h2 class="section-title" id="dashboard-heading">${DASHBOARD_COPY.sectionTitle}</h2>
-      </div>
+      <h2 class="visually-hidden" id="dashboard-heading">${DASHBOARD_COPY.sectionTitle}</h2>
 
       <div class="grid-3 dashboard-summary-grid">
         <article class="card dashboard-card" aria-labelledby="dash-invested-title">

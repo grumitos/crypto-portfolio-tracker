@@ -1,3 +1,26 @@
+.simulator-shell {
+  align-items: stretch;
+}
+
+.sim-parameters-card {
+  background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-secondary));
+}
+
+.sim-results-card {
+  border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0, var(--bg-card) 100%),
+    var(--bg-card);
+}
+
+.sim-projection-card {
+  background: color-mix(in srgb, var(--bg-card) 84%, var(--bg-secondary));
+}
+
+.sim-actions {
+  margin-top: var(--space-sm);
+}
+
 /* ── Simulator Results ── */
 .sim-results-container {
   display: flex;
@@ -17,9 +40,9 @@
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--panel-padding-compact);
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: color-mix(in srgb, var(--bg-card) 74%, var(--bg-secondary));
 }
 
 .sim-result-item {
@@ -29,8 +52,8 @@
 }
 
 .sim-result-label {
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: var(--type-label);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -45,16 +68,16 @@
 }
 
 .sim-result-value.big {
-  font-size: 1.3rem;
+  font-size: var(--type-number-lg);
   font-weight: 500;
 }
 
 .sim-result-value.medium {
-  font-size: 1.05rem;
+  font-size: var(--type-number-md);
 }
 
 .sim-result-value.small {
-  font-size: 0.95rem;
+  font-size: var(--type-body-sm);
 }
 
 .sim-projection-chart-skeleton {
@@ -160,4 +183,10 @@
 
 .sim-row-cross-be.sim-row-cross-goal td {
   background: color-mix(in srgb, var(--accent-warm-muted) 50%, var(--color-gain-muted));
+}
+
+@media (max-width: 768px) {
+  .simulator-shell {
+    grid-template-columns: 1fr;
+  }
 }

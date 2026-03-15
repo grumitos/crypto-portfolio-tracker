@@ -10,6 +10,9 @@ export const FEE_PRESETS: Record<FeePreset, { maker: number; label: string }> = 
 
 export const CALCULADORA_COPY = {
   title: 'Calculadora Swing Trade',
+  kicker: 'Lectura de señal',
+  intro: 'Define ejecución, compras y fees para leer el neto real de cada ciclo.',
+  configTitle: 'Contexto de entrada',
   executionTitle: 'Ejecución',
   positionsTitle: 'Posiciones',
   signalTitle: 'Señal actual',

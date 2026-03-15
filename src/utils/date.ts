@@ -5,6 +5,19 @@ export function formatISODateLocal(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+export function formatTimeHHMMLocal(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+export function toLocalDateTimeParts(date: Date): { date: string; time: string } {
+  return {
+    date: formatISODateLocal(date),
+    time: formatTimeHHMMLocal(date),
+  };
+}
+
 export function todayISODateLocal(): string {
   return formatISODateLocal(new Date());
 }
@@ -47,6 +60,14 @@ export function parseBinanceDualSettlementUTC(value: string): Date | null {
   }
 
   return new Date(Date.UTC(year, month - 1, day, BINANCE_DUAL_SETTLEMENT_HOUR_UTC, 0, 0, 0));
+}
+
+export function resolveBinanceDualSettlementLocal(
+  value: string,
+): { date: string; time: string } | null {
+  const settlement = parseBinanceDualSettlementUTC(value);
+  if (!settlement) return null;
+  return toLocalDateTimeParts(settlement);
 }
 
 export function isBinanceDualSettlementReached(

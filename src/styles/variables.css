@@ -117,11 +117,27 @@
   --radius-full: 50%;
 
   /* ── Typography ── */
-  --font-sans:
-    'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, monospace;
+  --type-micro: 0.68rem;
+  --type-kicker: 0.72rem;
+  --type-label: 0.72rem;
+  --type-meta: 0.78rem;
+  --type-body-sm: 0.9rem;
+  --type-body-md: 0.98rem;
+  --type-title-sm: 0.96rem;
+  --type-number-sm: 0.98rem;
+  --type-number-md: 1.08rem;
+  --type-number-lg: 1.3rem;
+  --type-number-xl: 1.75rem;
+  --line-height-tight: 1.15;
+  --line-height-snug: 1.3;
+  --line-height-body: 1.45;
 
   /* ── Layout ── */
+  --app-max-width: 1248px;
+  --page-padding-inline: clamp(20px, 4vw, 44px);
+  --page-padding-top: clamp(14px, 2vw, 24px);
   --header-height: 64px;
   --touch-target-size: 44px;
 

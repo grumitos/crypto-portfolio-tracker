@@ -2,7 +2,11 @@ import type { BinanceDualPosition, BinanceAccountBalance, DualPosition, Directio
 import { fetchDualPositions, fetchAccountBalances } from './binance-client';
 import { replaceAutoPositions } from './storage';
 import { getAssetPriceSnapshot } from './market';
-import { formatISODateLocal, parseBinanceDualSettlementUTC } from './date';
+import {
+  parseBinanceDualSettlementUTC,
+  resolveBinanceDualSettlementLocal,
+  toLocalDateTimeParts,
+} from './date';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -28,6 +32,23 @@ function resolveEntryTimestamp(bp: BinanceDualPosition): number {
   return Date.now();
 }
 
+function resolveEntryTimeSource(bp: BinanceDualPosition): DualPosition['entryTimeSource'] {
+  if (isValidTimestamp(bp.purchaseTime)) {
+    return 'binance_purchase_time';
+  }
+
+  const settlementAt = parseBinanceDualSettlementUTC(bp.settleDate);
+  if (settlementAt) {
+    return 'derived_settle_minus_duration';
+  }
+
+  if (isValidTimestamp(bp.purchaseEndTime)) {
+    return 'derived_purchase_end_time';
+  }
+
+  return 'derived_now';
+}
+
 // ── Map Binance position → local DualPosition ──
 
 function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
@@ -36,10 +57,9 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
   const subscriptionAsset = bp.investCoin;
 
   const entryTimestamp = resolveEntryTimestamp(bp);
-  const entryDate = new Date(entryTimestamp);
-  // Store as local date/time — resolveDualEntryAt interprets via parseLocalDateTime
-  const entryDateISO = formatISODateLocal(entryDate);
-  const entryTimeHHMM = `${String(entryDate.getHours()).padStart(2, '0')}:${String(entryDate.getMinutes()).padStart(2, '0')}`;
+  const entryAt = new Date(entryTimestamp);
+  const entry = toLocalDateTimeParts(entryAt);
+  const settlement = resolveBinanceDualSettlementLocal(bp.settleDate);
 
   return {
     id: `binance_${bp.id}`,
@@ -48,10 +68,12 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
     subscriptionAsset,
     amount: bp.amount,
     targetPrice: bp.strikePrice,
-    entryDate: entryDateISO,
-    entryTime: entryTimeHHMM,
-    settlementDate: bp.settleDate,
-    // No settlementTime → resolveDualSettlementAt uses parseBinanceDualSettlementUTC (08:00 UTC)
+    entryDate: entry.date,
+    entryTime: entry.time,
+    entryTimeSource: resolveEntryTimeSource(bp),
+    settlementDate: settlement?.date ?? bp.settleDate,
+    settlementTime: settlement?.time,
+    settlementTimeSource: settlement?.time ? 'binance_settle_date_rule' : undefined,
     apr: bp.apr,
   };
 }

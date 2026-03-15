@@ -4,8 +4,6 @@ import {
   saveApiCredentials,
   clearApiCredentials,
   hasApiCredentials,
-  saveTradingPin,
-  hasTradingPin,
   loadPositionsMode,
   savePositionsMode,
 } from '../../utils/binance-auth';
@@ -35,7 +33,6 @@ function getOrCreateModal(): HTMLDialogElement {
   dialog.id = 'modal-api-config';
   dialog.className = 'modal-overlay';
 
-  const hasPin = hasTradingPin();
   const creds = loadApiCredentials();
   const mode = loadPositionsMode();
   const isAuto = mode === 'auto';
@@ -54,13 +51,13 @@ function getOrCreateModal(): HTMLDialogElement {
 
       <!-- Mode toggle -->
       <div class="form-group">
-        <label>Modo de operación</label>
+        <label>Modo de operacion</label>
         <div class="mode-toggle">
           <button type="button" class="mode-btn${!isAuto ? ' active' : ''}" data-mode="manual" id="mode-manual">Manual</button>
           <button type="button" class="mode-btn${isAuto ? ' active' : ''}" data-mode="auto" id="mode-auto">Binance</button>
         </div>
         <div class="text-muted hint-text" id="mode-hint">
-          ${isAuto ? 'Binance sincroniza posiciones y saldo de forma automática.' : 'Manual: posiciones y saldo se gestionan localmente. Import/export via backup.'}
+          ${isAuto ? 'Binance sincroniza datos y saldo de forma automatica.' : 'Manual: la app muestra los datos guardados localmente o restaurados desde backup.'}
         </div>
       </div>
 
@@ -95,19 +92,6 @@ function getOrCreateModal(): HTMLDialogElement {
           <label for="input-api-secret">API Secret</label>
           <input type="password" id="input-api-secret" placeholder="Tu API Secret"
                  value="${escapeHtml(creds?.apiSecret ?? '')}" autocomplete="off" spellcheck="false">
-        </div>
-
-        <div id="api-pin-section" ${isAuto ? '' : 'hidden'}>
-          <div class="dual-market-divider"></div>
-
-          <div class="form-group">
-            <label for="input-trading-pin">PIN de Trading (4-6 dígitos)</label>
-            <input type="password" id="input-trading-pin" placeholder="${hasPin ? '••••' : 'PIN para activar suscripciones'}"
-                   maxlength="6" pattern="[0-9]{4,6}" inputmode="numeric" autocomplete="off">
-            <div class="text-muted hint-text">
-              Protege las suscripciones a Dual Investment. Solo aplica en modo Binance.
-            </div>
-          </div>
         </div>
       </div>
 
@@ -162,22 +146,19 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
         .querySelectorAll('.mode-btn')
         .forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.mode === mode));
 
-      const pinSection = dialog.querySelector('#api-pin-section') as HTMLElement;
       const clearBtn = dialog.querySelector('#btn-api-config-clear') as HTMLElement;
       const hintEl = dialog.querySelector('#mode-hint') as HTMLElement;
       const savingsSection = dialog.querySelector('#cfg-savings-section') as HTMLElement;
 
       if (mode === 'auto') {
-        pinSection.hidden = false;
         savingsSection.hidden = true;
         clearBtn.hidden = !hasApiCredentials();
-        hintEl.textContent = 'Binance sincroniza posiciones y saldo de forma automática.';
+        hintEl.textContent = 'Binance sincroniza datos y saldo de forma automatica.';
       } else {
-        pinSection.hidden = true;
         savingsSection.hidden = false;
         clearBtn.hidden = !hasApiCredentials();
         hintEl.textContent =
-          'Manual: posiciones y saldo se gestionan localmente. Import/export via backup.';
+          'Manual: la app muestra los datos guardados localmente o restaurados desde backup.';
       }
     });
   });
@@ -224,7 +205,6 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
   dialog.querySelector('#btn-api-config-save')?.addEventListener('click', async () => {
     const keyInput = dialog.querySelector('#input-api-key') as HTMLInputElement;
     const secretInput = dialog.querySelector('#input-api-secret') as HTMLInputElement;
-    const pinInput = dialog.querySelector('#input-trading-pin') as HTMLInputElement;
     const investedInput = dialog.querySelector('#input-cfg-invested') as HTMLInputElement;
     const goalInput = dialog.querySelector('#input-cfg-goal') as HTMLInputElement;
     const savingsInput = dialog.querySelector('#input-cfg-savings') as HTMLInputElement;
@@ -254,25 +234,16 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     // Save mode
     savePositionsMode(selectedMode);
 
-    // Save API credentials (available in both modes for Dual Market browsing)
+    // Save API credentials for read-only Binance sync.
     const key = keyInput.value.trim();
     const secret = secretInput.value.trim();
 
     if (key && secret) {
       const prevCreds = loadApiCredentials();
       saveApiCredentials({ apiKey: key, apiSecret: secret, tradingPin: prevCreds?.tradingPin });
-
-      // Save PIN only in auto mode
-      if (selectedMode === 'auto') {
-        const pin = pinInput.value.trim();
-        if (pin.length >= 4 && pin.length <= 6 && /^\d+$/.test(pin)) {
-          await saveTradingPin(pin);
-        }
-      }
-
       clearAllRuntimeCaches();
     } else if (selectedMode === 'auto') {
-      showStatus(statusEl, 'API Key y Secret son requeridos para el modo Binance.', 'error');
+      showStatus(statusEl, 'API Key y Secret son requeridos para la lectura con Binance.', 'error');
       return;
     }
 

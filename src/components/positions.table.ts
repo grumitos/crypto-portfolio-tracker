@@ -7,14 +7,13 @@ import {
   normalizeTime,
   resolveDualSettlementAt,
 } from '../utils/dual-yield';
-import { iconTrash } from '../utils/icons';
 import { ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from '../utils/constants';
 import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-logos';
 import { escapeHtml } from '../utils/ui-helpers';
 import type { DualPosition } from '../types';
 
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
-  const isBuyLow = title === 'Buy Low';
+  const isBuyLow = positions[0]?.direction !== 'sell-high';
   const safeTitle = escapeHtml(title);
   const groupSummary = `${positions.length} posicion${positions.length > 1 ? 'es' : ''}`;
   return `
@@ -48,8 +47,8 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
               <th scope="col">APR</th>
               <th scope="col">Equiv. USD</th>
               <th scope="col">Target</th>
-              <th scope="col">Suscripción</th>
-              <th scope="col">Liquidación</th>
+              <th scope="col">Suscripcion</th>
+              <th scope="col">Liquidacion</th>
               <th scope="col">Ganancia (Venc.)</th>
               <th scope="col">Restante</th>
             </tr>
@@ -68,7 +67,9 @@ function renderPositionRow(p: DualPosition): string {
   const projectedEarned = calculateDualProjectedProfit(p);
   const projectedEarnedStr = formatAmount(projectedEarned, p.subscriptionAsset);
   const hasComponents = p.components && p.components.length > 1;
-  const label = productLabel(p);
+
+  const entryHint = getDateTimeHint(p, 'entry');
+  const settlementHint = getDateTimeHint(p, 'settlement');
 
   const mainRow = `
     <tr data-id="${p.id}" ${hasComponents ? 'class="pos-row-grouped"' : ''}>
@@ -81,8 +82,8 @@ function renderPositionRow(p: DualPosition): string {
         <span class="skeleton skeleton-number" style="width:60px"></span>
       </td>
       <td class="mono" data-label="Target">${p.targetPrice > 0 ? p.targetPrice.toLocaleString() : '---'}</td>
-      <td class="text-secondary pos-datetime-cell" data-label="Suscripción">${renderDateTimeCell(p.entryDate, p.entryTime)}</td>
-      <td class="text-secondary pos-datetime-cell" data-label="Liquidación">${renderDateTimeCell(p.settlementDate, p.settlementTime)}</td>
+      <td class="text-secondary pos-datetime-cell" data-label="Suscripcion">${renderDateTimeCell(p.entryDate, p.entryTime, entryHint)}</td>
+      <td class="text-secondary pos-datetime-cell" data-label="Liquidacion">${renderDateTimeCell(p.settlementDate, p.settlementTime, settlementHint)}</td>
       <td class="mono text-gain pos-earn-cell" data-label="Ganancia">+${projectedEarnedStr}</td>
       <td class="pos-row-tail${hasComponents ? ' pos-row-tail-grouped' : ''}" data-label="Restante">
         <span class="pos-row-tail-content">
@@ -90,16 +91,13 @@ function renderPositionRow(p: DualPosition): string {
           ${
             hasComponents
               ? `
-            <button type="button" class="pos-components-summary mono" data-toggle-components aria-expanded="false" aria-label="Ver desglose de ${label}">
+            <button type="button" class="pos-components-summary mono" data-toggle-components aria-expanded="false" aria-label="Ver desglose de la posicion">
               <span class="pos-components-chevron" aria-hidden="true">▸</span>
               Ver desglose (${p.components!.length})
             </button>
           `
               : ''
           }
-        </span>
-        <span class="pos-row-actions">
-          <button type="button" class="btn btn-sm btn-danger btn-del-pos" data-id="${p.id}" title="Eliminar ${label}" aria-label="Eliminar posición ${label}">${iconTrash(13)}</button>
         </span>
       </td>
     </tr>
@@ -201,13 +199,39 @@ function isSubMinuteCountdown(position: DualPosition): boolean {
   return Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_MINUTE_MS;
 }
 
-function renderDateTimeCell(date: string, time?: string): string {
+function renderDateTimeCell(date: string, time?: string, hint?: string | null): string {
+  const titleAttr = hint ? ` title="${escapeHtml(hint)}"` : '';
   const parts = [`<span class="pos-date-value">${escapeHtml(formatDateLatin(date))}</span>`];
   const normalizedTime = normalizeTime(time);
   if (normalizedTime) {
     parts.push(`<span class="pos-time-value mono">${escapeHtml(normalizedTime)}</span>`);
   }
-  return parts.join('');
+  return `<span class="pos-datetime-wrap"${titleAttr}>${parts.join('')}</span>`;
+}
+
+function getDateTimeHint(
+  position: DualPosition,
+  field: 'entry' | 'settlement',
+): string | null {
+  if (field === 'settlement') {
+    if (position.settlementTimeSource === 'binance_settle_date_rule') {
+      return 'Hora de liquidación calculada desde settleDate con la ventana estándar de Binance.';
+    }
+    return null;
+  }
+
+  switch (position.entryTimeSource) {
+    case 'binance_purchase_time':
+      return 'Hora de suscripción reportada por Binance.';
+    case 'derived_settle_minus_duration':
+      return 'Hora de suscripción estimada por la app usando settleDate menos la duración del producto.';
+    case 'derived_purchase_end_time':
+      return 'Hora de suscripción estimada por la app usando purchaseEndTime.';
+    case 'derived_now':
+      return 'Hora de suscripción estimada por la app porque Binance no devolvió una marca de tiempo utilizable.';
+    default:
+      return null;
+  }
 }
 
 function formatAmount(amount: number, asset: string): string {

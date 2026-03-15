@@ -7,6 +7,8 @@ import type {
   CalculadoraState,
   Purchase,
   PositionsConfig,
+  PositionEntryTimeSource,
+  PositionSettlementTimeSource,
 } from '../types';
 import { sanitizeISODate, todayISODateLocal } from './date';
 import { parseLooseNumber } from './parse-number';
@@ -122,6 +124,22 @@ function sanitizeTime(value: unknown): string | undefined {
   return HHMM_PATTERN.test(clean) ? clean : undefined;
 }
 
+function sanitizeEntryTimeSource(value: unknown): PositionEntryTimeSource | undefined {
+  switch (value) {
+    case 'binance_purchase_time':
+    case 'derived_settle_minus_duration':
+    case 'derived_purchase_end_time':
+    case 'derived_now':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function sanitizeSettlementTimeSource(value: unknown): PositionSettlementTimeSource | undefined {
+  return value === 'binance_settle_date_rule' ? value : undefined;
+}
+
 function sanitizeBalanceHistory(
   rawHistory: unknown,
   fallbackDate: string,
@@ -194,8 +212,10 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
     targetPrice: sanitizeNonNegative(record.targetPrice, defaults.targetPrice),
     entryDate,
     entryTime: sanitizeTime(record.entryTime),
+    entryTimeSource: sanitizeEntryTimeSource(record.entryTimeSource),
     settlementDate,
     settlementTime: sanitizeTime(record.settlementTime),
+    settlementTimeSource: sanitizeSettlementTimeSource(record.settlementTimeSource),
     apr: sanitizeNonNegative(record.apr, defaults.apr),
     ...(components.length > 1 ? { components } : {}),
   };

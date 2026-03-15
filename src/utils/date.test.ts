@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatISODateLocal,
+  formatTimeHHMMLocal,
   parseISODateLocal,
   sanitizeISODate,
   parseBinanceDualSettlementUTC,
+  resolveBinanceDualSettlementLocal,
   isBinanceDualSettlementReached,
 } from './date';
 
@@ -11,6 +13,11 @@ describe('date utils', () => {
   it('formats local date as YYYY-MM-DD', () => {
     const date = new Date(2026, 1, 18); // 2026-02-18 local
     expect(formatISODateLocal(date)).toBe('2026-02-18');
+  });
+
+  it('formats local time as HH:mm', () => {
+    const date = new Date(2026, 1, 18, 4, 7, 59);
+    expect(formatTimeHHMMLocal(date)).toBe('04:07');
   });
 
   it('parses valid ISO date and rejects invalid date', () => {
@@ -26,6 +33,13 @@ describe('date utils', () => {
   it('parses Binance Dual settlement timestamp at 08:00 UTC', () => {
     const settlement = parseBinanceDualSettlementUTC('2026-02-19');
     expect(settlement?.toISOString()).toBe('2026-02-19T08:00:00.000Z');
+  });
+
+  it('resolves Binance settlement into local date/time parts', () => {
+    expect(resolveBinanceDualSettlementLocal('2026-02-19')).toEqual({
+      date: formatISODateLocal(new Date('2026-02-19T08:00:00.000Z')),
+      time: formatTimeHHMMLocal(new Date('2026-02-19T08:00:00.000Z')),
+    });
   });
 
   it('marks settlement reached only at or after 08:00 UTC', () => {

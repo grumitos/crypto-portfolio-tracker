@@ -7,7 +7,9 @@ export const DASHBOARD_BALANCE_DECIMALS_MEDIUM = 4;
 export const DASHBOARD_BALANCE_DECIMALS_LARGE = 2;
 
 export const DASHBOARD_COPY = {
-  sectionTitle: 'Portfolio',
+  sectionTitle: 'Resumen del portfolio',
+  sectionKicker: 'Vista general',
+  sectionIntro: 'Capital, progreso y run-rate actual en una sola lectura.',
   investedTitle: 'Invertido total',
   balanceTitle: 'Saldo total',
   pnlTitle: 'P&L',

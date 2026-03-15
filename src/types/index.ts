@@ -27,6 +27,14 @@ export interface DualPositionComponent {
   apr: number;
 }
 
+export type PositionEntryTimeSource =
+  | 'binance_purchase_time'
+  | 'derived_settle_minus_duration'
+  | 'derived_purchase_end_time'
+  | 'derived_now';
+
+export type PositionSettlementTimeSource = 'binance_settle_date_rule';
+
 export interface DualPosition {
   id: string;
   asset: string; // e.g. "ETH", "SOL", "BTC"
@@ -36,8 +44,10 @@ export interface DualPosition {
   targetPrice: number;
   entryDate: string; // ISO date
   entryTime?: string; // local HH:mm
+  entryTimeSource?: PositionEntryTimeSource;
   settlementDate: string; // ISO date
   settlementTime?: string; // local HH:mm (optional fallback to Binance default)
+  settlementTimeSource?: PositionSettlementTimeSource;
   apr: number; // annual percentage rate
   components?: DualPositionComponent[]; // grouped source entries used for weighted aggregate rows
 }

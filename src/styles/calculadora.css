@@ -1,8 +1,16 @@
 /* ── Calculadora ── */
+.calc-config-card {
+  background: color-mix(in srgb, var(--bg-card) 82%, var(--bg-secondary));
+}
+
 .calc-config-bar {
   display: grid;
   grid-template-columns: 1fr 1fr 0.7fr 1.3fr;
   gap: var(--space-md);
+  align-items: start;
+}
+
+.calc-shell {
   align-items: start;
 }
 
@@ -17,7 +25,7 @@
   left: 10px;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: var(--type-meta);
   pointer-events: none;
   z-index: 1;
 }
@@ -53,8 +61,15 @@
   gap: var(--space-sm);
 }
 
+.calc-signal-card {
+  border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0, var(--bg-card) 100%),
+    var(--bg-card);
+}
+
 .calc-metric-card {
-  background: var(--bg-secondary);
+  background: color-mix(in srgb, var(--bg-card) 56%, var(--bg-secondary));
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   padding: var(--panel-padding-compact);
@@ -69,8 +84,8 @@
 }
 
 .calc-metric-card.calc-hero {
-  border-color: var(--border);
-  background: var(--bg-card);
+  border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--accent-warm-muted));
 }
 
 .calc-metric-card.calc-hero:hover {
@@ -82,15 +97,15 @@
 }
 
 .calc-metric-label {
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: var(--type-label);
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .calc-metric-value {
-  font-size: 1.1rem;
+  font-size: var(--type-number-md);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -104,8 +119,8 @@
   padding-bottom: var(--space-sm);
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--space-sm);
-  font-size: 0.68rem;
-  font-weight: 500;
+  font-size: var(--type-label);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -134,7 +149,7 @@
   .calc-purchase-header,
   .calc-purchase-row {
     grid-template-columns: 1fr 1fr 1fr 28px;
-    font-size: 0.7rem;
+    font-size: var(--type-label);
   }
 }
 

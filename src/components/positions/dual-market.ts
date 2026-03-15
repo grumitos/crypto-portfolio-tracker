@@ -338,7 +338,7 @@ function renderModalContent(
   ctx.container.innerHTML = `
     <div class="modal modal--wide">
       <div class="dm-modal-header">
-        <h3 class="modal-title" style="margin-bottom:0">Mercado Dual</h3>
+        <h3 class="modal-title modal-title--flush">Mercado Dual</h3>
         <div class="dm-modal-header-actions">
           <button class="btn btn-xs" id="dm-btn-score-info" title="Como se calcula el score">${iconInfo(13)}Score</button>
           <button class="btn btn-xs" id="dm-btn-refresh" title="Recargar productos">${iconRefreshCw(13)}</button>
@@ -504,7 +504,7 @@ async function showPinDialog(
         <input type="password" id="dm-pin-input" maxlength="6" pattern="[0-9]{4,6}"
                inputmode="numeric" autocomplete="off" placeholder="••••">
       </div>
-      <div id="dm-pin-error" class="text-loss" style="display:none;margin-bottom:var(--space-sm)"></div>
+      <div id="dm-pin-error" class="form-feedback text-loss" hidden></div>
       <div class="modal-actions">
         <button class="btn" id="dm-pin-cancel">Cancelar</button>
         <button class="btn btn-primary" id="dm-pin-confirm">Desbloquear</button>
@@ -528,10 +528,12 @@ async function showPinDialog(
   dialog.querySelector('#dm-pin-cancel')?.addEventListener('click', cleanup);
 
   dialog.querySelector('#dm-pin-confirm')?.addEventListener('click', async () => {
+    errorEl.hidden = true;
+    errorEl.textContent = '';
     const pin = pinInput.value.trim();
     if (!pin) {
       errorEl.textContent = 'Ingresa el PIN';
-      errorEl.style.display = '';
+      errorEl.hidden = false;
       return;
     }
 
@@ -541,7 +543,7 @@ async function showPinDialog(
       refreshModal(ctx, onPrefillPosition);
     } else {
       errorEl.textContent = 'PIN incorrecto';
-      errorEl.style.display = '';
+      errorEl.hidden = false;
       pinInput.value = '';
       pinInput.focus();
     }
@@ -611,7 +613,7 @@ async function showSubscribeDialog(
         <div class="dm-subscribe-row"><span>APR</span><strong>${product.apr.toFixed(2)}%</strong></div>
         <div class="dm-subscribe-row"><span>Plazo</span><strong>${product.duration} dias</strong></div>
       </div>
-      <div class="form-group" style="margin-top:var(--space-md)">
+      <div class="form-group form-group-top">
         <div class="dm-subscribe-label-row">
           <label for="dm-subscribe-amount">Monto (${escapeHtml(product.investCoin)})</label>
           <button type="button" class="btn btn-xs" id="dm-subscribe-max" ${effectiveMax <= 0 ? 'disabled' : ''}>Max</button>
@@ -627,7 +629,7 @@ async function showSubscribeDialog(
         </div>
         <div class="text-muted hint-text">Min: ${product.minAmount} — Max producto: ${product.maxAmount}${balanceInfo.available !== null ? ` — Max usable: ${formatAssetAmount(effectiveMax, product.investCoin)}` : ''}</div>
       </div>
-      <div id="dm-subscribe-error" class="text-loss" style="display:none;margin-bottom:var(--space-sm)"></div>
+      <div id="dm-subscribe-error" class="form-feedback text-loss" hidden></div>
       <div class="modal-actions">
         <button class="btn" id="dm-subscribe-cancel">Cancelar</button>
         <button class="btn btn-primary" id="dm-subscribe-confirm">Confirmar suscripción</button>
@@ -654,22 +656,24 @@ async function showSubscribeDialog(
   });
 
   dialog.querySelector('#dm-subscribe-confirm')?.addEventListener('click', async () => {
+    errorEl.hidden = true;
+    errorEl.textContent = '';
     const amount = parseFloat(amountInput.value);
     if (!Number.isFinite(amount) || amount < product.minAmount || amount > product.maxAmount) {
       errorEl.textContent = `Monto invalido. Rango: ${product.minAmount} - ${product.maxAmount}`;
-      errorEl.style.display = '';
+      errorEl.hidden = false;
       return;
     }
 
     if (balanceInfo.available !== null && amount > balanceInfo.available) {
       errorEl.textContent = `Supera tu saldo disponible en ${product.investCoin}. Disponible: ${formatAssetAmount(balanceInfo.available, product.investCoin)}`;
-      errorEl.style.display = '';
+      errorEl.hidden = false;
       return;
     }
 
     if (!isTradingSessionActive()) {
       errorEl.textContent = 'Sesion de trading expirada. Vuelve a desbloquear.';
-      errorEl.style.display = '';
+      errorEl.hidden = false;
       return;
     }
 
@@ -697,7 +701,7 @@ async function showSubscribeDialog(
       loadProducts(ctx, onPrefillPosition, true);
     } catch (err) {
       errorEl.textContent = `Error: ${err instanceof Error ? err.message : 'Error desconocido'}`;
-      errorEl.style.display = '';
+      errorEl.hidden = false;
       const btn = dialog.querySelector('#dm-subscribe-confirm') as HTMLButtonElement;
       btn.disabled = false;
       btn.textContent = 'Confirmar suscripción';

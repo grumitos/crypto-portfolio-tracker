@@ -78,12 +78,10 @@ export function renderSimulatorTemplate(
 ): string {
   return `
     <div class="section">
-      <div class="section-header">
-        <h2 class="section-title">${SIMULATOR_COPY.title}</h2>
-      </div>
+      <h2 class="visually-hidden">${SIMULATOR_COPY.title}</h2>
 
-      <div class="grid-2">
-        <div class="card">
+      <div class="grid-2 simulator-shell">
+        <div class="card sim-parameters-card">
           <div class="card-title mb-md">${SIMULATOR_COPY.parametersTitle}</div>
           <div class="form-group">
             <label class="label-with-badge">
@@ -124,13 +122,13 @@ export function renderSimulatorTemplate(
               ${autoState.goal ? SIMULATOR_COPY.autoGoalHint : SIMULATOR_COPY.manualHint}
             </div>
           </div>
-          <div class="flex-row gap-sm">
+          <div class="flex-row gap-sm sim-actions">
             <button class="btn btn-sm flex-1" id="btn-sim-reset">${iconRefreshCw(14)} ${SIMULATOR_COPY.resetAutoLabel}</button>
             <button class="btn btn-primary flex-2" id="btn-simulate">${iconTarget(14)} ${SIMULATOR_COPY.simulateLabel}</button>
           </div>
         </div>
 
-        <div class="card" id="sim-results">
+        <div class="card sim-results-card" id="sim-results">
           <div class="card-title mb-lg">${SIMULATOR_COPY.resultsTitle}</div>
           <div class="sim-results-container">
             <div class="sim-milestones-grid">
@@ -177,7 +175,7 @@ export function renderSimulatorTemplate(
         </div>
       </div>
 
-      <div class="card" id="sim-table-container">
+      <div class="card sim-projection-card" id="sim-table-container">
         <div class="card-title mb-md">${SIMULATOR_COPY.projectionTitle}</div>
         <div class="chart-container mb-lg">
           <canvas id="projection-chart" hidden></canvas>

@@ -16,6 +16,8 @@ export const SPOT_CHANGE_SKELETON_WIDTH = '56px';
 
 export const POSITIONS_COPY = {
   title: 'Dual Investment',
+  kicker: 'Operaciones activas',
+  intro: 'Seguimiento de posiciones abiertas, capital comprometido y contexto de mercado en tiempo real.',
   aprTitle: 'APR promedio',
   capitalTitle: 'En posiciones',
   dailyTitle: 'Run-rate diario est.',
@@ -26,9 +28,10 @@ export const POSITIONS_COPY = {
   marketError: 'No se pudo actualizar precios de mercado.',
   autoEmptyTitle: 'Sin posiciones activas en Binance',
   autoEmptyBody: 'Esta vista refleja las posiciones pendientes reportadas por Binance.',
-  apiMissingTitle: 'Configura Binance para activar el modo Binance',
-  apiMissingBody: 'Usa Configurar para conectar tu cuenta y sincronizar posiciones.',
+  apiMissingTitle: 'Conecta Binance para habilitar la lectura automatica',
+  apiMissingBody: 'Usa Configuracion para conectar tu cuenta y sincronizar datos.',
   manualEmptyTitle: 'Sin posiciones activas',
-  manualEmptyBody:
-    'Usa "Nueva posición" o pega el bloque exportado desde Binance para reconstruir tu cartera manual.',
+  manualEmptyBody: 'No hay posiciones cargadas para mostrar en esta vista.',
+  emptyHintAuto: 'Sincroniza para consultar posiciones activas.',
+  emptyHintManual: 'Consulta tu backup o cambia a Binance para ver posiciones sincronizadas.',
 };

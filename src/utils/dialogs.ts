@@ -28,7 +28,7 @@ function ensureDialogElements(): DialogElements | null {
   overlay.innerHTML = `
     <div class="modal">
       <h3 class="modal-title" id="app-dialog-title">Confirmar</h3>
-      <p id="app-dialog-message" class="text-secondary" style="margin-bottom:var(--space-md)"></p>
+      <p id="app-dialog-message" class="modal-message"></p>
       <div class="modal-actions">
         <button type="button" class="btn" id="btn-app-dialog-cancel">Cancelar</button>
         <button type="button" class="btn btn-primary" id="btn-app-dialog-confirm">Aceptar</button>

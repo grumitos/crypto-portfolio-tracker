@@ -6,9 +6,22 @@
   align-items: flex-end;
 }
 
+.dashboard-heading-block {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-section-title {
+  max-width: 14ch;
+}
+
 .dashboard-summary-grid,
 .dashboard-metrics-grid {
   align-items: stretch;
+}
+
+.dashboard-summary-grid {
+  grid-template-columns: 1.08fr 1.08fr 0.84fr;
 }
 
 .dashboard-card,
@@ -16,14 +29,50 @@
   min-height: 100%;
 }
 
+.dashboard-card {
+  background: color-mix(in srgb, var(--bg-card) 84%, var(--bg-secondary));
+}
+
+.dashboard-summary-grid .dashboard-card {
+  min-height: 156px;
+}
+
+.dashboard-summary-grid .dashboard-card .card-title {
+  margin-bottom: var(--space-md);
+}
+
 .dashboard-goal-card {
   display: grid;
-  gap: var(--space-sm);
+  gap: var(--space-md);
+  padding: clamp(18px, 2.2vw, 28px);
+  border-color: color-mix(in srgb, var(--accent-warm) 22%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0, var(--bg-card) 52%),
+    var(--bg-card);
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 color-mix(in srgb, var(--bg-card) 22%, transparent);
+}
+
+.dashboard-goal-card .card-title {
+  margin-bottom: 0;
+  color: color-mix(in srgb, var(--accent-warm) 72%, var(--text-muted));
 }
 
 .dashboard-card output,
 .dashboard-stat-card output {
   display: inline-block;
+}
+
+.dashboard-goal-card .goal-progress-value:first-child {
+  font-size: clamp(1.2rem, 1.6vw, 1.5rem);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dashboard-goal-card .goal-progress-target {
+  padding-left: var(--space-md);
+  border-left: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
 }
 
 /* ── Progress bar ── */
@@ -34,7 +83,7 @@
 .progress-label {
   display: flex;
   justify-content: space-between;
-  font-size: 0.78rem;
+  font-size: var(--type-meta);
   color: var(--text-secondary);
   margin-bottom: var(--space-xs);
 }
@@ -63,12 +112,12 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-sm);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .goal-progress-value {
-  font-size: 0.85rem;
-  line-height: 1.2;
+  font-size: var(--type-meta);
+  line-height: var(--line-height-snug);
 }
 
 .goal-progress-target {
@@ -79,11 +128,15 @@
 
 .goal-progress-target-label {
   min-width: 2.8ch;
+  color: var(--text-muted);
 }
 
 .goal-progress-bar {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 78%, var(--border));
   transition: background-color 0.3s var(--ease-out);
 }
 
@@ -139,13 +192,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-sm);
+  gap: var(--space-md);
   flex-wrap: wrap;
+  padding-top: 6px;
 }
 
 .goal-progress-remaining {
-  font-size: 0.8rem;
-  line-height: 1.25;
+  font-size: var(--type-body-sm);
+  line-height: var(--line-height-snug);
   color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
@@ -153,12 +207,16 @@
   align-items: baseline;
 }
 
+.goal-progress-remaining output {
+  color: var(--text-primary);
+}
+
 .goal-progress-meta {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  line-height: 1.25;
+  line-height: var(--line-height-snug);
   flex-wrap: wrap;
 }
 
@@ -167,11 +225,11 @@
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
-  font-size: 0.78rem;
-  padding: 4px 8px;
+  font-size: var(--type-meta);
+  padding: 5px 10px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background: var(--bg-card);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 84%, transparent);
   cursor: pointer;
   transition:
     border-color 0.2s var(--ease-out),
@@ -196,8 +254,8 @@
 
 .goal-progress-legend.is-active {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-  background: color-mix(in srgb, var(--bg-card) 76%, var(--accent-muted));
+  border-color: color-mix(in srgb, var(--accent-warm) 42%, var(--border));
+  background: color-mix(in srgb, var(--bg-card) 72%, var(--accent-warm-muted));
 }
 
 .goal-progress-legend.is-inactive {
@@ -233,8 +291,22 @@
 }
 
 #dashboard-days {
-  font-size: 0.78rem;
+  font-size: var(--type-meta);
   color: var(--text-secondary);
+}
+
+.dashboard-metrics-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--layout-gap-tight);
+}
+
+.dashboard-stat-card {
+  min-height: 108px;
+  background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-secondary));
+}
+
+.dashboard-stat-card .card-title {
+  margin-bottom: 10px;
 }
 
 .text-swap {
@@ -284,7 +356,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.82rem;
+  font-size: var(--type-meta);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -294,7 +366,7 @@
 .dashboard-balance-panel-copy {
   margin: var(--space-xs) 0 0;
   max-width: 46ch;
-  font-size: 0.84rem;
+  font-size: var(--type-body-sm);
   line-height: 1.45;
   color: var(--text-muted);
 }
@@ -308,7 +380,7 @@
   border-radius: var(--radius-pill);
   background: var(--accent-warm-muted);
   color: var(--accent-warm);
-  font-size: 0.68rem;
+  font-size: var(--type-micro);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -364,7 +436,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: 0.6rem;
+  font-size: var(--type-micro);
   font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-secondary);
@@ -380,20 +452,20 @@
 }
 
 .dashboard-balance-asset {
-  font-size: 0.78rem;
+  font-size: var(--type-meta);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .dashboard-balance-caption {
-  font-size: 0.68rem;
+  font-size: var(--type-label);
   color: var(--text-muted);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .dashboard-balance-amount {
-  font-size: 0.98rem;
+  font-size: var(--type-number-sm);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -412,7 +484,7 @@
   border-radius: var(--radius-pill);
   background: var(--bg-secondary);
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--type-label);
   font-variant-numeric: tabular-nums;
 }
 
@@ -429,20 +501,29 @@
 }
 
 .dashboard-balance-empty-title {
-  font-size: 0.82rem;
+  font-size: var(--type-meta);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .dashboard-balance-empty-copy {
-  font-size: 0.78rem;
+  font-size: var(--type-meta);
   color: var(--text-muted);
 }
 
 @container (max-width: 720px) {
+  .dashboard-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .goal-progress-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .dashboard-goal-card .goal-progress-target {
+    padding-left: 0;
+    border-left: 0;
   }
 
   .goal-progress-meta {

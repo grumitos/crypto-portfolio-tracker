@@ -1,32 +1,17 @@
 import {
   loadState,
-  addPosition,
-  updatePosition,
-  deletePosition,
-  generateId,
-  replacePositions,
 } from '../utils/storage';
 import { formatUSD } from '../utils/calculator';
-import { formatISODateLocal, parseISODateLocal, todayISODateLocal } from '../utils/date';
-import {
-  normalizeAsset as normalizeAssetSymbol,
-} from '../utils/market';
+import { normalizeAsset as normalizeAssetSymbol } from '../utils/market';
 import type { AssetPriceSnapshot, PositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
-import { normalizeTime } from '../utils/dual-yield';
-import { iconPencil } from '../utils/icons';
 import {
   parseBinancePositions as parseBinancePositionsFromText,
   parseImportedPositions as parseImportedPositionsFromText,
-  DEFAULT_ASSET_POOL,
 } from './positions.parser';
-import {
-  formatTimeHHMM,
-  renderPositionGroup,
-  updateRemainingTimesInPlace,
-} from './positions.table';
-import type { DualPosition, Direction } from '../types';
+import { renderPositionGroup, updateRemainingTimesInPlace } from './positions.table';
+import type { DualPosition } from '../types';
 import { ONE_SECOND_MS } from '../utils/constants';
 import { subscribeToMarketTicks } from '../utils/market-poller';
 import { skeletonSpan } from '../utils/ui-helpers';
@@ -36,9 +21,6 @@ import {
   createAssetMonogram,
   resolveAssetLogoSources,
 } from '../utils/asset-logos';
-import { bindModalEvents, openModal, closeModal } from '../utils/modal-manager';
-import { showAlertDialog, showConfirmDialog } from '../utils/dialogs';
-import { openDualMarketModal } from './positions/dual-market';
 import { onApiConfigChange } from './positions/api-config-modal';
 import { isAutoMode, hasApiCredentials } from '../utils/binance-auth';
 import { syncPositionsFromBinance } from '../utils/binance-sync';
@@ -49,7 +31,6 @@ import {
   rememberAutoPortfolioSnapshot,
   rememberBalanceSummary,
 } from '../utils/api-runtime-cache';
-import type { DualProductScored } from '../types';
 import {
   POSITIONS_COPY,
   RESULT_NUMBER_ANIM_MS,
@@ -60,9 +41,6 @@ import {
 } from './positions.constants';
 import { renderPositionsTemplate, renderSpotCardTemplate } from './positions.template';
 
-const ASSET_POOL: string[] = [...DEFAULT_ASSET_POOL];
-const SUBSCRIPTION_ASSETS = [...ASSET_POOL];
-const ALLOWED_ASSETS = new Set<string>(ASSET_POOL);
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
 const spotStripValueAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -441,15 +419,15 @@ async function performAutoSync(
 
       if (synced.length > 0) {
         tablesContainer.innerHTML = `
-          ${buyLow.length > 0 ? renderPositionGroup('Buy Low', buyLow) : ''}
-          ${sellHigh.length > 0 ? renderPositionGroup('Sell High', sellHigh) : ''}
+          ${buyLow.length > 0 ? renderPositionGroup(POSITIONS_COPY.buyLowTitle, buyLow) : ''}
+          ${sellHigh.length > 0 ? renderPositionGroup(POSITIONS_COPY.sellHighTitle, sellHigh) : ''}
         `;
         bindAssetLogoFallbacks(tablesContainer);
       } else {
         tablesContainer.innerHTML = `
           <div class="card empty-state">
-            <p>Sin posiciones activas en Binance</p>
-            <p class="text-muted">No hay posiciones de Dual Investment pendientes.</p>
+            <p>${POSITIONS_COPY.autoEmptyTitle}</p>
+            <p class="text-muted">${POSITIONS_COPY.autoEmptyBody}</p>
           </div>
         `;
       }
@@ -492,53 +470,11 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
     sellHighMarkup:
       sellHigh.length > 0 ? renderPositionGroup(POSITIONS_COPY.sellHighTitle, sellHigh) : '',
     hasPositions: positions.length > 0,
-    marketButtonEnabled: true,
-    assetOptions: ASSET_POOL,
-    subscriptionOptions: SUBSCRIPTION_ASSETS,
   });
 
   bindAssetLogoFallbacks(container);
-  bindPositionEvents(container, onStateChange);
+  bindPositionEvents(container);
   updateSpotStrip(container, positions, null);
-
-  // Dual market section — prefill position modal from product
-  const prefillFromProduct = (product: DualProductScored): void => {
-    const dir = product.optionType === 'CALL' ? 'sell-high' : 'buy-low';
-    const asset = product.optionType === 'CALL' ? product.investCoin : product.exercisedCoin;
-    clearPositionForm(container);
-    (container.querySelector('#modal-position-title') as HTMLElement).textContent =
-      'Nueva posición';
-    const dirInput = container.querySelector('#input-direction') as HTMLInputElement;
-    dirInput.value = dir;
-    container.querySelectorAll('.dir-btn').forEach((b) => {
-      b.classList.toggle('active', (b as HTMLElement).dataset.dir === dir);
-    });
-    const assetSelect = container.querySelector('#input-asset') as HTMLSelectElement;
-    if ([...assetSelect.options].some((o) => o.value === asset)) {
-      assetSelect.value = asset;
-    }
-    (container.querySelector('#input-sub-asset') as HTMLSelectElement).value = product.investCoin;
-    (container.querySelector('#input-target') as HTMLInputElement).value =
-      product.strikePrice.toString();
-    (container.querySelector('#input-apr') as HTMLInputElement).value = product.apr.toFixed(2);
-    const entryInput = container.querySelector('#input-entry-date') as HTMLInputElement;
-    entryInput.value = todayISODateLocal();
-    (container.querySelector('#input-entry-time') as HTMLInputElement).value = formatTimeHHMM(
-      new Date(),
-    );
-    // Use the product's actual settlement date from the API (already ISO UTC date)
-    (container.querySelector('#input-settlement-date') as HTMLInputElement).value =
-      product.settleDate;
-    // Leave settlement time empty — defaults to Binance's 08:00 UTC via parseBinanceDualSettlementUTC
-    (container.querySelector('#input-settlement-time') as HTMLInputElement).value = '';
-    const modal = container.querySelector('#modal-position') as HTMLElement;
-    openModal(modal);
-  };
-
-  // Dual market — open modal from header button
-  container.querySelector('#btn-open-market')?.addEventListener('click', () => {
-    openDualMarketModal(prefillFromProduct);
-  });
 
   // Listen for config changes (mode switch)
   const unsubConfig = onApiConfigChange(() => {
@@ -664,108 +600,7 @@ export function parseImportedPositions(raw: string): DualPosition[] {
   return parseImportedPositionsFromText(raw);
 }
 
-function bindPositionEvents(container: HTMLElement, onStateChange: () => void): void {
-  const modal = container.querySelector('#modal-position') as HTMLElement;
-  const bulkImportModal = container.querySelector('#modal-bulk-import') as HTMLElement;
-  const bulkImportInput = container.querySelector('#input-bulk-import') as HTMLTextAreaElement;
-
-  // ── Direction toggle ──
-  const dirBtns = container.querySelectorAll('.dir-btn');
-  const dirInput = container.querySelector('#input-direction') as HTMLInputElement;
-  dirBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const direction = (btn as HTMLElement).dataset.dir;
-      if (!direction) return;
-      dirBtns.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      dirInput.value = direction;
-    });
-  });
-
-  const assetInput = container.querySelector('#input-asset') as HTMLSelectElement;
-
-  // ── Duration presets ──
-  const entryInput = container.querySelector('#input-entry-date') as HTMLInputElement;
-  const entryTimeInput = container.querySelector('#input-entry-time') as HTMLInputElement;
-  const settlementInput = container.querySelector('#input-settlement-date') as HTMLInputElement;
-  const settlementTimeInput = container.querySelector('#input-settlement-time') as HTMLInputElement;
-
-  container.querySelectorAll('.preset-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const rawDays = (btn as HTMLElement).dataset.days;
-      const days = Number.parseInt(rawDays ?? '', 10);
-      if (!Number.isFinite(days)) return;
-      const entryDate =
-        parseISODateLocal(entryInput.value) ?? parseISODateLocal(todayISODateLocal()) ?? new Date();
-      const settlement = new Date(entryDate);
-      settlement.setDate(settlement.getDate() + days);
-      settlementInput.value = formatISODateLocal(settlement);
-
-      container.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
-  });
-
-  entryInput.addEventListener('change', () => {
-    container.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
-  });
-
-  // ── Edit-mode toggle ──
-  const sectionEl = container.querySelector('.section') as HTMLElement;
-  const toggleBtn = container.querySelector('#btn-toggle-edit') as HTMLElement | null;
-  toggleBtn?.addEventListener('click', () => {
-    const active = sectionEl.classList.toggle('editing-mode');
-    toggleBtn.innerHTML = active ? `${iconPencil(13)}Listo` : `${iconPencil(13)}Editar`;
-  });
-
-  // ── Helper: open edit modal for a position ──
-  const openEditModal = (id: string): void => {
-    const state = loadState();
-    const pos = state.positions.find((p) => p.id === id);
-    if (!pos) return;
-
-    (container.querySelector('#modal-position-title') as HTMLElement).textContent =
-      'Editar posición';
-    (container.querySelector('#input-position-id') as HTMLInputElement).value = pos.id;
-
-    dirInput.value = pos.direction;
-    dirBtns.forEach((b) => {
-      b.classList.toggle('active', (b as HTMLElement).dataset.dir === pos.direction);
-    });
-
-    assetInput.value = pos.asset;
-    (container.querySelector('#input-sub-asset') as HTMLSelectElement).value =
-      pos.subscriptionAsset;
-    (container.querySelector('#input-amount') as HTMLInputElement).value = pos.amount.toString();
-    (container.querySelector('#input-apr') as HTMLInputElement).value = pos.apr.toString();
-    (container.querySelector('#input-target') as HTMLInputElement).value =
-      pos.targetPrice.toString();
-    entryInput.value = pos.entryDate;
-    entryTimeInput.value = pos.entryTime ?? '';
-    settlementInput.value = pos.settlementDate;
-    settlementTimeInput.value = pos.settlementTime ?? '';
-
-    openModal(modal);
-  };
-
-  // ── Open add modal ──
-  container.querySelector('#btn-add-position')?.addEventListener('click', () => {
-    clearPositionForm(container);
-    (container.querySelector('#modal-position-title') as HTMLElement).textContent =
-      'Nueva posición';
-    const today = todayISODateLocal();
-    entryInput.value = today;
-    entryTimeInput.value = formatTimeHHMM(new Date());
-    settlementTimeInput.value = '03:00';
-    openModal(modal);
-  });
-
-  container.querySelector('#btn-bulk-import')?.addEventListener('click', () => {
-    bulkImportInput.value = '';
-    openModal(bulkImportModal);
-    bulkImportInput.focus();
-  });
-
+function bindPositionEvents(container: HTMLElement): void {
   // ── Component sub-row toggle ──
   container.querySelectorAll<HTMLElement>('[data-toggle-components]').forEach((toggle) => {
     const handleToggle = (e: Event) => {
@@ -784,135 +619,4 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     };
     toggle.addEventListener('click', handleToggle);
   });
-
-  // ── Row click in edit-mode ──
-  container.querySelectorAll<HTMLElement>('tr[data-id]').forEach((row) => {
-    row.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('.btn-del-pos')) return;
-      if ((e.target as HTMLElement).closest('[data-ignore-row-edit="true"]')) return;
-      if (!sectionEl.classList.contains('editing-mode')) return;
-      const id = row.dataset.id;
-      if (!id) return;
-      openEditModal(id);
-    });
-  });
-
-  // ── Delete buttons ──
-  container.querySelectorAll('.btn-del-pos').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const id = (btn as HTMLElement).dataset.id;
-      if (!id) return;
-      const shouldDelete = await showConfirmDialog('Eliminar esta posición?', {
-        title: 'Confirmar eliminación',
-        confirmLabel: 'Eliminar',
-        destructive: true,
-      });
-      if (!shouldDelete) return;
-
-      deletePosition(id);
-      onStateChange();
-    });
-  });
-
-  // ── Cancel mappings ──
-  bindModalEvents(modal, [container.querySelector('#btn-cancel-position') as HTMLElement]);
-  bindModalEvents(bulkImportModal, [
-    container.querySelector('#btn-cancel-bulk-import') as HTMLElement,
-  ]);
-
-  container.querySelector('#btn-apply-bulk-import')?.addEventListener('click', async () => {
-    const parsed = parseImportedPositions(bulkImportInput.value);
-    if (parsed.length === 0) {
-      await showAlertDialog('No se detectaron posiciones validas en el texto pegado.');
-      return;
-    }
-    const shouldReplace = await showConfirmDialog(
-      `Reemplazar todas las posiciones actuales por ${parsed.length} importadas?`,
-      { title: 'Confirmar importación', confirmLabel: 'Reemplazar', destructive: true },
-    );
-    if (!shouldReplace) {
-      return;
-    }
-
-    replacePositions(parsed);
-    closeModal(bulkImportModal);
-    onStateChange();
-  });
-
-  // ── Save ──
-  container.querySelector('#btn-save-position')?.addEventListener('click', async () => {
-    const id = (container.querySelector('#input-position-id') as HTMLInputElement).value;
-    const direction = dirInput.value as Direction;
-    const asset = assetInput.value.toUpperCase().trim();
-    const subscriptionAsset = (container.querySelector('#input-sub-asset') as HTMLSelectElement)
-      .value;
-    const amount = parseFloat((container.querySelector('#input-amount') as HTMLInputElement).value);
-    const apr = parseFloat((container.querySelector('#input-apr') as HTMLInputElement).value);
-    const targetPrice =
-      parseFloat((container.querySelector('#input-target') as HTMLInputElement).value) || 0;
-    const entryDate = entryInput.value;
-    const entryTime = normalizeTime(entryTimeInput.value);
-    const settlementDate = settlementInput.value;
-    const settlementTime = normalizeTime(settlementTimeInput.value);
-
-    if (
-      !asset ||
-      !Number.isFinite(amount) ||
-      !Number.isFinite(apr) ||
-      !entryDate ||
-      !settlementDate
-    ) {
-      await showAlertDialog('Completa todos los campos requeridos.');
-      return;
-    }
-    if (amount <= 0 || apr < 0) {
-      await showAlertDialog('El monto debe ser mayor a 0 y el APR no puede ser negativo.');
-      return;
-    }
-    if (!ALLOWED_ASSETS.has(asset)) {
-      await showAlertDialog('Activo invalido. Solo BTC, ETH, BNB, SOL, USDT y USDC.');
-      return;
-    }
-
-    const data: DualPosition = {
-      id: id || generateId(),
-      asset,
-      direction,
-      subscriptionAsset,
-      amount,
-      targetPrice,
-      entryDate,
-      entryTime,
-      settlementDate,
-      settlementTime,
-      apr,
-    };
-
-    if (id) {
-      updatePosition(id, data);
-    } else {
-      addPosition(data);
-    }
-
-    closeModal(modal);
-    onStateChange();
-  });
-}
-
-function clearPositionForm(container: HTMLElement): void {
-  (container.querySelector('#input-position-id') as HTMLInputElement).value = '';
-  (container.querySelector('#input-direction') as HTMLInputElement).value = 'buy-low';
-  container.querySelectorAll('.dir-btn').forEach((b) => {
-    b.classList.toggle('active', (b as HTMLElement).dataset.dir === 'buy-low');
-  });
-  (container.querySelector('#input-asset') as HTMLSelectElement).value = 'ETH';
-  (container.querySelector('#input-sub-asset') as HTMLSelectElement).value = 'USDT';
-  (container.querySelector('#input-amount') as HTMLInputElement).value = '';
-  (container.querySelector('#input-apr') as HTMLInputElement).value = '';
-  (container.querySelector('#input-target') as HTMLInputElement).value = '';
-  (container.querySelector('#input-entry-date') as HTMLInputElement).value = '';
-  (container.querySelector('#input-entry-time') as HTMLInputElement).value = '';
-  (container.querySelector('#input-settlement-date') as HTMLInputElement).value = '';
-  (container.querySelector('#input-settlement-time') as HTMLInputElement).value = '';
-  container.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
 }

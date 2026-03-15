@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderPositions } from './positions';
-import { loadState, saveState } from '../utils/storage';
+import { saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
 import { clearApiRuntimeCache } from '../utils/api-runtime-cache';
@@ -24,11 +24,6 @@ vi.mock('../utils/notifications', () => ({
   showApiErrorBanner: vi.fn(),
 }));
 
-vi.mock('../utils/dialogs', () => ({
-  showConfirmDialog: vi.fn(async () => true),
-  showAlertDialog: vi.fn(async () => undefined),
-}));
-
 vi.mock('../utils/binance-sync', () => ({
   syncPositionsFromBinance: vi.fn(),
   clearBinanceSyncCaches: vi.fn(),
@@ -37,7 +32,6 @@ vi.mock('../utils/binance-sync', () => ({
 import { calculatePositionMetricsFromSnapshot, getAssetPriceSnapshot } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
-import { showAlertDialog, showConfirmDialog } from '../utils/dialogs';
 import { syncPositionsFromBinance } from '../utils/binance-sync';
 import { saveApiCredentials } from '../utils/binance-auth';
 import { DEFAULT_ASSET_POOL } from './positions.parser';
@@ -66,16 +60,6 @@ function seedState(
   });
 }
 
-function validImportBlock(): string {
-  return `USDT-ETH
-Buy-low
-2026-02-20 08:45
-100 USDT
-1,925 2026-02-23 03:00
-191.04%
-Holding`;
-}
-
 describe('positions integration', () => {
   beforeEach(() => {
     Object.defineProperty(globalThis, 'localStorage', {
@@ -88,8 +72,6 @@ describe('positions integration', () => {
     vi.clearAllMocks();
     clearApiRuntimeCache();
     resetMarketPollerForTests();
-    vi.mocked(showConfirmDialog).mockResolvedValue(true);
-    vi.mocked(showAlertDialog).mockResolvedValue();
 
     vi.mocked(getAssetPriceSnapshot).mockResolvedValue({
       priceByAsset: { BTC: 50000, ETH: 2000, BNB: 500, SOL: 150, USDT: 1, USDC: 1 },
@@ -353,64 +335,7 @@ describe('positions integration', () => {
     rafSpy.mockRestore();
   });
 
-  it('opens add modal and persists a new position', async () => {
-    seedState([]);
-    const onStateChange = vi.fn();
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const dispose = renderPositions(container, onStateChange);
-    await flushMicrotasks();
-
-    (container.querySelector('#btn-add-position') as HTMLButtonElement).click();
-    (container.querySelector('#input-amount') as HTMLInputElement).value = '150';
-    (container.querySelector('#input-apr') as HTMLInputElement).value = '80';
-    (container.querySelector('#input-target') as HTMLInputElement).value = '2000';
-    (container.querySelector('#input-entry-date') as HTMLInputElement).value = '2026-02-21';
-    (container.querySelector('#input-entry-time') as HTMLInputElement).value = '09:00';
-    (container.querySelector('#input-settlement-date') as HTMLInputElement).value = '2026-02-22';
-    (container.querySelector('#input-settlement-time') as HTMLInputElement).value = '03:00';
-    (container.querySelector('#btn-save-position') as HTMLButtonElement).click();
-
-    const next = loadState();
-    expect(next.positions).toHaveLength(1);
-    expect(next.positions[0].amount).toBe(150);
-    expect(next.positions[0].apr).toBe(80);
-    expect(onStateChange).toHaveBeenCalledTimes(1);
-
-    dispose();
-    container.remove();
-  });
-
-  it('blocks saving when amount is non-positive or APR is negative', async () => {
-    seedState([]);
-    const onStateChange = vi.fn();
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const dispose = renderPositions(container, onStateChange);
-    await flushMicrotasks();
-
-    (container.querySelector('#btn-add-position') as HTMLButtonElement).click();
-    (container.querySelector('#input-amount') as HTMLInputElement).value = '0';
-    (container.querySelector('#input-apr') as HTMLInputElement).value = '-1';
-    (container.querySelector('#input-target') as HTMLInputElement).value = '2000';
-    (container.querySelector('#input-entry-date') as HTMLInputElement).value = '2026-02-21';
-    (container.querySelector('#input-entry-time') as HTMLInputElement).value = '09:00';
-    (container.querySelector('#input-settlement-date') as HTMLInputElement).value = '2026-02-22';
-    (container.querySelector('#input-settlement-time') as HTMLInputElement).value = '03:00';
-    (container.querySelector('#btn-save-position') as HTMLButtonElement).click();
-    await flushMicrotasks();
-
-    expect(loadState().positions).toHaveLength(0);
-    expect(onStateChange).not.toHaveBeenCalled();
-    expect(showAlertDialog).toHaveBeenCalledWith(
-      'El monto debe ser mayor a 0 y el APR no puede ser negativo.',
-    );
-
-    dispose();
-    container.remove();
-  });
-
-  it('supports edit mode click, delete and bulk replace import flow', async () => {
+  it('renders the tracking view in read-only mode', async () => {
     seedState([
       {
         id: 'p1',
@@ -433,26 +358,15 @@ describe('positions integration', () => {
     const dispose = renderPositions(container, onStateChange);
     await flushMicrotasks();
 
-    (container.querySelector('#btn-toggle-edit') as HTMLButtonElement).click();
-    (container.querySelector('tr[data-id="p1"]') as HTMLTableRowElement).click();
-    expect((container.querySelector('#modal-position') as HTMLElement).style.display).toBe('flex');
-    expect((container.querySelector('#input-position-id') as HTMLInputElement).value).toBe('p1');
-
-    (container.querySelector('.btn-del-pos') as HTMLButtonElement).click();
-    await flushMicrotasks();
-    expect(loadState().positions).toHaveLength(0);
-    expect(onStateChange).toHaveBeenCalledTimes(1);
-
-    (container.querySelector('#btn-bulk-import') as HTMLButtonElement).click();
-    const text = container.querySelector('#input-bulk-import') as HTMLTextAreaElement;
-    text.value = validImportBlock();
-    (container.querySelector('#btn-apply-bulk-import') as HTMLButtonElement).click();
-    await flushMicrotasks();
-
-    expect(loadState().positions).toHaveLength(1);
-    expect(loadState().positions[0].asset).toBe('ETH');
-    expect(onStateChange).toHaveBeenCalledTimes(2);
-    expect(showConfirmDialog).toHaveBeenCalled();
+    expect(container.querySelector('#btn-add-position')).toBeNull();
+    expect(container.querySelector('#btn-toggle-edit')).toBeNull();
+    expect(container.querySelector('#btn-bulk-import')).toBeNull();
+    expect(container.querySelector('#btn-open-market')).toBeNull();
+    expect(container.querySelector('#modal-position')).toBeNull();
+    expect(container.querySelector('#modal-bulk-import')).toBeNull();
+    expect(container.querySelector('.btn-del-pos')).toBeNull();
+    expect(container.textContent).toContain('Buy Low');
+    expect(onStateChange).not.toHaveBeenCalled();
 
     dispose();
     container.remove();

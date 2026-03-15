@@ -61,10 +61,22 @@
 }
 
 .modal-title {
-  font-size: 0.95rem;
+  font-size: var(--type-title-sm);
   font-weight: 600;
   margin-bottom: var(--space-lg);
   letter-spacing: -0.02em;
+  line-height: var(--line-height-tight);
+}
+
+.modal-title--flush {
+  margin-bottom: 0;
+}
+
+.modal-message {
+  margin: 0 0 var(--space-md);
+  font-size: var(--type-body-sm);
+  line-height: var(--line-height-body);
+  color: var(--text-secondary);
 }
 
 .modal-actions {

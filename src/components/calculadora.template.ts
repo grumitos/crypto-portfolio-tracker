@@ -8,11 +8,10 @@ export function renderCalculadoraTemplate(
 ): string {
   return `
     <div class="section">
-      <div class="section-header">
-        <h2 class="section-title">${CALCULADORA_COPY.title}</h2>
-      </div>
+      <h2 class="visually-hidden">${CALCULADORA_COPY.title}</h2>
 
-      <div class="card">
+      <div class="card calc-config-card">
+        <div class="card-title mb-md">${CALCULADORA_COPY.configTitle}</div>
         <div class="calc-config-bar">
           <div class="form-group form-group-inline">
             <label for="calc-price">${CALCULADORA_COPY.priceLabel}</label>
@@ -52,7 +51,7 @@ export function renderCalculadoraTemplate(
         </div>
       </div>
 
-      <div class="grid-2">
+      <div class="grid-2 calc-shell">
         <div>
           <div class="card mb-md">
             <div class="card-title flex-between mb-md">
@@ -108,7 +107,7 @@ export function renderCalculadoraTemplate(
           </div>
         </div>
 
-        <div class="card">
+        <div class="card calc-signal-card">
           <div class="card-title mb-md">${CALCULADORA_COPY.signalTitle}</div>
           <div class="calc-metrics-grid">
             <div class="calc-metric-card calc-hero">

@@ -16,8 +16,10 @@ function makePosition(overrides: Partial<DualPosition>): DualPosition {
     targetPrice: overrides.targetPrice ?? 1900,
     entryDate: overrides.entryDate ?? '2026-02-21',
     entryTime: overrides.entryTime,
+    entryTimeSource: overrides.entryTimeSource,
     settlementDate: overrides.settlementDate ?? '2026-02-22',
     settlementTime: overrides.settlementTime,
+    settlementTimeSource: overrides.settlementTimeSource,
     apr: overrides.apr ?? 50,
     components: overrides.components,
   };
@@ -28,7 +30,7 @@ describe('positions table rendering', () => {
     vi.useFakeTimers();
   });
 
-  it('renders rows for buy and sell products', () => {
+  it('renders rows for both tracking groups', () => {
     const buyGroup = renderPositionGroup('Buy Low', [
       makePosition({ id: 'buy1', direction: 'buy-low', asset: 'ETH', subscriptionAsset: 'USDT' }),
     ]);
@@ -41,6 +43,24 @@ describe('positions table rendering', () => {
     expect(buyGroup).toContain('Ganancia (Venc.)');
     expect(buyGroup).not.toContain('Spot (USD)');
     expect(buyGroup).not.toContain('position-spot-buy1');
+    expect(buyGroup).not.toContain('btn-del-pos');
+  });
+
+  it('adds time provenance hints for Binance-synced rows', () => {
+    const group = renderPositionGroup('Buy Low', [
+      makePosition({
+        id: 'binance_1',
+        entryTime: '08:45',
+        entryTimeSource: 'binance_purchase_time',
+        settlementTime: '03:00',
+        settlementTimeSource: 'binance_settle_date_rule',
+      }),
+    ]);
+
+    expect(group).toContain('Hora de suscripción reportada por Binance.');
+    expect(group).toContain(
+      'Hora de liquidación calculada desde settleDate con la ventana estándar de Binance.',
+    );
   });
 
   it('renders a dropdown with component rows for grouped weighted positions', () => {

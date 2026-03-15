@@ -5,6 +5,8 @@ export const RESULT_NUMBER_ANIM_MS = 400;
 
 export const SIMULATOR_COPY = {
   title: 'Simulador de recuperación',
+  kicker: 'Escenario proyectado',
+  intro: 'Modela el tiempo necesario para recuperar capital y alcanzar la meta con compound.',
   parametersTitle: 'Parámetros',
   resultsTitle: 'Resultados',
   projectionTitle: 'Proyección mensual',

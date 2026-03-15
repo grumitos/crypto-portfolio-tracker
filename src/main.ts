@@ -21,8 +21,11 @@ import { onStorageChange } from './utils/storage';
 import { openApiConfigModal } from './components/positions/api-config-modal';
 import { renderAppShell } from './components/app-shell.template';
 import type { AppShellNavItem } from './components/app-shell.constants';
+import { applyTypographyConfig } from './utils/typography';
 
 let disposeActiveView: (() => void) | null = null;
+
+applyTypographyConfig();
 
 function themeIcon(): string {
   return getResolvedTheme() === 'dark' ? iconSun(15) : iconMoon(15);
