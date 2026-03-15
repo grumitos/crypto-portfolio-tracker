@@ -9,6 +9,10 @@ App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual 
 - Graficos con `Chart.js` (vista Simulador).
 - Import/export de backup en JSON.
 
+## Documentacion tecnica
+- Guia tecnica del repo: `ENGINEERING_GUIDE.md`
+- Hallazgos de auditoria y remediacion: `design-audit-findings.md`
+
 ## Requisitos
 - Node.js 20+
 - npm 10+
@@ -72,6 +76,7 @@ Abrir la URL local que imprime Vite (por defecto `http://localhost:5173`).
   - Meta (AUTO: meta del dashboard).
 - Boton `Resetear AUTO` para restaurar sincronizacion automatica.
 - Resultado con hitos de BE/meta y grafica de proyeccion.
+- Arquitectura interna refactorizada en `constants`, `template`, `dom` y `chart`.
 
 ### 4) Calculadora Swing Trade
 - Evalua resultados reales y estrategia objetivo por ciclo.
@@ -79,6 +84,13 @@ Abrir la URL local que imprime Vite (por defecto `http://localhost:5173`).
 - Cuando hay compras validas:
   - Capital y precio base se bloquean en modo AUTO usando totales de compras.
 - Presets de fee: `spot` y `futures` (con switch FDUSD en spot).
+- Arquitectura interna refactorizada para separar copy/presets y template del flujo de calculo.
+
+## Arquitectura UI
+- Shell compartido extraido para header, navegacion y acciones globales.
+- Sistema visual consolidado alrededor de `src/styles/variables.css` y `src/utils/theme.ts`.
+- `dashboard`, `simulator` y `calculadora` ya siguen un patron modular; `positions` conserva mas logica de coordinacion pero ya extrae constants/template.
+- Los colores de browser theme y chart se derivan de tokens CSS para evitar drift entre tema y runtime.
 
 ## Datos de mercado
 - Endpoints usados (con fallback):
@@ -148,12 +160,21 @@ Referencia de paleta:
 | Light | `#FAF9F5` | `#141413` | `#1F1E1D` | `#2C84DB` |
 | Dark | `#262624` | `#FAF9F5` | `#DEDCD1` | `#2C84DB` |
 
+Los tokens semanticos activos cubren superficie, texto, borde, accent, success, danger, warning, focus y chart.
+
 ## Accesibilidad
 - `:focus-visible` en todos los elementos interactivos.
 - `aria-current="page"` en la navegacion activa.
 - `aria-expanded` y `aria-pressed` en toggles y leyendas.
 - Soporte `prefers-reduced-motion` para animaciones.
-- Targets tactiles minimos de 36px.
+- Targets tactiles minimos de 44px.
+
+## Checklist de PR
+- Ejecutar `npm run check`.
+- Verificar estados `light` y `dark`.
+- Revisar shell en mobile y desktop.
+- Confirmar que no se introduzcan nuevos hardcodeos visuales en TypeScript.
+- Confirmar que cualquier nueva vista grande siga el patron modular del repo.
 
 ## PWA
 Incluye `manifest.json`, iconos (192/512) y service worker basico (`public/sw.js`) para instalacion como app.

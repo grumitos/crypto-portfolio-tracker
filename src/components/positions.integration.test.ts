@@ -3,6 +3,8 @@ import { renderPositions } from './positions';
 import { loadState, saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
+import { clearApiRuntimeCache } from '../utils/api-runtime-cache';
+import { resetMarketPollerForTests } from '../utils/market-poller';
 
 vi.mock('../utils/market', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/market')>();
@@ -27,17 +29,27 @@ vi.mock('../utils/dialogs', () => ({
   showAlertDialog: vi.fn(async () => undefined),
 }));
 
+vi.mock('../utils/binance-sync', () => ({
+  syncPositionsFromBinance: vi.fn(),
+  clearBinanceSyncCaches: vi.fn(),
+}));
+
 import { calculatePositionMetricsFromSnapshot, getAssetPriceSnapshot } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
 import { showAlertDialog, showConfirmDialog } from '../utils/dialogs';
+import { syncPositionsFromBinance } from '../utils/binance-sync';
+import { saveApiCredentials } from '../utils/binance-auth';
 import { DEFAULT_ASSET_POOL } from './positions.parser';
 
 const NON_STABLE_SPOT_ASSETS = DEFAULT_ASSET_POOL.filter(
   (asset) => asset !== 'USDT' && asset !== 'USDC',
 );
 
-function seedState(positions: AppState['positions']): void {
+function seedState(
+  positions: AppState['positions'],
+  options: { mode?: 'manual' | 'auto' } = {},
+): void {
   saveState({
     portfolio: {
       totalInvested: 1000,
@@ -48,6 +60,9 @@ function seedState(positions: AppState['positions']): void {
       balanceHistory: [{ date: '2026-02-21', balance: 900 }],
     },
     positions,
+    manualPositions: positions,
+    autoPositions: options.mode === 'auto' ? positions : [],
+    positionsConfig: { mode: options.mode ?? 'manual' },
   });
 }
 
@@ -71,6 +86,8 @@ describe('positions integration', () => {
     resetDom();
     mockMatchMedia(true);
     vi.clearAllMocks();
+    clearApiRuntimeCache();
+    resetMarketPollerForTests();
     vi.mocked(showConfirmDialog).mockResolvedValue(true);
     vi.mocked(showAlertDialog).mockResolvedValue();
 
@@ -113,6 +130,43 @@ describe('positions integration', () => {
     expect((container.querySelector('#positions-apr') as HTMLElement).textContent).toContain('---');
     expect(getAssetPriceSnapshot).not.toHaveBeenCalled();
     expect(calculatePositionMetricsFromSnapshot).not.toHaveBeenCalled();
+
+    dispose();
+    container.remove();
+  });
+
+  it('does not render account balance detail in positions even in auto mode', async () => {
+    const positions = [
+      {
+        id: 'p1',
+        asset: 'ETH',
+        direction: 'buy-low' as const,
+        subscriptionAsset: 'USDT',
+        amount: 1,
+        targetPrice: 2100,
+        entryDate: '2026-02-20',
+        settlementDate: '2026-02-23',
+        apr: 40,
+      },
+    ];
+
+    seedState(positions, { mode: 'auto' });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions,
+      count: positions.length,
+      balances: [{ asset: 'USDT', free: 300, locked: 0 }],
+      totalUsdEstimate: 300,
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, vi.fn());
+    await flushMicrotasks();
+
+    expect(syncPositionsFromBinance).toHaveBeenCalled();
+    expect(container.querySelector('.balance-strip')).toBeNull();
+    expect(container.textContent).not.toContain('Saldo en cuenta');
 
     dispose();
     container.remove();

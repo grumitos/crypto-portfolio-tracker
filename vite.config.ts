@@ -2,6 +2,20 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   base: './',
+  server: {
+    proxy: {
+      '/binance-api': {
+        target: 'https://api.binance.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/binance-api/, '/api'),
+      },
+      '/binance-sapi': {
+        target: 'https://api.binance.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/binance-sapi/, '/sapi'),
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     pool: 'vmThreads',

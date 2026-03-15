@@ -4,7 +4,7 @@
 import { formatUSD, formatPct } from './calculator';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from './animation';
 
-const DEFAULT_NUMBER_ANIM_MS = 560;
+const DEFAULT_NUMBER_ANIM_MS = 400;
 
 const valueAnimMap = new WeakMap<HTMLElement, number>();
 const textAnimMap = new WeakMap<HTMLElement, number>();

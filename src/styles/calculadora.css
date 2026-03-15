@@ -57,7 +57,7 @@
   background: var(--bg-secondary);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  padding: var(--space-md);
+  padding: var(--panel-padding-compact);
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -82,7 +82,7 @@
 }
 
 .calc-metric-label {
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 500;
   color: var(--text-muted);
   text-transform: uppercase;

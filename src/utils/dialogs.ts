@@ -30,8 +30,8 @@ function ensureDialogElements(): DialogElements | null {
       <h3 class="modal-title" id="app-dialog-title">Confirmar</h3>
       <p id="app-dialog-message" class="text-secondary" style="margin-bottom:var(--space-md)"></p>
       <div class="modal-actions">
-        <button class="btn" id="btn-app-dialog-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="btn-app-dialog-confirm">Aceptar</button>
+        <button type="button" class="btn" id="btn-app-dialog-cancel">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-app-dialog-confirm">Aceptar</button>
       </div>
     </div>
   `;

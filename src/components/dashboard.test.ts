@@ -6,8 +6,16 @@ import * as projectionMilestones from '../utils/projection-milestones';
 import * as animation from '../utils/animation';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
 
-vi.mock('../utils/market', () => ({
-  calculatePositionMetrics: vi.fn(),
+vi.mock('../utils/api-runtime-cache', () => ({
+  getSharedMarketData: vi.fn(),
+  getCachedBalanceSummary: vi.fn(() => null),
+  rememberBalanceSummary: vi.fn(),
+  clearApiRuntimeCache: vi.fn(),
+}));
+
+vi.mock('../utils/binance-sync', () => ({
+  fetchBalanceSummary: vi.fn(),
+  clearBinanceSyncCaches: vi.fn(),
 }));
 
 vi.mock('../utils/api-status', () => ({
@@ -19,10 +27,13 @@ vi.mock('../utils/notifications', () => ({
   showApiErrorBanner: vi.fn(),
 }));
 
-import { calculatePositionMetrics } from '../utils/market';
+import { getSharedMarketData } from '../utils/api-runtime-cache';
+import { fetchBalanceSummary } from '../utils/binance-sync';
 import { registerApiFailure } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
 import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
+import { saveApiCredentials } from '../utils/binance-auth';
+import { resetMarketPollerForTests } from '../utils/market-poller';
 
 interface SeedDashboardOptions {
   positions?: AppState['positions'];
@@ -30,6 +41,7 @@ interface SeedDashboardOptions {
   currentBalance?: number;
   savings?: number;
   goalAmount?: number;
+  mode?: 'manual' | 'auto';
 }
 
 function seedState(options: SeedDashboardOptions = {}): void {
@@ -57,6 +69,9 @@ function seedState(options: SeedDashboardOptions = {}): void {
       balanceHistory: [{ date: '2026-02-21', balance: options.currentBalance ?? 600 }],
     },
     positions: options.positions ?? defaultPositions,
+    manualPositions: options.positions ?? defaultPositions,
+    autoPositions: [],
+    positionsConfig: { mode: options.mode ?? 'manual' },
   };
 
   saveState(state);
@@ -64,6 +79,8 @@ function seedState(options: SeedDashboardOptions = {}): void {
 
 describe('dashboard legends', () => {
   beforeEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
     Object.defineProperty(globalThis, 'localStorage', {
       value: createMemoryStorage(),
       configurable: true,
@@ -73,17 +90,40 @@ describe('dashboard legends', () => {
     resetDom();
     mockMatchMedia(true);
     resetDashboardLegendStateForTests();
+    resetMarketPollerForTests();
 
-    vi.mocked(calculatePositionMetrics).mockResolvedValue({
-      totalUsd: 400,
-      weightedApr: 30,
-      dailyEarningsUsd: 0.32,
-      usdByPositionId: { p1: 400 },
-      priceByAsset: { USDT: 1 },
-      marketLastUpdatedAt: Date.now(),
-      hasStalePrices: false,
-      hasUnavailablePrices: false,
-      priceSourceByAsset: { USDT: 'stable' },
+    vi.mocked(getSharedMarketData).mockResolvedValue({
+      positionsKey: 'p1',
+      snapshot: {
+        priceByAsset: { BTC: 50000, ETH: 2000, BNB: 500, SOL: 150, USDT: 1, USDC: 1 },
+        sourceByAsset: {
+          BTC: 'live',
+          ETH: 'live',
+          BNB: 'live',
+          SOL: 'live',
+          USDT: 'stable',
+          USDC: 'stable',
+        },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        changePercent24hByAsset: { BTC: 0, ETH: 0, BNB: 0, SOL: 0, USDT: 0, USDC: 0 },
+      },
+      metrics: {
+        totalUsd: 400,
+        weightedApr: 30,
+        dailyEarningsUsd: 0.32,
+        usdByPositionId: { p1: 400 },
+        priceByAsset: { USDT: 1 },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        priceSourceByAsset: { USDT: 'stable' },
+      },
+    });
+    vi.mocked(fetchBalanceSummary).mockResolvedValue({
+      balances: [],
+      totalUsdEstimate: 0,
     });
 
     seedState();
@@ -289,16 +329,34 @@ describe('dashboard legends', () => {
   });
 
   it('syncs dashboard balance from market metrics and surfaces stale API status', async () => {
-    vi.mocked(calculatePositionMetrics).mockResolvedValue({
-      totalUsd: 800,
-      weightedApr: 30,
-      dailyEarningsUsd: 0.5,
-      usdByPositionId: { p1: 800 },
-      priceByAsset: { USDT: 1 },
-      marketLastUpdatedAt: Date.now(),
-      hasStalePrices: true,
-      hasUnavailablePrices: false,
-      priceSourceByAsset: { USDT: 'cache-stale' },
+    vi.mocked(getSharedMarketData).mockResolvedValue({
+      positionsKey: 'p1',
+      snapshot: {
+        priceByAsset: { BTC: 50000, ETH: 2000, BNB: 500, SOL: 150, USDT: 1, USDC: 1 },
+        sourceByAsset: {
+          BTC: 'live',
+          ETH: 'live',
+          BNB: 'live',
+          SOL: 'live',
+          USDT: 'cache-stale',
+          USDC: 'stable',
+        },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: true,
+        hasUnavailablePrices: false,
+        changePercent24hByAsset: { BTC: 0, ETH: 0, BNB: 0, SOL: 0, USDT: 0, USDC: 0 },
+      },
+      metrics: {
+        totalUsd: 800,
+        weightedApr: 30,
+        dailyEarningsUsd: 0.5,
+        usdByPositionId: { p1: 800 },
+        priceByAsset: { USDT: 1 },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: true,
+        hasUnavailablePrices: false,
+        priceSourceByAsset: { USDT: 'cache-stale' },
+      },
     });
     seedState({ currentBalance: 600, savings: 200 });
 
@@ -391,31 +449,67 @@ describe('dashboard legends', () => {
 
     try {
       let metricCall = 0;
-      vi.mocked(calculatePositionMetrics).mockImplementation(async () => {
+      vi.mocked(getSharedMarketData).mockImplementation(async () => {
         metricCall += 1;
         if (metricCall === 1) {
           return {
-            totalUsd: 400,
-            weightedApr: 30,
-            dailyEarningsUsd: 0.32,
-            usdByPositionId: { p1: 400 },
+            positionsKey: 'p1',
+            snapshot: {
+              priceByAsset: { BTC: 50000, ETH: 2000, BNB: 500, SOL: 150, USDT: 1, USDC: 1 },
+              sourceByAsset: {
+                BTC: 'live',
+                ETH: 'live',
+                BNB: 'live',
+                SOL: 'live',
+                USDT: 'stable',
+                USDC: 'stable',
+              },
+              marketLastUpdatedAt: Date.now(),
+              hasStalePrices: false,
+              hasUnavailablePrices: false,
+              changePercent24hByAsset: { BTC: 0, ETH: 0, BNB: 0, SOL: 0, USDT: 0, USDC: 0 },
+            },
+            metrics: {
+              totalUsd: 400,
+              weightedApr: 30,
+              dailyEarningsUsd: 0.32,
+              usdByPositionId: { p1: 400 },
+              priceByAsset: { USDT: 1 },
+              marketLastUpdatedAt: Date.now(),
+              hasStalePrices: false,
+              hasUnavailablePrices: false,
+              priceSourceByAsset: { USDT: 'stable' },
+            },
+          };
+        }
+        return {
+          positionsKey: 'p1',
+          snapshot: {
+            priceByAsset: { BTC: 50000, ETH: 2200, BNB: 500, SOL: 150, USDT: 1, USDC: 1 },
+            sourceByAsset: {
+              BTC: 'live',
+              ETH: 'live',
+              BNB: 'live',
+              SOL: 'live',
+              USDT: 'stable',
+              USDC: 'stable',
+            },
+            marketLastUpdatedAt: Date.now(),
+            hasStalePrices: false,
+            hasUnavailablePrices: false,
+            changePercent24hByAsset: { BTC: 0, ETH: 0, BNB: 0, SOL: 0, USDT: 0, USDC: 0 },
+          },
+          metrics: {
+            totalUsd: 500,
+            weightedApr: 45,
+            dailyEarningsUsd: 0.51,
+            usdByPositionId: { p1: 500 },
             priceByAsset: { USDT: 1 },
             marketLastUpdatedAt: Date.now(),
             hasStalePrices: false,
             hasUnavailablePrices: false,
             priceSourceByAsset: { USDT: 'stable' },
-          };
-        }
-        return {
-          totalUsd: 500,
-          weightedApr: 45,
-          dailyEarningsUsd: 0.51,
-          usdByPositionId: { p1: 500 },
-          priceByAsset: { USDT: 1 },
-          marketLastUpdatedAt: Date.now(),
-          hasStalePrices: false,
-          hasUnavailablePrices: false,
-          priceSourceByAsset: { USDT: 'stable' },
+          },
         };
       });
       seedState({ currentBalance: 600, savings: 200 });
@@ -459,7 +553,7 @@ describe('dashboard legends', () => {
   });
 
   it('handles market fetch errors by flagging API failure', async () => {
-    vi.mocked(calculatePositionMetrics).mockRejectedValue(new Error('boom'));
+    vi.mocked(getSharedMarketData).mockRejectedValue(new Error('boom'));
     seedState();
 
     const container = document.createElement('div');
@@ -480,9 +574,16 @@ describe('dashboard legends', () => {
     const dispose = renderDashboard(container);
     await flushMicrotasks();
 
-    const savingsInput = container.querySelector('#input-balance') as HTMLInputElement;
-    savingsInput.value = '300';
-    (container.querySelector('#btn-save-balance') as HTMLButtonElement).click();
+    // Update state directly and dispatch config change event (simulating unified config modal save)
+    const before = loadState();
+    const basePositionsValue =
+      before.positions.length > 0 ? before.portfolio.currentBalance - before.portfolio.savings : 0;
+    const nextBalance = Math.max(0, Math.round((basePositionsValue + 300) * 100) / 100);
+    saveState({
+      ...before,
+      portfolio: { ...before.portfolio, savings: 300, currentBalance: nextBalance },
+    });
+    window.dispatchEvent(new CustomEvent('binance-config-change'));
     await flushMicrotasks();
 
     const next = loadState();
@@ -501,11 +602,13 @@ describe('dashboard legends', () => {
     const dispose = renderDashboard(container);
     await flushMicrotasks();
 
-    const investedInput = container.querySelector('#input-invested') as HTMLInputElement;
-    const goalInput = container.querySelector('#input-goal') as HTMLInputElement;
-    investedInput.value = '900';
-    goalInput.value = '1400';
-    (container.querySelector('#btn-save-settings') as HTMLButtonElement).click();
+    // Update state directly and dispatch config change event (simulating unified config modal save)
+    const before = loadState();
+    saveState({
+      ...before,
+      portfolio: { ...before.portfolio, totalInvested: 900, goalAmount: 1400 },
+    });
+    window.dispatchEvent(new CustomEvent('binance-config-change'));
     await flushMicrotasks();
 
     const next = loadState();
@@ -513,6 +616,38 @@ describe('dashboard legends', () => {
     expect(next.portfolio.goalAmount).toBe(1400);
     expect(container.querySelector('#dash-invested')?.textContent).toContain('$900.00');
     expect(container.querySelector('#dash-prog-target')?.textContent).toContain('$1,400.00');
+
+    dispose();
+    container.remove();
+  });
+
+  it('renders account balance detail in dashboard when Binance auto mode is active', async () => {
+    seedState({ mode: 'auto' });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(fetchBalanceSummary).mockResolvedValue({
+      totalUsdEstimate: 260,
+      balances: [
+        { asset: 'USDT', free: 250, locked: 10 },
+        { asset: 'ETH', free: 0.25, locked: 0 },
+      ],
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect(fetchBalanceSummary).toHaveBeenCalled();
+    expect(container.querySelector('#dashboard-balance-strip')).not.toBeNull();
+    expect(container.querySelector('#dashboard-balance-strip')?.textContent).toContain(
+      'Saldo en cuenta',
+    );
+    expect(container.querySelector('#dashboard-balance-strip-items')?.textContent).toContain(
+      'USDT',
+    );
+    expect(container.querySelector('#dashboard-balance-strip-items')?.textContent).toContain(
+      '260.00',
+    );
 
     dispose();
     container.remove();

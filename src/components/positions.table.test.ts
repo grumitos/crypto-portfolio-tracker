@@ -77,7 +77,7 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(grouped).toContain('pos-toggle-row');
+    expect(grouped).toContain('pos-components-summary');
     expect(grouped).toContain('▸');
     expect(grouped).toContain('Ver desglose (2)');
     expect(grouped).toContain('pos-sub-row');

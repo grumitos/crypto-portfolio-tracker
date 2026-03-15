@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#FAF9F5">
+  <meta name="theme-color" content="#f9f9f7">
   <meta name="description"
     content="Monitorea tu portafolio crypto: posiciones Dual Investment, simulador de recuperación y calculadora de swing trade.">
   <title>Crypto Portfolio Tracker</title>
@@ -13,7 +13,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.svg">
   <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 7 13.5 15.5 8.5 10.5 2 17'/%3E%3Cpolyline points='16 7 22 7 22 13'/%3E%3C/svg%3E">
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%232d2d2b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 7 13.5 15.5 8.5 10.5 2 17'/%3E%3Cpolyline points='16 7 22 7 22 13'/%3E%3C/svg%3E">
   <script>
     // Anti-FOUC: apply theme before CSS loads to prevent flash
     (function () {
@@ -22,14 +22,14 @@
       if (dark) {
         document.documentElement.dataset.theme = 'dark';
         var m = document.querySelector('meta[name="theme-color"]');
-        if (m) m.content = '#262624';
+        if (m) m.content = '#2d2d2b';
       }
     })();
   </script>
 </head>
 
 <body>
-  <a href="#view-container" class="skip-to-content" style="position:absolute;left:-9999px">Ir al contenido</a>
+  <a href="#view-container" class="skip-to-content">Ir al contenido</a>
   <div id="app"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

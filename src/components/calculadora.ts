@@ -1,10 +1,8 @@
 import { loadCalcState, saveCalcState } from '../utils/storage';
 import { formatUSD } from '../utils/calculator';
-import { iconPlus, iconX, iconRefreshCw, iconTrash } from '../utils/icons';
 import type {
   AchievedResults,
   CalculadoraState,
-  FeePreset,
   PurchaseTotals,
   StrategyResults,
 } from '../types';
@@ -18,13 +16,13 @@ import {
 } from './calculadora.math';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
 import { showConfirmDialog } from '../utils/dialogs';
-
-// ── Fee presets ──
-
-const FEE_PRESETS: Record<FeePreset, { maker: number; label: string }> = {
-  spot: { maker: 0.075, label: 'Spot' },
-  futures: { maker: 0, label: 'Futuros' },
-};
+import {
+  CALC_INPUT_DEBOUNCE_MS,
+  CALC_RESULT_ANIM_MS,
+  CALCULADORA_COPY,
+  FEE_PRESETS,
+} from './calculadora.constants';
+import { renderCalculadoraTemplate, renderPurchaseRow } from './calculadora.template';
 
 function fmtNum(value: number, decimals: number): string {
   if (!Number.isFinite(value)) return '-';
@@ -40,8 +38,6 @@ let state: CalculadoraState;
 let purchaseIdCounter = 1;
 let lastValidPrice = NaN;
 let recalcTimer: ReturnType<typeof setTimeout> | null = null;
-const CALC_INPUT_DEBOUNCE_MS = 120;
-const CALC_RESULT_ANIM_MS = 560;
 const calcValueAnimationByElement = new WeakMap<HTMLElement, number>();
 const calcTextAnimationByElement = new WeakMap<HTMLElement, number>();
 
@@ -90,150 +86,10 @@ export function renderCalculadora(container: HTMLElement): () => void {
   cancelScheduledRecalculate();
   loadAndInit();
 
-  container.innerHTML = `
-    <div class="section">
-      <div class="section-header">
-        <h2 class="section-title">Calculadora Swing Trade</h2>
-      </div>
-
-      <!-- Config bar -->
-      <div class="card">
-        <div class="calc-config-bar">
-          <div class="form-group form-group-inline">
-            <label for="calc-price">Precio activo</label>
-            <div class="calc-input-wrap">
-              <span class="calc-prefix">$</span>
-              <input type="text" id="calc-price" class="calc-has-prefix" placeholder="600" inputmode="decimal" value="${state.price}">
-            </div>
-            <span class="auto-tag is-auto hint-text" id="calc-price-lock" style="display:none">AUTO</span>
-          </div>
-
-          <div class="form-group form-group-inline">
-            <label for="calc-capital">Capital</label>
-            <div class="calc-input-wrap">
-              <span class="calc-prefix">$</span>
-              <input type="text" id="calc-capital" class="calc-has-prefix" inputmode="decimal" value="${state.capital}">
-            </div>
-          </div>
-
-          <div class="form-group form-group-inline">
-            <label for="calc-trades">Trades/Ano</label>
-            <input type="text" id="calc-trades" inputmode="decimal" value="${state.trades}">
-          </div>
-
-          <div class="form-group form-group-inline">
-            <label>Comision</label>
-            <div class="calc-fee-row">
-              <button type="button" class="preset-btn ${state.feePreset === 'spot' && !state.fdusdEnabled ? 'active' : ''}" id="calc-fee-spot">Spot</button>
-              <button type="button" class="preset-btn ${state.feePreset === 'futures' ? 'active' : ''}" id="calc-fee-futures">Futuros</button>
-              <button type="button" class="preset-btn ${state.feePreset === 'spot' && state.fdusdEnabled ? 'active' : ''}" id="calc-fee-fdusd" ${state.feePreset !== 'spot' ? 'disabled' : ''}>FDUSD</button>
-            </div>
-            <div class="text-muted hint-text">
-              Fee: <span id="calc-fee-display" class="mono">${getEffectiveFee().maker.toFixed(3)}%</span>
-              <span class="calc-fee-sep">&middot;</span>
-              Total: <span id="calc-fee-total" class="mono">-</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Main layout -->
-      <div class="grid-2">
-        <!-- Left: Inputs -->
-        <div>
-          <!-- Execution -->
-          <div class="card mb-md">
-            <div class="card-title flex-between mb-md">
-              Ejecucion
-              <button class="btn btn-sm" id="calc-reset-exec" title="Resetear valores">${iconRefreshCw(14)} Reset</button>
-            </div>
-            <div class="grid-3">
-              <div class="form-group">
-                <label for="calc-sell-price">Precio ejecutado</label>
-                <div class="calc-input-wrap">
-                  <span class="calc-prefix">$</span>
-                  <input type="text" id="calc-sell-price" class="calc-has-prefix" placeholder="615" inputmode="decimal" value="${state.sellPrice}">
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="calc-sell-pct">Venta obj. (%)</label>
-                <input type="text" id="calc-sell-pct" inputmode="decimal" value="${state.sellPct}">
-              </div>
-              <div class="form-group">
-                <label for="calc-rebuy-pct">Recompra obj. (%)</label>
-                <input type="text" id="calc-rebuy-pct" inputmode="decimal" value="${state.rebuyPct}">
-              </div>
-            </div>
-          </div>
-
-          <!-- Purchases -->
-          <div class="card">
-            <div class="card-title flex-between mb-md">
-              Posiciones
-              <div class="flex-row gap-sm">
-                <button class="btn btn-sm btn-danger" id="calc-clear-purchases" ${state.purchases.length === 0 ? 'disabled' : ''}>${iconTrash(14)} Borrar</button>
-                <button class="btn btn-sm btn-primary" id="calc-add-purchase">${iconPlus(14)} Agregar</button>
-              </div>
-            </div>
-
-            ${
-              state.purchases.length > 0
-                ? `
-              <div class="calc-purchase-header">
-                <span>Cantidad</span>
-                <span>Precio (USD)</span>
-                <span>Total (USD)</span>
-                <span></span>
-              </div>
-            `
-                : ''
-            }
-
-            <div id="calc-purchases-list"></div>
-
-            <div class="text-muted hint-text mt-md" id="calc-purchase-summary">
-              ${state.purchases.length === 0 ? 'Agrega compras para calcular precio promedio ponderado.' : ''}
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Metrics -->
-        <div class="card">
-          <div class="card-title mb-md">Senal Actual</div>
-          <div class="calc-metrics-grid">
-            <div class="calc-metric-card calc-hero">
-              <span class="calc-metric-label">APR real</span>
-              <div class="calc-metric-value mono" id="calc-out-apr">-</div>
-            </div>
-            <div class="calc-metric-card calc-hero">
-              <span class="calc-metric-label">Neto % ciclo</span>
-              <div class="calc-metric-value mono" id="calc-out-net-cycle-pct">-</div>
-            </div>
-            <div class="calc-metric-card">
-              <span class="calc-metric-label">Movimiento</span>
-              <div class="calc-metric-value mono" id="calc-out-movement">-</div>
-            </div>
-            <div class="calc-metric-card">
-              <span class="calc-metric-label">Ganancia/Trade</span>
-              <div class="calc-metric-value mono" id="calc-out-profit-trade">-</div>
-            </div>
-            <div class="calc-metric-card">
-              <span class="calc-metric-label">Precio venta</span>
-              <div class="calc-metric-value mono" id="calc-out-sell-price">-</div>
-            </div>
-            <div class="calc-metric-card">
-              <span class="calc-metric-label">Precio recompra</span>
-              <div class="calc-metric-value mono" id="calc-out-rebuy-price">-</div>
-            </div>
-            <div class="calc-metric-card calc-wide calc-hero">
-              <span class="calc-metric-label">Neto USD ciclo</span>
-              <div class="calc-metric-value mono" id="calc-out-net-cycle-usd">-</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+  container.innerHTML = renderCalculadoraTemplate(
+    state,
+    getEffectiveFee().maker,
+  );
 
   renderPurchaseRows(container);
   bindEvents(container);
@@ -266,21 +122,12 @@ function renderPurchaseRows(container: HTMLElement): void {
 
     const row = document.createElement('div');
     row.className = 'calc-purchase-row';
-    row.innerHTML = `
-      <div class="form-group form-group-inline">
-        <input type="text" data-purchase-id="${purchase.id}" data-field="qty" placeholder="0.00" inputmode="decimal" value="${purchase.qty}">
-      </div>
-      <div class="form-group form-group-inline">
-        <div class="calc-input-wrap">
-          <span class="calc-prefix">$</span>
-          <input type="text" data-purchase-id="${purchase.id}" data-field="price" class="calc-has-prefix" placeholder="0.00" inputmode="decimal" value="${purchase.price}">
-        </div>
-      </div>
-      <div class="form-group form-group-inline">
-        <input type="text" readonly tabindex="-1" class="calc-locked" value="${Number.isFinite(total) ? fmtNum(total, 2) : '-'}">
-      </div>
-      <button type="button" class="btn btn-sm btn-danger calc-remove-btn" data-remove-id="${purchase.id}" aria-label="Eliminar posicion">${iconX(14)}</button>
-    `;
+    row.innerHTML = renderPurchaseRow(
+      purchase.id,
+      purchase.qty,
+      purchase.price,
+      Number.isFinite(total) ? fmtNum(total, 2) : '-',
+    );
     list.appendChild(row);
   }
 
@@ -561,12 +408,18 @@ function recalculate(container: HTMLElement, options: { animate?: boolean } = {}
     priceInput.value = totals.avgPrice.toFixed(2);
     priceInput.readOnly = true;
     priceInput.classList.add('calc-locked');
-    if (priceLock) priceLock.style.display = 'inline-flex';
+    if (priceLock) {
+      priceLock.hidden = false;
+      priceLock.style.display = 'inline-flex';
+    }
     basePrice = totals.avgPrice;
   } else {
     priceInput.readOnly = false;
     priceInput.classList.remove('calc-locked');
-    if (priceLock) priceLock.style.display = 'none';
+    if (priceLock) {
+      priceLock.hidden = true;
+      priceLock.style.display = 'none';
+    }
     basePrice = roundTo(parseNum(priceInput.value), 2);
   }
 
@@ -770,11 +623,11 @@ function updatePurchaseSummary(container: HTMLElement, totals: PurchaseTotals): 
   if (!el) return;
 
   if (state.purchases.length === 0) {
-    el.textContent = 'Agrega compras para calcular precio promedio ponderado.';
+    el.textContent = CALCULADORA_COPY.purchasesEmpty;
     return;
   }
   if (!totals.validCount) {
-    el.textContent = 'Completa cantidad y precio para cada compra.';
+    el.textContent = CALCULADORA_COPY.purchasesIncomplete;
     return;
   }
   el.textContent = `Total ${fmtNum(totals.totalQty, 6)} | Costo $ ${fmtNum(totals.totalUsd, 2)} | Promedio $ ${fmtNum(totals.avgPrice, 4)}`;

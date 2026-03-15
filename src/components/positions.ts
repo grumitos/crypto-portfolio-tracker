@@ -9,15 +9,13 @@ import {
 import { formatUSD } from '../utils/calculator';
 import { formatISODateLocal, parseISODateLocal, todayISODateLocal } from '../utils/date';
 import {
-  type AssetPriceSnapshot,
-  calculatePositionMetricsFromSnapshot,
-  getAssetPriceSnapshot,
   normalizeAsset as normalizeAssetSymbol,
 } from '../utils/market';
+import type { AssetPriceSnapshot, PositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
 import { normalizeTime } from '../utils/dual-yield';
-import { iconPlus, iconPencil, iconUpload } from '../utils/icons';
+import { iconPencil } from '../utils/icons';
 import {
   parseBinancePositions as parseBinancePositionsFromText,
   parseImportedPositions as parseImportedPositionsFromText,
@@ -31,32 +29,40 @@ import {
 import type { DualPosition, Direction } from '../types';
 import { ONE_SECOND_MS } from '../utils/constants';
 import { subscribeToMarketTicks } from '../utils/market-poller';
-import { escapeHtml, skeletonSpan } from '../utils/ui-helpers';
+import { skeletonSpan } from '../utils/ui-helpers';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
-import { createAssetMonogram, resolveAssetLogoSources } from '../utils/asset-logos';
+import {
+  bindAssetLogoFallbacks,
+  createAssetMonogram,
+  resolveAssetLogoSources,
+} from '../utils/asset-logos';
 import { bindModalEvents, openModal, closeModal } from '../utils/modal-manager';
 import { showAlertDialog, showConfirmDialog } from '../utils/dialogs';
-
-// ── Duration presets in days ──
-
-const DURATION_PRESETS = [
-  { label: '1D', days: 1 },
-  { label: '2D', days: 2 },
-  { label: '3D', days: 3 },
-  { label: '5D', days: 5 },
-  { label: '1S', days: 7 },
-  { label: '2S', days: 14 },
-  { label: '1M', days: 30 },
-];
+import { openDualMarketModal } from './positions/dual-market';
+import { onApiConfigChange } from './positions/api-config-modal';
+import { isAutoMode, hasApiCredentials } from '../utils/binance-auth';
+import { syncPositionsFromBinance } from '../utils/binance-sync';
+import {
+  getCachedAutoPortfolioSnapshot,
+  getPositionsCacheKey,
+  getSharedMarketData,
+  rememberAutoPortfolioSnapshot,
+  rememberBalanceSummary,
+} from '../utils/api-runtime-cache';
+import type { DualProductScored } from '../types';
+import {
+  POSITIONS_COPY,
+  RESULT_NUMBER_ANIM_MS,
+  SPOT_CHANGE_SKELETON_WIDTH,
+  SPOT_STRIP_ASSET_ORDER,
+  SPOT_STRIP_EXCLUDED_ASSETS,
+  SPOT_VALUE_SKELETON_WIDTH,
+} from './positions.constants';
+import { renderPositionsTemplate, renderSpotCardTemplate } from './positions.template';
 
 const ASSET_POOL: string[] = [...DEFAULT_ASSET_POOL];
 const SUBSCRIPTION_ASSETS = [...ASSET_POOL];
 const ALLOWED_ASSETS = new Set<string>(ASSET_POOL);
-const SPOT_STRIP_EXCLUDED_ASSETS = new Set<string>(['USDT', 'USDC']);
-const SPOT_STRIP_ASSET_ORDER = ['BTC', 'ETH', 'BNB', 'SOL'];
-const RESULT_NUMBER_ANIM_MS = 560;
-const SPOT_VALUE_SKELETON_WIDTH = '72px';
-const SPOT_CHANGE_SKELETON_WIDTH = '56px';
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
 const spotStripValueAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -138,7 +144,7 @@ function setSpotValue(el: HTMLElement | null, value: number): void {
   if (!Number.isFinite(value) || value <= 0) {
     stopValueAnimation(spotStripValueAnimationByElement, el);
     delete el.dataset.numericValue;
-    el.textContent = 'N/D';
+    el.textContent = POSITIONS_COPY.noData;
     el.classList.add('text-muted');
     return;
   }
@@ -165,7 +171,7 @@ function setSpotChange(el: HTMLElement | null, value: number | null): void {
   if (!isValid) {
     stopValueAnimation(spotStripChangeAnimationByElement, el);
     delete el.dataset.numericValue;
-    el.textContent = 'N/D';
+    el.textContent = POSITIONS_COPY.noData;
     el.classList.remove('text-gain', 'text-loss');
     el.classList.add('text-muted');
     cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
@@ -214,10 +220,7 @@ function setSpotChangeLoading(el: HTMLElement | null): void {
   cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
 }
 
-function buildSpotAssetData(
-  spotAssets: string[],
-  snapshot: AssetPriceSnapshot,
-): SpotAssetData[] {
+function buildSpotAssetData(spotAssets: string[], snapshot: AssetPriceSnapshot): SpotAssetData[] {
   return sortSpotAssets(spotAssets).map((asset) => ({
     asset,
     spotPrice: snapshot.priceByAsset[asset] ?? 0,
@@ -255,26 +258,10 @@ function bindSpotCardLogo(cardEl: HTMLElement, asset: string): void {
 }
 
 function createSpotCard(asset: string): HTMLElement {
-  const safeAsset = escapeHtml(asset);
   const card = document.createElement('article');
   card.className = 'positions-spot-card';
   card.id = `positions-spot-${asset}`;
-  card.innerHTML = `
-    <span class="positions-spot-header">
-      <span class="positions-spot-logo-wrap">
-        <img class="positions-spot-logo" loading="lazy" decoding="async">
-        <span class="positions-spot-fallback mono"></span>
-      </span>
-      <span class="positions-spot-symbol mono">${safeAsset}</span>
-    </span>
-    <span class="positions-spot-meta">
-      <span class="positions-spot-value mono" id="positions-spot-value-${asset}">${skeletonSpan(SPOT_VALUE_SKELETON_WIDTH)}</span>
-      <span class="positions-spot-change-row">
-        <span class="positions-spot-change mono" id="positions-spot-change-${asset}">${skeletonSpan(SPOT_CHANGE_SKELETON_WIDTH)}</span>
-        <span class="positions-spot-change-window mono">24h</span>
-      </span>
-    </span>
-  `;
+  card.innerHTML = renderSpotCardTemplate(asset);
   bindSpotCardLogo(card, asset);
   return card;
 }
@@ -289,6 +276,7 @@ function updateSpotStrip(
 
   if (positions.length === 0) {
     stripEl.replaceChildren();
+    stripEl.hidden = true;
     stripEl.style.display = 'none';
     return;
   }
@@ -299,10 +287,12 @@ function updateSpotStrip(
   const hydratedAssets = snapshot ? buildSpotAssetData(orderedAssets, snapshot) : [];
   if (snapshot && hydratedAssets.length === 0) {
     stripEl.replaceChildren();
+    stripEl.hidden = true;
     stripEl.style.display = 'none';
     return;
   }
 
+  stripEl.hidden = false;
   stripEl.style.display = 'flex';
   const fragment = document.createDocumentFragment();
 
@@ -352,7 +342,138 @@ function createUnavailableSpotSnapshot(positions: DualPosition[]): AssetPriceSna
   };
 }
 
+// ── Auto mode helpers ──
+
+function applyPositionMarketData(
+  container: HTMLElement,
+  positions: DualPosition[],
+  snapshot: AssetPriceSnapshot,
+  metrics: PositionMetrics,
+): boolean {
+  const aprEl = container.querySelector('#positions-apr') as HTMLElement | null;
+  const capitalEl = container.querySelector('#positions-capital') as HTMLElement | null;
+  const dailyEl = container.querySelector('#positions-daily') as HTMLElement | null;
+  if (!aprEl || !capitalEl || !dailyEl) return false;
+
+  const hasSubMinuteCountdown = updateRemainingTimesInPlace(container, positions);
+  registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
+
+  aprEl.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
+  if (metrics.weightedApr > 0) {
+    setStatPercent(aprEl, metrics.weightedApr, true);
+  } else {
+    setStatText(aprEl, '---', true);
+  }
+
+  if (metrics.totalUsd > 0) {
+    setStatCurrency(capitalEl, metrics.totalUsd, true);
+  } else {
+    setStatText(capitalEl, '---', true);
+  }
+
+  dailyEl.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
+  if (metrics.dailyEarningsUsd > 0) {
+    setStatCurrency(dailyEl, metrics.dailyEarningsUsd, true);
+  } else {
+    setStatText(dailyEl, '---', true);
+  }
+
+  if (snapshot.hasStalePrices || snapshot.hasUnavailablePrices) {
+    registerApiFailure();
+    showApiErrorBanner(POSITIONS_COPY.marketError);
+  }
+
+  updateSpotStrip(container, positions, snapshot);
+
+  positions.forEach((position) => {
+    const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;
+    const usdValue = metrics.usdByPositionId[position.id] ?? 0;
+    if (rowEl) {
+      rowEl.textContent = usdValue > 0 ? formatUSD(usdValue) : 'N/D';
+    }
+
+    if (position.components && position.amount > 0) {
+      position.components.forEach((component) => {
+        const componentRowEl = container.querySelector(
+          `#position-usd-${position.id}-comp-${component.id}`,
+        ) as HTMLElement | null;
+        if (!componentRowEl) return;
+        const ratio = component.amount / position.amount;
+        const componentUsdValue = usdValue * ratio;
+        componentRowEl.textContent = componentUsdValue > 0 ? formatUSD(componentUsdValue) : 'N/D';
+      });
+    }
+  });
+
+  return hasSubMinuteCountdown;
+}
+
+async function performAutoSync(
+  container: HTMLElement,
+  onStateChange: () => void,
+  forceRefresh = false,
+): Promise<void> {
+  const syncBtn = container.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
+  if (syncBtn) {
+    syncBtn.disabled = true;
+    syncBtn.classList.add('syncing');
+  }
+
+  try {
+    const previousPositionsKey = getPositionsCacheKey(loadState().positions);
+    const snapshot = await syncPositionsFromBinance(forceRefresh);
+    rememberAutoPortfolioSnapshot(snapshot);
+    rememberBalanceSummary({
+      balances: snapshot.balances,
+      totalUsdEstimate: snapshot.totalUsdEstimate,
+    });
+
+    const { positions: synced, count } = snapshot;
+    const nextPositionsKey = getPositionsCacheKey(synced);
+
+    const countEl = container.querySelector('#positions-count');
+    if (countEl) countEl.textContent = String(count);
+
+    const tablesContainer = container.querySelector('#positions-tables-container');
+    if (tablesContainer) {
+      const buyLow = synced.filter((p) => p.direction === 'buy-low');
+      const sellHigh = synced.filter((p) => p.direction === 'sell-high');
+
+      if (synced.length > 0) {
+        tablesContainer.innerHTML = `
+          ${buyLow.length > 0 ? renderPositionGroup('Buy Low', buyLow) : ''}
+          ${sellHigh.length > 0 ? renderPositionGroup('Sell High', sellHigh) : ''}
+        `;
+        bindAssetLogoFallbacks(tablesContainer);
+      } else {
+        tablesContainer.innerHTML = `
+          <div class="card empty-state">
+            <p>Sin posiciones activas en Binance</p>
+            <p class="text-muted">No hay posiciones de Dual Investment pendientes.</p>
+          </div>
+        `;
+      }
+    }
+
+    await hydratePositionMarketData(container, synced, forceRefresh);
+
+    if (previousPositionsKey !== nextPositionsKey) {
+      onStateChange();
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[positions] Auto-sync failed:', err);
+    const msg = err instanceof Error ? err.message : 'Error desconocido';
+    showApiErrorBanner(`No se pudieron sincronizar las posiciones desde Binance: ${msg}`);
+  } finally {
+    if (syncBtn) {
+      syncBtn.disabled = false;
+      syncBtn.classList.remove('syncing');
+    }
+  }
+}
+
 export function renderPositions(container: HTMLElement, onStateChange: () => void): () => void {
+  const autoMode = isAutoMode();
   const state = loadState();
   const { positions } = state;
   const activeCount = positions.length;
@@ -361,165 +482,77 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const buyLow = positions.filter((p) => p.direction === 'buy-low');
   const sellHigh = positions.filter((p) => p.direction === 'sell-high');
 
-  container.innerHTML = `
-    <div class="section">
-      <div class="section-header">
-        <h2 class="section-title">Dual Investment</h2>
-        <div class="section-actions">
-          <button class="btn btn-sm" id="btn-toggle-edit">${iconPencil(13)}Editar</button>
-          <button class="btn btn-sm" id="btn-bulk-import">${iconUpload(13)}Pegar y reemplazar</button>
-          <button class="btn btn-primary btn-sm" id="btn-add-position">${iconPlus(14)}Nueva posicion</button>
-        </div>
-      </div>
+  const hasApi = hasApiCredentials();
 
-      <!-- Summary cards -->
-      <div class="grid-4">
-        <div class="stat-card" data-shared-card="apr">
-          <div class="card-title">APR promedio</div>
-          <div class="stat-value lg" id="positions-apr">
-            ${skeletonSpan('70px')}
-          </div>
-        </div>
-        <div class="stat-card" data-shared-card="capital">
-          <div class="card-title">En posiciones</div>
-          <div class="stat-value lg" id="positions-capital">
-            ${skeletonSpan('90px')}
-          </div>
-        </div>
-        <div class="stat-card" data-shared-card="daily">
-          <div class="card-title">Run-rate diario est.</div>
-          <div class="stat-value lg" id="positions-daily">
-            ${skeletonSpan('70px')}
-          </div>
-        </div>
-        <div class="stat-card" data-shared-card="positions">
-          <div class="card-title">Posiciones activas</div>
-          <div class="stat-value lg">${activeCount}</div>
-        </div>
-      </div>
+  container.innerHTML = renderPositionsTemplate({
+    autoMode,
+    hasApi,
+    activeCount,
+    buyLowMarkup: buyLow.length > 0 ? renderPositionGroup(POSITIONS_COPY.buyLowTitle, buyLow) : '',
+    sellHighMarkup:
+      sellHigh.length > 0 ? renderPositionGroup(POSITIONS_COPY.sellHighTitle, sellHigh) : '',
+    hasPositions: positions.length > 0,
+    marketButtonEnabled: true,
+    assetOptions: ASSET_POOL,
+    subscriptionOptions: SUBSCRIPTION_ASSETS,
+  });
 
-      <!-- Spot prices -->
-      <div class="positions-spot-strip-wrap">
-        <div class="positions-spot-strip" id="positions-spot-strip" style="display:none"></div>
-      </div>
-
-      <!-- Positions table -->
-      ${
-        positions.length > 0
-          ? `
-        ${buyLow.length > 0 ? renderPositionGroup('Buy Low', buyLow) : ''}
-        ${sellHigh.length > 0 ? renderPositionGroup('Sell High', sellHigh) : ''}
-      `
-          : `
-        <div class="card empty-state">
-          <p>Sin posiciones activas</p>
-          <p>Usa el botón "Agregar" o pega texto desde Binance para importar tus posiciones de Dual Investment.</p>
-        </div>
-      `
-      }
-    </div>
-
-    <!-- Add/Edit modal -->
-    <dialog id="modal-position" class="modal-overlay">
-      <div class="modal">
-        <h3 class="modal-title" id="modal-position-title">Nueva posicion</h3>
-        <input type="hidden" id="input-position-id" value="">
-
-        <!-- Direction toggle -->
-        <div class="form-group">
-          <label for="input-direction">Direccion</label>
-          <div class="direction-toggle">
-            <button class="dir-btn active" data-dir="buy-low" id="dir-buy-low">Buy Low</button>
-            <button class="dir-btn" data-dir="sell-high" id="dir-sell-high">Sell High</button>
-          </div>
-          <input type="hidden" id="input-direction" value="buy-low">
-        </div>
-
-        <!-- Asset -->
-        <div class="grid-2">
-          <div class="form-group">
-            <label for="input-asset">Activo</label>
-            <select id="input-asset">
-              ${ASSET_POOL.map((a) => `<option value="${a}" ${a === 'ETH' ? 'selected' : ''}>${a}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="input-sub-asset">Moneda de suscripcion</label>
-            <select id="input-sub-asset">
-              ${SUBSCRIPTION_ASSETS.map((a) => `<option value="${a}" ${a === 'USDT' ? 'selected' : ''}>${a}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-
-        <!-- Amount and APR -->
-        <div class="grid-2">
-          <div class="form-group">
-            <label for="input-amount">Monto suscrito</label>
-            <input type="number" id="input-amount" step="1" placeholder="0.00">
-          </div>
-          <div class="form-group">
-            <label for="input-apr">APR (%)</label>
-            <input type="number" id="input-apr" step="1" placeholder="0.00">
-          </div>
-        </div>
-
-        <!-- Target price -->
-        <div class="form-group">
-          <label for="input-target">Precio objetivo</label>
-          <input type="number" id="input-target" step="1" placeholder="0.00">
-        </div>
-
-        <!-- Dates with presets -->
-        <div class="form-group">
-          <label for="input-entry-date">Fecha de suscripcion</label>
-          <div class="grid-2 position-datetime-inputs">
-            <input type="date" id="input-entry-date">
-            <input type="time" id="input-entry-time" step="60" placeholder="HH:MM">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="input-settlement-date">Fecha de liquidacion</label>
-          <div class="duration-presets">
-            ${DURATION_PRESETS.map((p) => `<button class="preset-btn" data-days="${p.days}">${p.label}</button>`).join('')}
-          </div>
-          <div class="grid-2 position-datetime-inputs" style="margin-top:var(--space-xs)">
-            <input type="date" id="input-settlement-date">
-            <input type="time" id="input-settlement-time" step="60" placeholder="HH:MM">
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button class="btn" id="btn-cancel-position">Cancelar</button>
-          <button class="btn btn-primary" id="btn-save-position">Guardar</button>
-        </div>
-      </div>
-    </dialog>
-
-    <dialog id="modal-bulk-import" class="modal-overlay">
-      <div class="modal">
-        <h3 class="modal-title">Pegar posiciones (Binance)</h3>
-        <div class="form-group">
-          <label for="input-bulk-import">Pega el bloque completo copiado desde Binance</label>
-          <textarea id="input-bulk-import" rows="14" placeholder="USDC-ETH&#10;Buy-low&#10;2026-02-19 14:29&#10;100 USDC&#10;..."></textarea>
-          <div class="text-muted hint-text">
-            Reemplazara todas las posiciones actuales.
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn" id="btn-cancel-bulk-import">Cancelar</button>
-          <button class="btn btn-primary" id="btn-apply-bulk-import">Reemplazar</button>
-        </div>
-      </div>
-    </dialog>
-  `;
-
+  bindAssetLogoFallbacks(container);
   bindPositionEvents(container, onStateChange);
   updateSpotStrip(container, positions, null);
+
+  // Dual market section — prefill position modal from product
+  const prefillFromProduct = (product: DualProductScored): void => {
+    const dir = product.optionType === 'CALL' ? 'sell-high' : 'buy-low';
+    const asset = product.optionType === 'CALL' ? product.investCoin : product.exercisedCoin;
+    clearPositionForm(container);
+    (container.querySelector('#modal-position-title') as HTMLElement).textContent =
+      'Nueva posición';
+    const dirInput = container.querySelector('#input-direction') as HTMLInputElement;
+    dirInput.value = dir;
+    container.querySelectorAll('.dir-btn').forEach((b) => {
+      b.classList.toggle('active', (b as HTMLElement).dataset.dir === dir);
+    });
+    const assetSelect = container.querySelector('#input-asset') as HTMLSelectElement;
+    if ([...assetSelect.options].some((o) => o.value === asset)) {
+      assetSelect.value = asset;
+    }
+    (container.querySelector('#input-sub-asset') as HTMLSelectElement).value = product.investCoin;
+    (container.querySelector('#input-target') as HTMLInputElement).value =
+      product.strikePrice.toString();
+    (container.querySelector('#input-apr') as HTMLInputElement).value = product.apr.toFixed(2);
+    const entryInput = container.querySelector('#input-entry-date') as HTMLInputElement;
+    entryInput.value = todayISODateLocal();
+    (container.querySelector('#input-entry-time') as HTMLInputElement).value = formatTimeHHMM(
+      new Date(),
+    );
+    // Use the product's actual settlement date from the API (already ISO UTC date)
+    (container.querySelector('#input-settlement-date') as HTMLInputElement).value =
+      product.settleDate;
+    // Leave settlement time empty — defaults to Binance's 08:00 UTC via parseBinanceDualSettlementUTC
+    (container.querySelector('#input-settlement-time') as HTMLInputElement).value = '';
+    const modal = container.querySelector('#modal-position') as HTMLElement;
+    openModal(modal);
+  };
+
+  // Dual market — open modal from header button
+  container.querySelector('#btn-open-market')?.addEventListener('click', () => {
+    openDualMarketModal(prefillFromProduct);
+  });
+
+  // Listen for config changes (mode switch)
+  const unsubConfig = onApiConfigChange(() => {
+    onStateChange();
+  });
 
   let disposed = false;
   let latestKnownPositions = positions;
   let remainingTicker: ReturnType<typeof setInterval> | null = null;
+
+  // Sync button (auto mode)
+  container.querySelector('#btn-sync-positions')?.addEventListener('click', () => {
+    void performAutoSync(container, onStateChange, true);
+  });
 
   const syncRemainingTicker = (hasSubMinuteCountdown: boolean): void => {
     if (hasSubMinuteCountdown) {
@@ -542,21 +575,50 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
     remainingTicker = null;
   };
 
+  const runInitialHydration = async (): Promise<void> => {
+    if (disposed || !container.isConnected) return;
+
+    let hasSubMinuteCountdown = false;
+    if (autoMode && hasApiCredentials() && !getCachedAutoPortfolioSnapshot()) {
+      await performAutoSync(container, onStateChange, false);
+      latestKnownPositions = loadState().positions;
+      hasSubMinuteCountdown = updateRemainingTimesInPlace(container, latestKnownPositions);
+    } else {
+      latestKnownPositions = loadState().positions;
+      hasSubMinuteCountdown = await hydratePositionMarketData(container, latestKnownPositions, false);
+    }
+
+    syncRemainingTicker(hasSubMinuteCountdown);
+  };
+
+  void runInitialHydration();
+
   const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
     if (disposed || !container.isConnected) return;
-    const { positions: latestPositions } = loadState();
-    latestKnownPositions = latestPositions;
-    const hasSubMinuteCountdown = await hydratePositionMarketData(
-      container,
-      latestPositions,
-      forceRefresh,
-    );
+    let hasSubMinuteCountdown = false;
+
+    if (autoMode && hasApiCredentials()) {
+      await performAutoSync(container, onStateChange, forceRefresh);
+      const { positions: syncedPositions } = loadState();
+      latestKnownPositions = syncedPositions;
+      hasSubMinuteCountdown = updateRemainingTimesInPlace(container, latestKnownPositions);
+    } else {
+      const { positions: latestPositions } = loadState();
+      latestKnownPositions = latestPositions;
+      hasSubMinuteCountdown = await hydratePositionMarketData(
+        container,
+        latestPositions,
+        forceRefresh,
+      );
+    }
+
     syncRemainingTicker(hasSubMinuteCountdown);
-  });
+  }, false);
 
   return () => {
     disposed = true;
     unsubscribeMarket();
+    unsubConfig();
     if (remainingTicker) clearInterval(remainingTicker);
   };
 }
@@ -582,70 +644,12 @@ async function hydratePositionMarketData(
   const hasSubMinuteCountdown = updateRemainingTimesInPlace(container, positions);
 
   try {
-    const assetUniverse = Array.from(
-      new Set([
-        ...getSpotStripAssets(positions),
-        ...positions
-          .map((position) => normalizeAssetSymbol(position.subscriptionAsset))
-          .filter(Boolean),
-      ]),
-    );
-    const snapshot = await getAssetPriceSnapshot(assetUniverse, {
-      forceRefresh,
-      includeChangePercent24h: true,
-    });
-    const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);
-    registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
-
-    aprEl.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
-    if (metrics.weightedApr > 0) {
-      setStatPercent(aprEl, metrics.weightedApr, true);
-    } else {
-      setStatText(aprEl, '---', true);
-    }
-
-    if (metrics.totalUsd > 0) {
-      setStatCurrency(capitalEl, metrics.totalUsd, true);
-    } else {
-      setStatText(capitalEl, '---', true);
-    }
-
-    dailyEl.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
-    if (metrics.dailyEarningsUsd > 0) {
-      setStatCurrency(dailyEl, metrics.dailyEarningsUsd, true);
-    } else {
-      setStatText(dailyEl, '---', true);
-    }
-    if (snapshot.hasStalePrices || snapshot.hasUnavailablePrices) {
-      registerApiFailure();
-      showApiErrorBanner('No se pudo actualizar precios de mercado.');
-    }
-
-    updateSpotStrip(container, positions, snapshot);
-
-    positions.forEach((position) => {
-      const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;
-      const usdValue = metrics.usdByPositionId[position.id] ?? 0;
-      if (rowEl) {
-        rowEl.textContent = usdValue > 0 ? formatUSD(usdValue) : 'N/D';
-      }
-
-      if (position.components && position.amount > 0) {
-        position.components.forEach((c) => {
-          const cRowEl = container.querySelector(
-            `#position-usd-${position.id}-comp-${c.id}`,
-          ) as HTMLElement | null;
-          if (!cRowEl) return;
-          const ratio = c.amount / position.amount;
-          const cUsdValue = usdValue * ratio;
-          cRowEl.textContent = cUsdValue > 0 ? formatUSD(cUsdValue) : 'N/D';
-        });
-      }
-    });
+    const { snapshot, metrics } = await getSharedMarketData(positions, forceRefresh);
+    return applyPositionMarketData(container, positions, snapshot, metrics);
   } catch (err) {
     if (import.meta.env.DEV) console.warn('[Positions] market hydration failed:', err);
     registerApiFailure();
-    showApiErrorBanner('No se pudo actualizar precios de mercado.');
+    showApiErrorBanner(POSITIONS_COPY.marketError);
     updateSpotStrip(container, positions, createUnavailableSpotSnapshot(positions));
   }
 
@@ -659,7 +663,6 @@ export function parseBinancePositions(raw: string): DualPosition[] {
 export function parseImportedPositions(raw: string): DualPosition[] {
   return parseImportedPositionsFromText(raw);
 }
-
 
 function bindPositionEvents(container: HTMLElement, onStateChange: () => void): void {
   const modal = container.querySelector('#modal-position') as HTMLElement;
@@ -709,8 +712,8 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
 
   // ── Edit-mode toggle ──
   const sectionEl = container.querySelector('.section') as HTMLElement;
-  const toggleBtn = container.querySelector('#btn-toggle-edit') as HTMLElement;
-  toggleBtn.addEventListener('click', () => {
+  const toggleBtn = container.querySelector('#btn-toggle-edit') as HTMLElement | null;
+  toggleBtn?.addEventListener('click', () => {
     const active = sectionEl.classList.toggle('editing-mode');
     toggleBtn.innerHTML = active ? `${iconPencil(13)}Listo` : `${iconPencil(13)}Editar`;
   });
@@ -722,7 +725,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     if (!pos) return;
 
     (container.querySelector('#modal-position-title') as HTMLElement).textContent =
-      'Editar posicion';
+      'Editar posición';
     (container.querySelector('#input-position-id') as HTMLInputElement).value = pos.id;
 
     dirInput.value = pos.direction;
@@ -749,7 +752,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
   container.querySelector('#btn-add-position')?.addEventListener('click', () => {
     clearPositionForm(container);
     (container.querySelector('#modal-position-title') as HTMLElement).textContent =
-      'Nueva posicion';
+      'Nueva posición';
     const today = todayISODateLocal();
     entryInput.value = today;
     entryTimeInput.value = formatTimeHHMM(new Date());
@@ -769,28 +772,17 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
       e.stopPropagation();
       const toggleRow = toggle.closest('tr');
       if (!toggleRow) return;
-      const chevron = toggle.querySelector('.pos-components-chevron') as HTMLElement | null;
       let sibling = toggleRow.nextElementSibling;
       const isExpanding =
-        sibling?.classList.contains('pos-sub-row') &&
-        (sibling as HTMLElement).style.display === 'none';
+        sibling?.classList.contains('pos-sub-row') && (sibling as HTMLElement).hidden;
       while (sibling && sibling.classList.contains('pos-sub-row')) {
-        (sibling as HTMLElement).style.display = isExpanding ? '' : 'none';
+        (sibling as HTMLElement).hidden = !isExpanding;
         sibling = sibling.nextElementSibling;
-      }
-      if (chevron) {
-        chevron.style.transform = isExpanding ? 'rotate(90deg)' : '';
       }
       toggle.setAttribute('aria-expanded', String(isExpanding));
       toggleRow.classList.toggle('pos-toggle-expanded', isExpanding);
     };
     toggle.addEventListener('click', handleToggle);
-    toggle.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        handleToggle(e);
-      }
-    });
   });
 
   // ── Row click in edit-mode ──
@@ -810,8 +802,8 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     btn.addEventListener('click', async () => {
       const id = (btn as HTMLElement).dataset.id;
       if (!id) return;
-      const shouldDelete = await showConfirmDialog('Eliminar esta posicion?', {
-        title: 'Confirmar eliminacion',
+      const shouldDelete = await showConfirmDialog('Eliminar esta posición?', {
+        title: 'Confirmar eliminación',
         confirmLabel: 'Eliminar',
         destructive: true,
       });
@@ -836,7 +828,7 @@ function bindPositionEvents(container: HTMLElement, onStateChange: () => void): 
     }
     const shouldReplace = await showConfirmDialog(
       `Reemplazar todas las posiciones actuales por ${parsed.length} importadas?`,
-      { title: 'Confirmar importacion', confirmLabel: 'Reemplazar', destructive: true },
+      { title: 'Confirmar importación', confirmLabel: 'Reemplazar', destructive: true },
     );
     if (!shouldReplace) {
       return;

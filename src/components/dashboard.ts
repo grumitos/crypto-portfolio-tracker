@@ -1,10 +1,15 @@
-import { loadState, updateBalance, updatePortfolio, SIMULATOR_VIEW_KEY } from '../utils/storage';
+import { loadState, updateBalance, SIMULATOR_VIEW_KEY } from '../utils/storage';
 import { formatUSD, formatPct, formatDateLatin } from '../utils/calculator';
-import { calculatePositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
-import { iconWallet, iconSettings } from '../utils/icons';
-import { bindDashboardEvents } from './dashboard.events';
+import { isAutoMode, hasApiCredentials } from '../utils/binance-auth';
+import { fetchBalanceSummary } from '../utils/binance-sync';
+import {
+  getCachedBalanceSummary,
+  getSharedMarketData,
+  rememberBalanceSummary,
+} from '../utils/api-runtime-cache';
+import { onApiConfigChange } from './positions/api-config-modal';
 import {
   formatDashboardDurationLabel,
   resolveDashboardGoalDetails,
@@ -14,25 +19,35 @@ import {
 import { buildProjectionSnapshot } from '../utils/projection-milestones';
 import { subscribeToMarketTicks } from '../utils/market-poller';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
-import { skeletonSpan } from '../utils/ui-helpers';
 import { sanitizeFrequency } from './simulator.state';
-import { parseFlexibleNumber } from '../utils/parse-number';
 import {
   clearDashboardLegendState,
   loadDashboardLegendState,
   saveDashboardLegendState,
 } from './dashboard.state';
+import { getDashboardElements } from './dashboard.dom';
+import {
+  AUTO_BALANCE_SYNC_COOLDOWN_MS,
+  DASHBOARD_BALANCE_VISIBLE_ITEMS,
+  DASHBOARD_COPY,
+  GOAL_NUMBER_ANIM_MS,
+} from './dashboard.constants';
+import {
+  renderBalanceDetailCards,
+  renderBalanceEmptyState,
+  renderDashboardTemplate,
+} from './dashboard.template';
 import type {
   AppState,
+  BinanceAccountBalance,
   CompoundFrequency,
   DashboardGoalMode,
   DashboardLegendState,
 } from '../types';
 
-const AUTO_BALANCE_SYNC_COOLDOWN_MS = 5000;
-const GOAL_NUMBER_ANIM_MS = 560;
 let lastAutoBalanceSyncAt = 0;
 let dashboardLegendState: DashboardLegendState = sanitizeDashboardLegendState(undefined);
+
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const daysAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -53,13 +68,6 @@ interface DashboardUiState {
 interface GoalVisualUpdateOptions {
   animateNumbers?: boolean;
   animateText?: boolean;
-}
-
-function formatEditableCurrency(value: number): string {
-  return value.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 function progressPct(balance: number, target: number): number {
@@ -140,6 +148,13 @@ function setStaticTextOutput(el: HTMLElement | null, text: string): void {
   el.textContent = text;
 }
 
+function setTextResult(el: HTMLElement | null, text: string, animate: boolean): void {
+  if (!el) return;
+  stopValueAnimation(valueAnimationByElement, el);
+  delete el.dataset.numericValue;
+  animateTextSwap(el, text, animate);
+}
+
 function readSimulatorFrequency(fallback: CompoundFrequency): CompoundFrequency {
   try {
     const raw = localStorage.getItem(SIMULATOR_VIEW_KEY);
@@ -181,21 +196,36 @@ function modeToClass(mode: DashboardGoalMode): string {
   return 'mode-both';
 }
 
+function syncGoalProgressAccessibility(
+  container: HTMLElement,
+  balance: number,
+  details: ReturnType<typeof resolveDashboardGoalDetails>,
+): void {
+  const { goalBar } = getDashboardElements(container);
+  if (!goalBar) return;
+
+  const pct = details.targetAmount > 0 ? clampProgress(progressPct(balance, details.targetAmount)) : 0;
+  goalBar.setAttribute('aria-valuenow', String(Math.round(pct)));
+  goalBar.setAttribute(
+    'aria-valuetext',
+    `${formatUSD(balance)} de ${formatUSD(details.targetAmount)} hacia ${details.targetLabelLong}`,
+  );
+}
+
 function setDaysLabel(
   container: HTMLElement,
   value: string,
   highlight: boolean,
   animate = false,
 ): void {
-  const daysEl = container.querySelector('#dashboard-days') as HTMLElement | null;
-  const daysSepEl = container.querySelector('#dashboard-days-sep') as HTMLElement | null;
-  if (!daysEl || !daysSepEl) return;
+  const { goalDays, goalDaysSeparator } = getDashboardElements(container);
+  if (!goalDays || !goalDaysSeparator) return;
 
-  stopValueAnimation(daysAnimationByElement, daysEl);
-  delete daysEl.dataset.numericValue;
-  animateTextSwap(daysEl, value, animate);
-  daysEl.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
-  daysSepEl.style.display = value ? 'inline' : 'none';
+  stopValueAnimation(daysAnimationByElement, goalDays);
+  delete goalDays.dataset.numericValue;
+  animateTextSwap(goalDays, value, animate);
+  goalDays.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
+  goalDaysSeparator.style.display = value ? 'inline' : 'none';
 }
 
 function setDaysDurationLabel(
@@ -204,17 +234,15 @@ function setDaysDurationLabel(
   highlight: boolean,
   animate = false,
 ): void {
-  const daysEl = container.querySelector('#dashboard-days') as HTMLElement | null;
-  const daysSepEl = container.querySelector('#dashboard-days-sep') as HTMLElement | null;
-  if (!daysEl || !daysSepEl) return;
+  const { goalDays, goalDaysSeparator } = getDashboardElements(container);
+  if (!goalDays || !goalDaysSeparator) return;
 
-  const end = Math.max(0, totalDays);
-  daysEl.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
-  daysSepEl.style.display = 'inline';
+  goalDays.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
+  goalDaysSeparator.style.display = 'inline';
   setAnimatedNumber(
     daysAnimationByElement,
-    daysEl,
-    end,
+    goalDays,
+    Math.max(0, totalDays),
     (next) => formatDashboardDurationLabel(next),
     {
       enabled: animate,
@@ -226,17 +254,16 @@ function setDaysDurationLabel(
 }
 
 function updateLegendButtons(container: HTMLElement): void {
-  const beBtn = container.querySelector('#dashboard-legend-be') as HTMLButtonElement | null;
-  const goalBtn = container.querySelector('#dashboard-legend-goal') as HTMLButtonElement | null;
-  if (!beBtn || !goalBtn) return;
+  const { legendBreakEven, legendGoal } = getDashboardElements(container);
+  if (!legendBreakEven || !legendGoal) return;
 
-  beBtn.classList.toggle('is-active', dashboardLegendState.be);
-  beBtn.classList.toggle('is-inactive', !dashboardLegendState.be);
-  beBtn.setAttribute('aria-pressed', dashboardLegendState.be ? 'true' : 'false');
+  legendBreakEven.classList.toggle('is-active', dashboardLegendState.be);
+  legendBreakEven.classList.toggle('is-inactive', !dashboardLegendState.be);
+  legendBreakEven.setAttribute('aria-pressed', dashboardLegendState.be ? 'true' : 'false');
 
-  goalBtn.classList.toggle('is-active', dashboardLegendState.goal);
-  goalBtn.classList.toggle('is-inactive', !dashboardLegendState.goal);
-  goalBtn.setAttribute('aria-pressed', dashboardLegendState.goal ? 'true' : 'false');
+  legendGoal.classList.toggle('is-active', dashboardLegendState.goal);
+  legendGoal.classList.toggle('is-inactive', !dashboardLegendState.goal);
+  legendGoal.setAttribute('aria-pressed', dashboardLegendState.goal ? 'true' : 'false');
 }
 
 function updateGoalProgressVisual(
@@ -254,6 +281,7 @@ function updateGoalProgressVisual(
     uiState.goal,
     dashboardLegendState,
   );
+  const elements = getDashboardElements(container);
 
   let firstMilestonePct: number;
   let secondMilestonePct: number;
@@ -268,81 +296,82 @@ function updateGoalProgressVisual(
     firstSolidPct = Math.min(progressFill, firstMilestonePct);
     secondSolidPct = Math.max(0, Math.min(progressFill, secondMilestonePct) - firstMilestonePct);
   } else {
-    const singleTarget = details.targetAmount;
-    const progressFill = clampProgress(progressPct(uiState.balance, singleTarget));
+    const progressFill = clampProgress(progressPct(uiState.balance, details.targetAmount));
     firstMilestonePct = 100;
     firstSolidPct = progressFill;
     secondSolidPct = 0;
     secondMilestonePct = 0;
   }
 
-  const bar = container.querySelector('#dash-goal-progress-bar') as HTMLElement | null;
-  const mutedFirst = container.querySelector('#dash-prog-muted-first') as HTMLElement | null;
-  const mutedSecond = container.querySelector('#dash-prog-muted-second') as HTMLElement | null;
-  const solidFirst = container.querySelector('#dash-prog-solid-first') as HTMLElement | null;
-  const solidSecond = container.querySelector('#dash-prog-solid-second') as HTMLElement | null;
-  const currentEl = container.querySelector('#dash-prog-current') as HTMLElement | null;
-  const targetLabelEl = container.querySelector('#dash-prog-target-label') as HTMLElement | null;
-  const targetAmountEl = container.querySelector('#dash-prog-target-amount') as HTMLElement | null;
-  const remainingTextEl = container.querySelector(
-    '#dash-prog-remaining-text',
-  ) as HTMLElement | null;
-  const remainingAmountEl = container.querySelector(
-    '#dash-prog-remaining-amount',
-  ) as HTMLElement | null;
-  const remainingPrefixEl = container.querySelector(
-    '#dash-prog-remaining-prefix',
-  ) as HTMLElement | null;
-  const remainingTargetEl = container.querySelector(
-    '#dash-prog-remaining-target',
-  ) as HTMLElement | null;
+  if (
+    !elements.goalBar ||
+    !elements.goalMutedFirst ||
+    !elements.goalMutedSecond ||
+    !elements.goalSolidFirst ||
+    !elements.goalSolidSecond
+  ) {
+    return;
+  }
 
-  if (!bar || !mutedFirst || !mutedSecond || !solidFirst || !solidSecond) return;
+  elements.goalBar.classList.remove('mode-be', 'mode-goal', 'mode-both');
+  elements.goalBar.classList.add(modeToClass(details.mode));
 
-  bar.classList.remove('mode-be', 'mode-goal', 'mode-both');
-  bar.classList.add(modeToClass(details.mode));
+  elements.goalMutedFirst.style.width = `${firstMilestonePct}%`;
+  elements.goalMutedSecond.style.left = `${firstMilestonePct}%`;
+  elements.goalMutedSecond.style.width = `${Math.max(0, secondMilestonePct - firstMilestonePct)}%`;
+  elements.goalSolidFirst.style.width = `${firstSolidPct}%`;
+  elements.goalSolidSecond.style.left = `${firstMilestonePct}%`;
+  elements.goalSolidSecond.style.width = `${secondSolidPct}%`;
 
-  mutedFirst.style.width = `${firstMilestonePct}%`;
-  mutedSecond.style.left = `${firstMilestonePct}%`;
-  mutedSecond.style.width = `${Math.max(0, secondMilestonePct - firstMilestonePct)}%`;
-
-  solidFirst.style.width = `${firstSolidPct}%`;
-  solidSecond.style.left = `${firstMilestonePct}%`;
-  solidSecond.style.width = `${secondSolidPct}%`;
-
-  setCurrencyOutput(currentEl, uiState.balance, animateNumbers, GOAL_NUMBER_ANIM_MS);
-  setCurrencyOutput(targetAmountEl, details.targetAmount, animateNumbers, GOAL_NUMBER_ANIM_MS);
-  animateTextScramble(targetLabelEl, details.targetLabelShort, animateText);
+  setCurrencyOutput(elements.goalCurrent, uiState.balance, animateNumbers, GOAL_NUMBER_ANIM_MS);
+  setCurrencyOutput(
+    elements.goalTargetAmount,
+    details.targetAmount,
+    animateNumbers,
+    GOAL_NUMBER_ANIM_MS,
+  );
+  animateTextScramble(elements.goalTargetLabel, details.targetLabelShort, animateText);
 
   if (details.isReached) {
-    animateTextSwap(remainingTextEl, `${details.targetLabelShort} alcanzado`, animateText);
-    if (remainingAmountEl) remainingAmountEl.style.display = 'none';
-    if (remainingPrefixEl) remainingPrefixEl.style.display = 'none';
-    if (remainingTargetEl) remainingTargetEl.style.display = 'none';
+    animateTextSwap(
+      elements.goalRemainingText,
+      `${details.targetLabelShort} ${DASHBOARD_COPY.reachedSuffix}`,
+      animateText,
+    );
+    if (elements.goalRemainingAmount) elements.goalRemainingAmount.style.display = 'none';
+    if (elements.goalRemainingPrefix) elements.goalRemainingPrefix.style.display = 'none';
+    if (elements.goalRemainingTarget) elements.goalRemainingTarget.style.display = 'none';
   } else {
-    animateTextSwap(remainingTextEl, 'Faltan', animateText);
-    if (remainingAmountEl) {
-      remainingAmountEl.style.display = 'inline';
+    animateTextSwap(elements.goalRemainingText, DASHBOARD_COPY.remainingText, animateText);
+    if (elements.goalRemainingAmount) {
+      elements.goalRemainingAmount.style.display = 'inline';
       setCurrencyOutput(
-        remainingAmountEl,
+        elements.goalRemainingAmount,
         details.remainingAmount,
         animateNumbers,
         GOAL_NUMBER_ANIM_MS,
       );
     }
-    if (remainingPrefixEl) remainingPrefixEl.style.display = 'inline';
-    if (remainingTargetEl) {
-      remainingTargetEl.style.display = 'inline';
+    if (elements.goalRemainingPrefix) elements.goalRemainingPrefix.style.display = 'inline';
+    if (elements.goalRemainingTarget) {
+      elements.goalRemainingTarget.style.display = 'inline';
       animateTextScramble(
-        remainingTargetEl,
-        details.target === 'be' ? 'breakeven' : 'la meta',
+        elements.goalRemainingTarget,
+        details.target === 'be'
+          ? DASHBOARD_COPY.breakEvenTargetText
+          : DASHBOARD_COPY.goalTargetText,
         animateText,
       );
     }
   }
 
   if (details.isReached) {
-    setDaysLabel(container, `${details.targetLabelShort} alcanzado`, true, animateText);
+    setDaysLabel(
+      container,
+      `${details.targetLabelShort} ${DASHBOARD_COPY.reachedSuffix}`,
+      true,
+      animateText,
+    );
   } else if (uiState.apr && uiState.apr > 0) {
     const daysRemaining = estimateDaysToTargetWithProjectionSnapshot(
       uiState.balance,
@@ -361,6 +390,7 @@ function updateGoalProgressVisual(
     setDaysLabel(container, '', false, animateText);
   }
 
+  syncGoalProgressAccessibility(container, uiState.balance, details);
   updateLegendButtons(container);
 }
 
@@ -372,249 +402,129 @@ function updateDashboardSummaryVisual(
 ): void {
   const loss = uiState.balance - uiState.invested;
   const lossPct = uiState.invested > 0 ? (loss / uiState.invested) * 100 : 0;
-  const balanceDate = formatDateLatin(lastUpdatedIso);
+  const elements = getDashboardElements(container);
 
-  const investedEl = container.querySelector('#dash-invested') as HTMLElement | null;
-  const balanceEl = container.querySelector('#dash-balance') as HTMLElement | null;
-  const balanceDateEl = container.querySelector('#dash-balance-date') as HTMLElement | null;
-  const pnlEl = container.querySelector('#dash-pnl') as HTMLElement | null;
-  const pnlPctEl = container.querySelector('#dash-pnl-pct') as HTMLElement | null;
+  setCurrencyOutput(elements.invested, uiState.invested, animate);
+  setCurrencyOutput(elements.balance, uiState.balance, animate);
+  setStaticTextOutput(elements.balanceDate, formatDateLatin(lastUpdatedIso));
 
-  setCurrencyOutput(investedEl, uiState.invested, animate);
-  setCurrencyOutput(balanceEl, uiState.balance, animate);
-  setStaticTextOutput(balanceDateEl, balanceDate);
-
-  if (pnlEl) {
-    pnlEl.className = `big-number ${loss >= 0 ? 'gain' : 'loss'}`;
-    setCurrencyOutput(pnlEl, loss, animate);
+  if (elements.pnl) {
+    elements.pnl.className = `big-number ${loss >= 0 ? 'gain' : 'loss'}`;
+    setCurrencyOutput(elements.pnl, loss, animate);
   }
 
-  if (pnlPctEl) {
-    pnlPctEl.className = `mono ${loss >= 0 ? 'text-gain' : 'text-loss'}`;
-    setPercentOutput(pnlPctEl, lossPct, animate, true);
+  if (elements.pnlPct) {
+    elements.pnlPct.className = `mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}`;
+    setPercentOutput(elements.pnlPct, lossPct, animate, true);
   }
 }
 
-function setTextResult(el: HTMLElement | null, text: string, animate: boolean): void {
-  if (!el) return;
-  stopValueAnimation(valueAnimationByElement, el);
-  delete el.dataset.numericValue;
-  animateTextSwap(el, text, animate);
+function renderBalanceDetail(
+  container: HTMLElement,
+  balances: BinanceAccountBalance[] | null,
+): void {
+  const { balanceStrip, balanceStripItems } = getDashboardElements(container);
+  if (!balanceStrip || !balanceStripItems) return;
+
+  const relevant = (balances ?? [])
+    .map((balance) => ({ ...balance, total: balance.free + balance.locked }))
+    .sort((left, right) => right.total - left.total)
+    .slice(0, DASHBOARD_BALANCE_VISIBLE_ITEMS);
+
+  balanceStrip.hidden = false;
+
+  if (relevant.length === 0) {
+    balanceStripItems.innerHTML = renderBalanceEmptyState();
+    return;
+  }
+
+  renderBalanceDetailCards(balanceStripItems, relevant);
+}
+
+function createInitialUiState(state: AppState): DashboardUiState {
+  const displayBalance =
+    state.positions.length === 0 ? state.portfolio.savings : state.portfolio.currentBalance;
+  return {
+    balance: displayBalance,
+    invested: state.portfolio.totalInvested,
+    goal: state.portfolio.goalAmount,
+    apr: null,
+    frequency: readSimulatorFrequency('daily'),
+  };
+}
+
+function renderInitialDashboard(container: HTMLElement, state: AppState): DashboardUiState {
+  const uiState = createInitialUiState(state);
+  const progressScale = progressScaleTarget(uiState.invested, uiState.goal);
+  const progressFill = clampProgress(progressPct(uiState.balance, progressScale));
+  const firstMilestonePct = progressMarkerPct(uiState.invested, progressScale);
+  const secondMilestonePct = progressMarkerPct(uiState.goal, progressScale);
+  const autoModeEnabled = isAutoMode();
+
+  container.innerHTML = renderDashboardTemplate({
+    balance: uiState.balance,
+    goalAmount: uiState.goal,
+    invested: uiState.invested,
+    lastUpdatedIso: state.portfolio.lastUpdated,
+    positionsCount: state.positions.length,
+    autoModeEnabled,
+    hasApiCredentials: hasApiCredentials(),
+    firstMilestonePct,
+    secondMilestonePct,
+    progressFill,
+  });
+
+  return uiState;
 }
 
 export function renderDashboard(container: HTMLElement): () => void {
   const state = loadState();
-  const { portfolio, positions } = state;
   dashboardLegendState = loadDashboardLegendState(sanitizeDashboardLegendState(undefined));
 
-  const displayBalance = positions.length === 0 ? portfolio.savings : portfolio.currentBalance;
-  const loss = displayBalance - portfolio.totalInvested;
-  const lossPct = (loss / portfolio.totalInvested) * 100;
-  const progressScale = progressScaleTarget(portfolio.totalInvested, portfolio.goalAmount);
-  const progressFill = clampProgress(progressPct(displayBalance, progressScale));
-  const firstMilestonePct = progressMarkerPct(portfolio.totalInvested, progressScale);
-  const secondMilestonePct = progressMarkerPct(portfolio.goalAmount, progressScale);
+  const uiState = renderInitialDashboard(container, state);
+  const unsubConfig = onApiConfigChange(() => {
+    const updatedState = loadState();
+    uiState.balance = updatedState.portfolio.currentBalance;
+    uiState.invested = updatedState.portfolio.totalInvested;
+    uiState.goal = updatedState.portfolio.goalAmount;
+    uiState.frequency = readSimulatorFrequency(uiState.frequency);
+    updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
+    updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+  });
 
-  const uiState: DashboardUiState = {
-    balance: displayBalance,
-    invested: portfolio.totalInvested,
-    goal: portfolio.goalAmount,
-    apr: null,
-    frequency: readSimulatorFrequency('daily'),
-  };
-
-  container.innerHTML = `
-    <div class="section">
-      <div class="section-header">
-        <h2 class="section-title">Portfolio</h2>
-        <div class="flex-row gap-sm">
-          <button class="btn btn-sm" id="btn-edit-balance">${iconWallet(14)}Ahorros</button>
-          <button class="btn btn-sm" id="btn-edit-settings">${iconSettings(14)}Configurar</button>
-        </div>
-      </div>
-
-      <div class="grid-3">
-        <div class="card">
-          <div class="card-title">Invertido total</div>
-          <div class="big-number" id="dash-invested">${formatUSD(portfolio.totalInvested)}</div>
-        </div>
-        <div class="card">
-          <div class="card-title">Saldo total</div>
-          <div class="big-number accent" id="dash-balance">${formatUSD(displayBalance)}</div>
-          <div class="text-muted sub-text" id="dash-balance-date">
-            ${formatDateLatin(portfolio.lastUpdated)}
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-title">P&L</div>
-          <div class="big-number ${loss >= 0 ? 'gain' : 'loss'}" id="dash-pnl">
-            ${formatUSD(loss)}
-          </div>
-          <div id="dash-pnl-pct" class="mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}">
-            ${formatPct(lossPct)}
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Progreso: breakeven y meta</div>
-        <div class="goal-progress-head">
-          <span class="mono goal-progress-value" id="dash-prog-current">${formatUSD(displayBalance)}</span>
-          <span class="mono text-secondary goal-progress-value goal-progress-target" id="dash-prog-target">
-            <span class="goal-progress-target-label" id="dash-prog-target-label">Meta</span>
-            <span id="dash-prog-target-amount">${formatUSD(portfolio.goalAmount)}</span>
-          </span>
-        </div>
-        <div class="progress-bar goal-progress-bar mode-both" id="dash-goal-progress-bar">
-          <div class="goal-progress-zone-muted breakeven zone-first" id="dash-prog-muted-first" style="width:${firstMilestonePct}%"></div>
-          <div class="goal-progress-zone-muted goal zone-second" id="dash-prog-muted-second" style="left:${firstMilestonePct}%;width:${Math.max(0, secondMilestonePct - firstMilestonePct)}%"></div>
-          <div class="goal-progress-zone breakeven zone-first" id="dash-prog-solid-first" style="width:${Math.min(progressFill, firstMilestonePct)}%"></div>
-          <div class="goal-progress-zone goal zone-second" id="dash-prog-solid-second" style="left:${firstMilestonePct}%;width:${Math.max(0, Math.min(progressFill, secondMilestonePct) - firstMilestonePct)}%"></div>
-        </div>
-        <div class="goal-progress-foot">
-          <div class="text-secondary goal-progress-remaining" id="dash-prog-remaining">
-            <span id="dash-prog-remaining-text">Faltan</span>
-            <span class="mono" id="dash-prog-remaining-amount">${formatUSD(Math.max(0, portfolio.goalAmount - displayBalance))}</span>
-            <span id="dash-prog-remaining-prefix">para</span>
-            <span id="dash-prog-remaining-target">la meta</span>
-          </div>
-          <div class="goal-progress-meta">
-            <button type="button" class="goal-progress-legend is-active" id="dashboard-legend-be" data-legend="be" aria-pressed="true">
-              <span class="goal-progress-dot breakeven"></span>BE
-            </button>
-            <button type="button" class="goal-progress-legend is-active" id="dashboard-legend-goal" data-legend="goal" aria-pressed="true">
-              <span class="goal-progress-dot goal"></span>Meta
-            </button>
-            <span class="text-muted goal-progress-sep" id="dashboard-days-sep">/</span>
-            <span class="mono" id="dashboard-days">${skeletonSpan('72px')}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid-4">
-        <div class="stat-card" data-shared-card="apr">
-          <div class="card-title">APR promedio</div>
-          <div class="stat-value" id="dashboard-apr">
-            ${skeletonSpan('70px')}
-          </div>
-        </div>
-        <div class="stat-card" data-shared-card="capital">
-          <div class="card-title">En posiciones</div>
-          <div class="stat-value" id="dashboard-capital">
-            ${skeletonSpan('90px')}
-          </div>
-        </div>
-        <div class="stat-card" data-shared-card="daily">
-          <div class="card-title">Run-rate diario est.</div>
-          <div class="stat-value" id="dashboard-daily">
-            ${skeletonSpan('70px')}
-          </div>
-        </div>
-        <div class="stat-card" data-shared-card="positions">
-          <div class="card-title">Posiciones activas</div>
-          <div class="stat-value">
-            ${positions.length}
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <dialog id="modal-balance" class="modal-overlay">
-      <div class="modal">
-        <h3 class="modal-title">Ahorros</h3>
-        <div class="form-group">
-          <label for="input-balance">Efectivo / stablecoins fuera de posiciones (USD)</label>
-          <input type="text" id="input-balance" inputmode="decimal" value="${formatEditableCurrency(portfolio.savings)}">
-        </div>
-        <div class="modal-actions">
-          <button class="btn" id="btn-cancel-balance">Cancelar</button>
-          <button class="btn btn-primary" id="btn-save-balance">Guardar</button>
-        </div>
-      </div>
-    </dialog>
-
-    <dialog id="modal-settings" class="modal-overlay">
-      <div class="modal">
-        <h3 class="modal-title">Configuracion</h3>
-        <div class="form-group">
-          <label for="input-invested">Total invertido (USD)</label>
-          <input type="text" id="input-invested" inputmode="decimal" value="${formatEditableCurrency(portfolio.totalInvested)}">
-        </div>
-        <div class="form-group">
-          <label for="input-goal">Meta (USD)</label>
-          <input type="text" id="input-goal" inputmode="decimal" value="${formatEditableCurrency(portfolio.goalAmount)}">
-        </div>
-        <div class="modal-actions">
-          <button class="btn" id="btn-cancel-settings">Cancelar</button>
-          <button class="btn btn-primary" id="btn-save-settings">Guardar</button>
-        </div>
-      </div>
-    </dialog>
-  `;
-
-  bindDashboardEvents(
-    container,
-    {
-      onSaveBalance: (savings) => {
-        const before = loadState();
-        const basePositionsValue =
-          before.positions.length > 0
-            ? before.portfolio.currentBalance - before.portfolio.savings
-            : 0;
-        const nextBalance = Math.max(0, Math.round((basePositionsValue + savings) * 100) / 100);
-        updatePortfolio({ savings });
-        const updatedState = updateBalance(nextBalance);
-
-        uiState.balance = updatedState.portfolio.currentBalance;
-        uiState.invested = updatedState.portfolio.totalInvested;
-        uiState.goal = updatedState.portfolio.goalAmount;
-        uiState.frequency = readSimulatorFrequency(uiState.frequency);
-
-        updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
-        updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
-      },
-      onSaveSettings: (invested, goal) => {
-        const updatedState = updatePortfolio({ totalInvested: invested, goalAmount: goal });
-
-        uiState.balance = updatedState.portfolio.currentBalance;
-        uiState.invested = updatedState.portfolio.totalInvested;
-        uiState.goal = updatedState.portfolio.goalAmount;
-        uiState.frequency = readSimulatorFrequency(uiState.frequency);
-
-        updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
-        updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
-      },
-    },
-    parseFlexibleNumber,
-  );
   bindGoalLegendEvents(container, uiState);
   updateGoalProgressVisual(container, uiState, { animateNumbers: false, animateText: false });
 
   requestAnimationFrame(() => {
-    updateDashboardSummaryVisual(container, uiState, portfolio.lastUpdated, true);
+    updateDashboardSummaryVisual(container, uiState, state.portfolio.lastUpdated, true);
   });
 
   let disposed = false;
   let hasFirstMarketHydrationCompleted = false;
 
+  void hydrateDashboardMarketStats(container, loadState().positions, uiState, false, false).finally(
+    () => {
+      hasFirstMarketHydrationCompleted = true;
+    },
+  );
+
   const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
     if (disposed || !container.isConnected) return;
-    const { positions: latestPositions } = loadState();
-    const animateGoalSection = hasFirstMarketHydrationCompleted;
+    const { positions } = loadState();
     await hydrateDashboardMarketStats(
       container,
-      latestPositions,
+      positions,
       uiState,
       forceRefresh,
-      animateGoalSection,
+      hasFirstMarketHydrationCompleted,
     );
     hasFirstMarketHydrationCompleted = true;
-  });
+  }, false);
 
   return () => {
     disposed = true;
     unsubscribeMarket();
+    unsubConfig();
   };
 }
 
@@ -639,10 +549,8 @@ async function hydrateDashboardMarketStats(
   forceRefresh = false,
   animateGoalSection = true,
 ): Promise<void> {
-  const aprEl = container.querySelector('#dashboard-apr') as HTMLElement | null;
-  const capitalEl = container.querySelector('#dashboard-capital') as HTMLElement | null;
-  const dailyEl = container.querySelector('#dashboard-daily') as HTMLElement | null;
-  if (!aprEl || !capitalEl || !dailyEl) return;
+  const { apr, capital, daily } = getDashboardElements(container);
+  if (!apr || !capital || !daily) return;
 
   const currentState = loadState();
   uiState.balance = currentState.portfolio.currentBalance;
@@ -650,17 +558,38 @@ async function hydrateDashboardMarketStats(
   uiState.goal = currentState.portfolio.goalAmount;
   uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
+  const shouldHydrateBinanceBalance = isAutoMode() && hasApiCredentials();
+  let autoBalanceSummary: Awaited<ReturnType<typeof fetchBalanceSummary>> | null = null;
+
+  if (shouldHydrateBinanceBalance) {
+    try {
+      autoBalanceSummary = !forceRefresh ? getCachedBalanceSummary() : null;
+      if (!autoBalanceSummary) {
+        autoBalanceSummary = await fetchBalanceSummary(forceRefresh);
+        rememberBalanceSummary(autoBalanceSummary);
+      }
+      renderBalanceDetail(container, autoBalanceSummary.balances);
+    } catch {
+      renderBalanceDetail(container, null);
+    }
+  } else {
+    renderBalanceDetail(container, null);
+  }
+
   if (positions.length === 0) {
-    const savingsOnlyBalance = Math.round(currentState.portfolio.savings * 100) / 100;
+    const savingsOnlyBalance =
+      Math.round((autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.savings) * 100) /
+      100;
     const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
+
     if (Math.abs(savingsOnlyBalance - storedBalance) >= 0.01) {
       const updatedState = updateBalance(savingsOnlyBalance);
       updateBalanceInPlace(container, savingsOnlyBalance, uiState, updatedState.portfolio, false);
     }
 
-    setTextResult(aprEl, '---', true);
-    setTextResult(capitalEl, '---', true);
-    setTextResult(dailyEl, '---', true);
+    setTextResult(apr, '---', true);
+    setTextResult(capital, '---', true);
+    setTextResult(daily, '---', true);
     uiState.apr = null;
     updateGoalProgressVisual(container, uiState, {
       animateNumbers: animateGoalSection,
@@ -670,10 +599,10 @@ async function hydrateDashboardMarketStats(
   }
 
   try {
-    const metrics = await calculatePositionMetrics(positions, { forceRefresh });
-    registerApiLastUpdatedAt(metrics.marketLastUpdatedAt);
+    const { snapshot, metrics } = await getSharedMarketData(positions, forceRefresh);
+    registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
 
-    const savings = currentState.portfolio.savings;
+    const savings = autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.savings;
     const totalBalance = Math.round((metrics.totalUsd + savings) * 100) / 100;
     const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
     const now = Date.now();
@@ -689,24 +618,25 @@ async function hydrateDashboardMarketStats(
       updateBalanceInPlace(container, totalBalance, uiState, updatedState.portfolio, false);
     }
 
-    aprEl.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
+    apr.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
     if (metrics.weightedApr > 0) {
-      setPercentOutput(aprEl, metrics.weightedApr, true, false);
+      setPercentOutput(apr, metrics.weightedApr, true, false);
     } else {
-      setTextResult(aprEl, '---', true);
+      setTextResult(apr, '---', true);
     }
 
     if (metrics.totalUsd > 0) {
-      setCurrencyOutput(capitalEl, metrics.totalUsd, true);
+      setCurrencyOutput(capital, metrics.totalUsd, true);
     } else {
-      setTextResult(capitalEl, '---', true);
+      setTextResult(capital, '---', true);
     }
 
-    dailyEl.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
+    daily.style.color =
+      metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
     if (metrics.dailyEarningsUsd > 0) {
-      setCurrencyOutput(dailyEl, metrics.dailyEarningsUsd, true);
+      setCurrencyOutput(daily, metrics.dailyEarningsUsd, true);
     } else {
-      setTextResult(dailyEl, '---', true);
+      setTextResult(daily, '---', true);
     }
 
     if (metrics.hasStalePrices || metrics.hasUnavailablePrices) {
@@ -740,6 +670,7 @@ function bindGoalLegendEvents(container: HTMLElement, uiState: DashboardUiState)
   const legendButtons = container.querySelectorAll<HTMLButtonElement>(
     '.goal-progress-legend[data-legend]',
   );
+
   legendButtons.forEach((button) => {
     button.addEventListener('click', () => {
       const legend = button.dataset.legend;

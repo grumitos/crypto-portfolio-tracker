@@ -52,3 +52,36 @@ export function resolveAssetLogoSources(asset: string): {
     alt: `${normalized} logo`,
   };
 }
+
+export function bindAssetLogoFallbacks(root: ParentNode): void {
+  root.querySelectorAll<HTMLElement>('[data-asset-logo-root]').forEach((logoRoot) => {
+    if (logoRoot.dataset.logoBound === 'true') return;
+
+    const img = logoRoot.querySelector<HTMLImageElement>('[data-asset-logo-img]');
+    const fallback = logoRoot.querySelector<HTMLElement>('[data-asset-logo-fallback]');
+    if (!img || !fallback) return;
+
+    const fallbackSrc = img.dataset.fallback;
+
+    const showFallback = (): void => {
+      img.style.display = 'none';
+      fallback.style.display = 'inline-flex';
+    };
+
+    img.addEventListener('load', () => {
+      img.style.display = '';
+      fallback.style.display = 'none';
+    });
+
+    img.addEventListener('error', () => {
+      if (fallbackSrc && img.dataset.fallback !== '') {
+        img.dataset.fallback = '';
+        img.src = fallbackSrc;
+        return;
+      }
+      showFallback();
+    });
+
+    logoRoot.dataset.logoBound = 'true';
+  });
+}

@@ -111,6 +111,9 @@ export interface StrategyResults {
 export interface AppState {
   portfolio: PortfolioData;
   positions: DualPosition[];
+  manualPositions: DualPosition[];
+  autoPositions: DualPosition[];
+  positionsConfig: PositionsConfig;
 }
 
 // ── Navigation ──
@@ -133,4 +136,87 @@ export interface DashboardGoalDetails {
   isReached: boolean;
   targetLabelShort: 'BE' | 'Meta';
   targetLabelLong: 'breakeven' | 'meta';
+}
+
+// ── Positions mode ──
+export type PositionsMode = 'manual' | 'auto';
+
+export interface PositionsConfig {
+  mode: PositionsMode;
+}
+
+// ── Binance API ──
+export interface BinanceApiCredentials {
+  apiKey: string;
+  apiSecret: string;
+  tradingPin?: string; // hashed PIN for Level 2
+}
+
+export type DualOptionType = 'CALL' | 'PUT';
+
+export interface DualProduct {
+  id: string;
+  investCoin: string; // e.g. "USDT"
+  exercisedCoin: string; // e.g. "BTC"
+  orderId?: string;
+  strikePrice: number;
+  duration: number; // days
+  settleDate: string; // ISO date
+  apr: number;
+  minAmount: number;
+  maxAmount: number;
+  optionType: DualOptionType; // CALL = sell-high, PUT = buy-low
+  purchaseDecimal: number; // decimal places for amount
+  perValue: number; // per unit value
+  purchaseEndTime: number; // timestamp ms
+  canPurchase?: boolean;
+}
+
+export interface ScoreBreakdown {
+  yieldScore: number;
+  safetyScore: number;
+  durationScore: number;
+  trendScore: number;
+  compoundScore: number;
+}
+
+export interface DualProductScored extends DualProduct {
+  score: number;
+  scoreBreakdown: ScoreBreakdown;
+  spotPrice: number;
+  distancePercent: number; // (strike - spot) / spot for CALL, (spot - strike) / spot for PUT
+}
+
+export interface DualMarketFilters {
+  asset?: string;
+  direction?: Direction;
+  minApr?: number;
+  maxDuration?: number;
+}
+
+export interface DualMarketState {
+  filters: DualMarketFilters;
+}
+
+export interface BinanceAccountBalance {
+  asset: string;
+  free: number;
+  locked: number;
+}
+
+export interface BinanceDualPosition {
+  id: string;
+  investCoin: string;
+  exercisedCoin: string;
+  orderId?: string;
+  strikePrice: number;
+  amount: number;
+  duration: number;
+  settleDate: string;
+  apr: number;
+  purchaseStatus?: string;
+  purchaseEndTime?: number;
+  optionType: DualOptionType;
+  purchaseTime?: number; // timestamp ms
+  status: string;
 }

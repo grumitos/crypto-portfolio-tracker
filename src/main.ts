@@ -10,16 +10,17 @@ import {
   iconLayers,
   iconTrendingUp,
   iconCalculator,
-  iconArchive,
+  iconSettings,
   iconSun,
   iconMoon,
 } from './utils/icons';
 import type { View } from './types';
-import { renderBackupModal, bindBackupEvents } from './components/backup';
 import { enhanceNumberSteppers } from './utils/number-stepper';
 import { getCurrentView, initRouter, navigateTo, handleTransitionEntry } from './utils/router';
 import { onStorageChange } from './utils/storage';
-import { openModal } from './utils/modal-manager';
+import { openApiConfigModal } from './components/positions/api-config-modal';
+import { renderAppShell } from './components/app-shell.template';
+import type { AppShellNavItem } from './components/app-shell.constants';
 
 let disposeActiveView: (() => void) | null = null;
 
@@ -33,25 +34,13 @@ function init(): void {
 
   initTheme();
 
-  // Render shell (header + nav + backup modal) once
-  app.innerHTML = `
-    <header class="app-header">
-      <div class="app-brand">
-        <h1 class="app-title">Crypto <span>Portfolio Tracker</span></h1>
-        <div class="app-last-update" id="app-last-update">Actualizado: pendiente</div>
-      </div>
-      <nav class="nav" aria-label="Vistas principales">
-        <button class="nav-btn active" data-view="dashboard">${iconDashboard(15)}Dashboard</button>
-        <button class="nav-btn" data-view="positions">${iconLayers(15)}Posiciones</button>
-        <button class="nav-btn" data-view="simulator">${iconTrendingUp(15)}Simulador</button>
-        <button class="nav-btn" data-view="calculadora">${iconCalculator(15)}Calculadora</button>
-        <button class="nav-btn" id="btn-backup" title="Exportar/Importar datos" aria-label="Exportar/Importar datos">${iconArchive(15)}</button>
-        <button class="theme-toggle" id="btn-theme" title="Cambiar tema" aria-label="Cambiar tema">${themeIcon()}</button>
-      </nav>
-    </header>
-    <main id="view-container"></main>
-    ${renderBackupModal()}
-  `;
+  const navItems: AppShellNavItem[] = [
+    { view: 'dashboard', label: 'Dashboard', icon: iconDashboard(15), active: true },
+    { view: 'positions', label: 'Posiciones', icon: iconLayers(15), active: false },
+    { view: 'simulator', label: 'Simulador', icon: iconTrendingUp(15), active: false },
+    { view: 'calculadora', label: 'Calculadora', icon: iconCalculator(15), active: false },
+  ];
+  app.innerHTML = renderAppShell(iconSettings(15), themeIcon(), navItems);
 
   // Nav events (bound once)
   app.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
@@ -74,8 +63,10 @@ function init(): void {
     if (themeBtn) themeBtn.innerHTML = themeIcon();
   });
 
-  const onStateChange = () => renderView(app, getCurrentView());
-  bindBackupEvents(app, onStateChange);
+  app.querySelector('#btn-config')?.addEventListener('click', () => {
+    openApiConfigModal();
+  });
+
   enhanceNumberSteppers(app);
   syncApiLastUpdatedLabel();
 
@@ -98,10 +89,10 @@ function init(): void {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-    // Ctrl+S / Cmd+S → open backup modal
+    // Ctrl+S / Cmd+S → open unified config modal
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
-      openModal(app.querySelector('#modal-backup'));
+      openApiConfigModal();
       return;
     }
 

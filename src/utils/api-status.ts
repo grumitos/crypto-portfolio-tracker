@@ -1,5 +1,6 @@
 import { API_LAST_UPDATED_KEY } from './storage';
 import { MARKET_POLL_INTERVAL_MS, ONE_SECOND_MS } from './constants';
+import { getNextMarketPollAt } from './market-poller';
 
 const API_LAST_UPDATED_ELEMENT_ID = 'app-last-update';
 const API_STATUS_REFRESH_MS = ONE_SECOND_MS;
@@ -7,7 +8,7 @@ const API_STATUS_REFRESH_MS = ONE_SECOND_MS;
 let cachedLastUpdatedAt: number | null | undefined;
 let hasApiFailure = false;
 let statusTicker: ReturnType<typeof setInterval> | null = null;
-let lastApiPollTickAt: number | null = null;
+let fallbackNextPollAt: number | null = null;
 
 function normalizeTimestamp(value: unknown): number | null {
   const parsed = Number(value);
@@ -50,32 +51,57 @@ function formatRelativeElapsed(ts: number): string {
   if (hours < 24) return `hace ${hours} hora${hours === 1 ? '' : 's'}`;
 
   const days = Math.floor(hours / 24);
-  return `hace ${days} dia${days === 1 ? '' : 's'}`;
+  return `hace ${days} día${days === 1 ? '' : 's'}`;
 }
 
-function formatCountdownLabel(referenceTs: number | null, prefix: string): string {
-  if (!referenceTs) return `${prefix} pendiente`;
-  const elapsedMs = Date.now() - referenceTs;
-  const remainingMs = MARKET_POLL_INTERVAL_MS - elapsedMs;
+function resolveNextPollAt(): number | null {
+  const scheduledByPoller = getNextMarketPollAt();
+  if (scheduledByPoller) {
+    fallbackNextPollAt = scheduledByPoller;
+    return scheduledByPoller;
+  }
+
+  if (fallbackNextPollAt && fallbackNextPollAt > Date.now()) {
+    return fallbackNextPollAt;
+  }
+
+  return fallbackNextPollAt;
+}
+
+function ensureFallbackNextPollAt(): void {
+  const scheduledByPoller = getNextMarketPollAt();
+  if (scheduledByPoller) {
+    fallbackNextPollAt = scheduledByPoller;
+    return;
+  }
+
+  if (!fallbackNextPollAt || fallbackNextPollAt <= Date.now()) {
+    fallbackNextPollAt = Date.now() + MARKET_POLL_INTERVAL_MS;
+  }
+}
+
+function formatCountdownLabel(nextPollAt: number | null, prefix: string): string {
+  if (!nextPollAt) return `${prefix} pendiente`;
+  const remainingMs = nextPollAt - Date.now();
   const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   return `${prefix} en ${remainingSeconds}s`;
 }
 
 function resolveHeaderLabel(ts: number | null): string {
-  const pollReferenceTs = lastApiPollTickAt ?? ts;
+  const nextPollAt = resolveNextPollAt();
 
   if (!ts) {
     if (hasApiFailure) {
-      return `Actualizacion: sin conexion · ${formatCountdownLabel(pollReferenceTs, 'reintento')}`;
+      return `Actualización: sin conexión · ${formatCountdownLabel(nextPollAt, 'reintento')}`;
     }
     return 'Actualizado: pendiente';
   }
 
   const relative = formatRelativeElapsed(ts);
   if (hasApiFailure) {
-    return `Actualizacion: error · ultimo dato ${relative} · ${formatCountdownLabel(pollReferenceTs, 'reintento')}`;
+    return `Actualización: error · último dato ${relative} · ${formatCountdownLabel(nextPollAt, 'reintento')}`;
   }
-  return formatCountdownLabel(pollReferenceTs, 'proxima actualizacion');
+  return formatCountdownLabel(nextPollAt, 'próxima actualización');
 }
 
 function updateHeaderLabel(): void {
@@ -114,7 +140,7 @@ export function registerApiLastUpdatedAt(nextValue: number | null): void {
   const latest = current ? Math.max(current, normalized) : normalized;
   cachedLastUpdatedAt = latest;
   hasApiFailure = false;
-  lastApiPollTickAt = Date.now();
+  ensureFallbackNextPollAt();
   writeStoredTimestamp(latest);
   ensureStatusTicker();
   updateHeaderLabel();
@@ -122,7 +148,7 @@ export function registerApiLastUpdatedAt(nextValue: number | null): void {
 
 export function registerApiFailure(): void {
   hasApiFailure = true;
-  lastApiPollTickAt = Date.now();
+  ensureFallbackNextPollAt();
   ensureStatusTicker();
   updateHeaderLabel();
 }

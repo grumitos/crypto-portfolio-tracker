@@ -4,12 +4,14 @@ import { SIMULATOR_VIEW_KEY, saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import * as calculator from '../utils/calculator';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
-import { calculatePositionMetrics } from '../utils/market';
+import { getSharedMarketData } from '../utils/api-runtime-cache';
 import { registerApiFailure } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
+import { resetMarketPollerForTests } from '../utils/market-poller';
 
-vi.mock('../utils/market', () => ({
-  calculatePositionMetrics: vi.fn(),
+vi.mock('../utils/api-runtime-cache', () => ({
+  getSharedMarketData: vi.fn(),
+  clearApiRuntimeCache: vi.fn(),
 }));
 
 vi.mock('../utils/api-status', () => ({
@@ -45,16 +47,34 @@ function mockAutoMetrics({
   totalUsd?: number;
   weightedApr?: number;
 } = {}): void {
-  vi.mocked(calculatePositionMetrics).mockResolvedValue({
-    totalUsd,
-    weightedApr,
-    dailyEarningsUsd: 0.4,
-    usdByPositionId: { p1: totalUsd },
-    priceByAsset: { USDT: 1 },
-    marketLastUpdatedAt: Date.now(),
-    hasStalePrices: false,
-    hasUnavailablePrices: false,
-    priceSourceByAsset: { USDT: 'stable' },
+  vi.mocked(getSharedMarketData).mockResolvedValue({
+    positionsKey: 'p1',
+    snapshot: {
+      priceByAsset: { BTC: 50000, ETH: 2000, BNB: 500, SOL: 150, USDT: 1, USDC: 1 },
+      sourceByAsset: {
+        BTC: 'live',
+        ETH: 'live',
+        BNB: 'live',
+        SOL: 'live',
+        USDT: 'stable',
+        USDC: 'stable',
+      },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+      changePercent24hByAsset: { BTC: 0, ETH: 0, BNB: 0, SOL: 0, USDT: 0, USDC: 0 },
+    },
+    metrics: {
+      totalUsd,
+      weightedApr,
+      dailyEarningsUsd: 0.4,
+      usdByPositionId: { p1: totalUsd },
+      priceByAsset: { USDT: 1 },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+      priceSourceByAsset: { USDT: 'stable' },
+    },
   });
 }
 
@@ -69,6 +89,9 @@ function seedState(options: SeedSimulatorOptions = {}): void {
       balanceHistory: [{ date: '2026-02-21', balance: 1000 }],
     },
     positions: options.positions ?? [DEFAULT_POSITION],
+    manualPositions: options.positions ?? [DEFAULT_POSITION],
+    autoPositions: [],
+    positionsConfig: { mode: 'manual' },
   };
 
   saveState(state);
@@ -84,6 +107,7 @@ describe('simulator dual milestones', () => {
     });
     mockMatchMedia(true);
     resetDom();
+    resetMarketPollerForTests();
     seedState();
     mockAutoMetrics();
   });
@@ -357,7 +381,7 @@ describe('simulator dual milestones', () => {
 
   it('handles auto-value hydration failures by reporting API error', async () => {
     seedState({ positions: [DEFAULT_POSITION] });
-    vi.mocked(calculatePositionMetrics).mockRejectedValue(new Error('api down'));
+    vi.mocked(getSharedMarketData).mockRejectedValue(new Error('api down'));
 
     const container = document.createElement('div');
     document.body.appendChild(container);

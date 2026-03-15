@@ -44,13 +44,13 @@ describe('api-status utils', () => {
     const apiStatus = await loadApiStatus();
 
     apiStatus.registerApiFailure();
-    expect(target.textContent).toContain('sin conexion');
+    expect(target.textContent).toContain('sin conexión');
     expect(target.textContent).toContain('reintento en 60s');
     expect(target.classList.contains('is-error')).toBe(true);
 
     apiStatus.registerApiLastUpdatedAt(new Date('2026-02-21T00:00:05.000Z').getTime());
 
-    expect(target.textContent).toBe('proxima actualizacion en 60s');
+    expect(target.textContent).toBe('próxima actualización en 60s');
     expect(target.classList.contains('is-error')).toBe(false);
   });
 
@@ -62,8 +62,8 @@ describe('api-status utils', () => {
     apiStatus.registerApiLastUpdatedAt(new Date('2026-02-21T00:01:30.000Z').getTime());
     apiStatus.registerApiFailure();
 
-    expect(target.textContent).toContain('Actualizacion: error');
-    expect(target.textContent).toContain('ultimo dato');
+    expect(target.textContent).toContain('Actualización: error');
+    expect(target.textContent).toContain('último dato');
     expect(target.textContent).toContain('reintento en 60s');
     expect(target.classList.contains('is-error')).toBe(true);
   });
@@ -84,9 +84,9 @@ describe('api-status utils', () => {
     const apiStatus = await loadApiStatus();
 
     apiStatus.registerApiLastUpdatedAt(new Date('2026-02-20T23:59:59.000Z').getTime());
-    expect(target.textContent).toBe('proxima actualizacion en 60s');
+    expect(target.textContent).toBe('próxima actualización en 60s');
 
     vi.advanceTimersByTime(61_000);
-    expect(target.textContent).toBe('proxima actualizacion en 0s');
+    expect(target.textContent).toBe('próxima actualización en 0s');
   });
 });

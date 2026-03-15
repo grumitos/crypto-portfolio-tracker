@@ -1,8 +1,29 @@
-// ── Theme Management ──
-// Handles light/dark mode with system preference detection,
-// localStorage persistence, and runtime theme switching.
-
 const STORAGE_KEY = 'crypto-theme';
+const THEME_COLOR_VAR = '--browser-theme-color';
+const FAVICON_STROKE_VAR = '--favicon-stroke-encoded';
+
+const CSS_FALLBACKS = {
+  browserThemeColorLight: '#FAF9F5',
+  browserThemeColorDark: '#262624',
+  faviconStrokeLight: '%23141413',
+  faviconStrokeDark: '%23FAF9F5',
+  chartLineLight: '#cc7d5e',
+  chartFillLight: 'rgba(204, 125, 94, 0.16)',
+  chartBeLight: 'rgba(204, 125, 94, 0.42)',
+  chartGoalLight: 'rgba(126, 164, 138, 0.36)',
+  chartGridLight: 'rgba(45, 45, 43, 0.12)',
+  chartTickLight: '#6b6860',
+  chartLegendLight: '#3d3b37',
+  chartPointLight: '#cc7d5e',
+  chartLineDark: '#d4896b',
+  chartFillDark: 'rgba(212, 137, 107, 0.22)',
+  chartBeDark: 'rgba(212, 137, 107, 0.46)',
+  chartGoalDark: 'rgba(159, 195, 171, 0.42)',
+  chartGridDark: 'rgba(222, 220, 209, 0.16)',
+  chartTickDark: '#b5b0a5',
+  chartLegendDark: '#e6e3db',
+  chartPointDark: '#d4896b',
+} as const;
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
@@ -17,28 +38,6 @@ export interface ChartColors {
   legend: string;
   pointBg: string;
 }
-
-const CHART_COLORS_LIGHT: ChartColors = {
-  line: '#C96442',
-  fill: 'rgba(201, 100, 66, 0.16)',
-  beTarget: 'rgba(201, 100, 66, 0.42)',
-  goalTarget: 'rgba(106, 124, 82, 0.36)',
-  grid: 'rgba(31, 30, 29, 0.12)',
-  tick: '#6E6A63',
-  legend: '#3F3D39',
-  pointBg: '#C96442',
-};
-
-const CHART_COLORS_DARK: ChartColors = {
-  line: '#DF805F',
-  fill: 'rgba(223, 128, 95, 0.22)',
-  beTarget: 'rgba(223, 128, 95, 0.46)',
-  goalTarget: 'rgba(158, 174, 134, 0.42)',
-  grid: 'rgba(222, 220, 209, 0.16)',
-  tick: '#B7B1A3',
-  legend: '#DED9CB',
-  pointBg: '#DF805F',
-};
 
 type ThemeChangeCallback = (theme: ResolvedTheme) => void;
 const listeners: ThemeChangeCallback[] = [];
@@ -70,7 +69,41 @@ export function toggleTheme(): void {
 }
 
 export function getChartColors(): ChartColors {
-  return getResolvedTheme() === 'dark' ? CHART_COLORS_DARK : CHART_COLORS_LIGHT;
+  const resolvedTheme = getResolvedTheme();
+  return {
+    line: readThemeVariable(
+      '--chart-line',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartLineDark : CSS_FALLBACKS.chartLineLight,
+    ),
+    fill: readThemeVariable(
+      '--chart-fill',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartFillDark : CSS_FALLBACKS.chartFillLight,
+    ),
+    beTarget: readThemeVariable(
+      '--chart-target-be',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartBeDark : CSS_FALLBACKS.chartBeLight,
+    ),
+    goalTarget: readThemeVariable(
+      '--chart-target-goal',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartGoalDark : CSS_FALLBACKS.chartGoalLight,
+    ),
+    grid: readThemeVariable(
+      '--chart-grid',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartGridDark : CSS_FALLBACKS.chartGridLight,
+    ),
+    tick: readThemeVariable(
+      '--chart-tick',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartTickDark : CSS_FALLBACKS.chartTickLight,
+    ),
+    legend: readThemeVariable(
+      '--chart-legend',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartLegendDark : CSS_FALLBACKS.chartLegendLight,
+    ),
+    pointBg: readThemeVariable(
+      '--chart-point',
+      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartPointDark : CSS_FALLBACKS.chartPointLight,
+    ),
+  };
 }
 
 export function onThemeChange(callback: ThemeChangeCallback): void {
@@ -103,11 +136,19 @@ function applyTheme(): void {
   // Update meta theme-color
   const meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
   if (meta) {
-    meta.content = resolved === 'dark' ? '#262624' : '#FAF9F5';
+    meta.content = readThemeVariable(
+      THEME_COLOR_VAR,
+      resolved === 'dark'
+        ? CSS_FALLBACKS.browserThemeColorDark
+        : CSS_FALLBACKS.browserThemeColorLight,
+    );
   }
 
   // Update favicon stroke color
-  const faviconStroke = resolved === 'dark' ? '%23FAF9F5' : '%23141413';
+  const faviconStroke = readThemeVariable(
+    FAVICON_STROKE_VAR,
+    resolved === 'dark' ? CSS_FALLBACKS.faviconStrokeDark : CSS_FALLBACKS.faviconStrokeLight,
+  );
   const favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
   if (favicon) {
     favicon.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='${faviconStroke}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 7 13.5 15.5 8.5 10.5 2 17'/%3E%3Cpolyline points='16 7 22 7 22 13'/%3E%3C/svg%3E`;
@@ -117,4 +158,9 @@ function applyTheme(): void {
   for (const cb of listeners) {
     cb(resolved);
   }
+}
+
+function readThemeVariable(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
 }

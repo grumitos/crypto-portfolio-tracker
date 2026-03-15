@@ -8,6 +8,7 @@ const CACHE_TTL_MS = 60_000;
 const STALE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const PRICE_CACHE_MAX_ENTRIES = 256;
 const CHANGE_CACHE_MAX_ENTRIES = 256;
+const POSITION_METRICS_CACHE_MAX_ENTRIES = 32;
 const BINANCE_FETCH_TIMEOUT_MS = 6000;
 const DEFAULT_RATE_LIMIT_BLOCK_MS = 60_000;
 const DEFAULT_BINANCE_TICKER_ENDPOINTS = [
@@ -87,6 +88,14 @@ export interface PositionMetrics {
 export interface PositionMetricsOptions {
   forceRefresh?: boolean;
 }
+
+interface PositionMetricsCacheEntry {
+  value: PositionMetrics;
+  ts: number;
+}
+
+const positionMetricsCache = new Map<string, PositionMetricsCacheEntry>();
+const positionMetricsInFlight = new Map<string, Promise<PositionMetrics>>();
 
 function isStable(asset: string): boolean {
   return STABLE_ASSETS.has(asset.toUpperCase());
@@ -438,6 +447,37 @@ function pruneChangePercent24hCache(now = Date.now()): void {
   pruneCache(changePercent24hCache, CHANGE_CACHE_MAX_ENTRIES, now);
 }
 
+function buildPositionMetricsCacheKey(positions: DualPosition[]): string {
+  return [...positions]
+    .map((position) =>
+      [
+        position.id,
+        normalizeAsset(position.subscriptionAsset),
+        position.amount.toFixed(8),
+        position.apr.toFixed(8),
+      ].join(':'),
+    )
+    .sort()
+    .join('|');
+}
+
+function prunePositionMetricsCache(now = Date.now()): void {
+  for (const [key, entry] of positionMetricsCache.entries()) {
+    if (now - entry.ts > CACHE_TTL_MS) {
+      positionMetricsCache.delete(key);
+    }
+  }
+
+  let overflow = positionMetricsCache.size - POSITION_METRICS_CACHE_MAX_ENTRIES;
+  if (overflow <= 0) return;
+
+  for (const key of positionMetricsCache.keys()) {
+    if (overflow <= 0) break;
+    positionMetricsCache.delete(key);
+    overflow -= 1;
+  }
+}
+
 function staleOrUnavailable(asset: string): ResolvedAssetPrice {
   const stale = priceCache.get(asset);
   if (stale) {
@@ -652,9 +692,57 @@ export async function calculatePositionMetrics(
   positions: DualPosition[],
   options: PositionMetricsOptions = {},
 ): Promise<PositionMetrics> {
-  const snapshot = await getAssetPriceSnapshot(
-    positions.map((position) => position.subscriptionAsset),
-    options,
-  );
-  return calculatePositionMetricsFromSnapshot(positions, snapshot);
+  const forceRefresh = options.forceRefresh === true;
+  const cacheKey = buildPositionMetricsCacheKey(positions);
+  const now = Date.now();
+
+  prunePositionMetricsCache(now);
+
+  if (!forceRefresh) {
+    const cached = positionMetricsCache.get(cacheKey);
+    if (cached && now - cached.ts < CACHE_TTL_MS) {
+      positionMetricsCache.delete(cacheKey);
+      positionMetricsCache.set(cacheKey, cached);
+      return cached.value;
+    }
+
+    const inFlight = positionMetricsInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+  }
+
+  const request = (async (): Promise<PositionMetrics> => {
+    const snapshot = await getAssetPriceSnapshot(
+      positions.map((position) => position.subscriptionAsset),
+      options,
+    );
+    const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);
+    positionMetricsCache.delete(cacheKey);
+    positionMetricsCache.set(cacheKey, { value: metrics, ts: Date.now() });
+    prunePositionMetricsCache();
+    return metrics;
+  })();
+
+  positionMetricsInFlight.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    if (positionMetricsInFlight.get(cacheKey) === request) {
+      positionMetricsInFlight.delete(cacheKey);
+    }
+  }
+}
+
+export function clearMarketCaches(): void {
+  priceCache.clear();
+  changePercent24hCache.clear();
+  positionMetricsCache.clear();
+  positionMetricsInFlight.clear();
+  tickerInFlight.clear();
+  tickerBatchInFlight.clear();
+  ticker24hBatchInFlight.clear();
+  endpointBlockedUntilByUrl.clear();
+  preferredEndpointIndex = 0;
+  preferred24hEndpointIndex = 0;
 }

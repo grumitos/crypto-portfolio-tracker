@@ -16,16 +16,20 @@ import type { DualPosition } from '../types';
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
   const isBuyLow = title === 'Buy Low';
   const safeTitle = escapeHtml(title);
+  const groupSummary = `${positions.length} posicion${positions.length > 1 ? 'es' : ''}`;
   return `
-    <div class="card">
-      <div class="flex-between mb-md">
+    <div class="card positions-group-card">
+      <div class="flex-between positions-group-head">
         <div class="card-title form-group-inline">
           <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${safeTitle}</span>
-          <span class="text-muted sub-text" style="margin-left:var(--space-sm)">${positions.length} posicion${positions.length > 1 ? 'es' : ''}</span>
+          <span class="positions-group-count text-muted sub-text">${groupSummary}</span>
         </div>
       </div>
       <div class="table-container">
-        <table class="positions-table">
+        <table class="positions-table" aria-label="Tabla de posiciones ${safeTitle}">
+          <caption class="visually-hidden">
+            ${safeTitle}: ${groupSummary}
+          </caption>
           <colgroup>
             <col class="col-pos-asset">
             <col class="col-pos-amount">
@@ -39,15 +43,15 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
           </colgroup>
           <thead>
             <tr>
-              <th>Activo</th>
-              <th>Monto</th>
-              <th>APR</th>
-              <th>Equiv. USD</th>
-              <th>Target</th>
-              <th>Suscripcion</th>
-              <th>Liquidación</th>
-              <th>Ganancia (Venc.)</th>
-              <th>Restante</th>
+              <th scope="col">Activo</th>
+              <th scope="col">Monto</th>
+              <th scope="col">APR</th>
+              <th scope="col">Equiv. USD</th>
+              <th scope="col">Target</th>
+              <th scope="col">Suscripción</th>
+              <th scope="col">Liquidación</th>
+              <th scope="col">Ganancia (Venc.)</th>
+              <th scope="col">Restante</th>
             </tr>
           </thead>
           <tbody>
@@ -64,25 +68,38 @@ function renderPositionRow(p: DualPosition): string {
   const projectedEarned = calculateDualProjectedProfit(p);
   const projectedEarnedStr = formatAmount(projectedEarned, p.subscriptionAsset);
   const hasComponents = p.components && p.components.length > 1;
+  const label = productLabel(p);
 
   const mainRow = `
     <tr data-id="${p.id}" ${hasComponents ? 'class="pos-row-grouped"' : ''}>
       <td data-label="Activo">
-        <span style="font-weight:500;color:var(--text-primary)">${productLabelHtml(p)}</span>
+        <span class="pos-product-label">${productLabelHtml(p)}</span>
       </td>
       <td class="mono" data-label="Monto">${formatAmount(p.amount, p.subscriptionAsset)}</td>
-      <td class="mono" style="font-weight:500" data-label="APR">${p.apr.toFixed(2)}%</td>
+      <td class="mono pos-emphasis" data-label="APR">${p.apr.toFixed(2)}%</td>
       <td class="mono" id="position-usd-${p.id}" data-label="Equiv. USD">
         <span class="skeleton skeleton-number" style="width:60px"></span>
       </td>
       <td class="mono" data-label="Target">${p.targetPrice > 0 ? p.targetPrice.toLocaleString() : '---'}</td>
-      <td class="text-secondary pos-datetime-cell" data-label="Suscripcion">${renderDateTimeCell(p.entryDate, p.entryTime)}</td>
+      <td class="text-secondary pos-datetime-cell" data-label="Suscripción">${renderDateTimeCell(p.entryDate, p.entryTime)}</td>
       <td class="text-secondary pos-datetime-cell" data-label="Liquidación">${renderDateTimeCell(p.settlementDate, p.settlementTime)}</td>
       <td class="mono text-gain pos-earn-cell" data-label="Ganancia">+${projectedEarnedStr}</td>
-      <td class="pos-row-tail" data-label="Restante">
-        <span id="position-remaining-${p.id}">${daysDisplay}</span>
+      <td class="pos-row-tail${hasComponents ? ' pos-row-tail-grouped' : ''}" data-label="Restante">
+        <span class="pos-row-tail-content">
+          <span id="position-remaining-${p.id}">${daysDisplay}</span>
+          ${
+            hasComponents
+              ? `
+            <button type="button" class="pos-components-summary mono" data-toggle-components aria-expanded="false" aria-label="Ver desglose de ${label}">
+              <span class="pos-components-chevron" aria-hidden="true">▸</span>
+              Ver desglose (${p.components!.length})
+            </button>
+          `
+              : ''
+          }
+        </span>
         <span class="pos-row-actions">
-          <button class="btn btn-sm btn-danger btn-del-pos" data-id="${p.id}" title="Eliminar">${iconTrash(13)}</button>
+          <button type="button" class="btn btn-sm btn-danger btn-del-pos" data-id="${p.id}" title="Eliminar ${label}" aria-label="Eliminar posición ${label}">${iconTrash(13)}</button>
         </span>
       </td>
     </tr>
@@ -103,17 +120,6 @@ function renderComponentRows(parent: DualPosition): string {
     return bKey.localeCompare(aKey);
   });
 
-  const toggleRow = `
-    <tr class="pos-toggle-row" data-ignore-row-edit="true">
-      <td colspan="9" class="pos-toggle-cell">
-        <span class="pos-components-summary mono" data-toggle-components tabindex="0" role="button" aria-expanded="false">
-          <span class="pos-components-chevron" aria-hidden="true">▸</span>
-          Ver desglose (${components.length})
-        </span>
-      </td>
-    </tr>
-  `;
-
   const subRows = sorted
     .map((c) => {
       const tempPos: DualPosition = { ...parent, ...c };
@@ -122,10 +128,10 @@ function renderComponentRows(parent: DualPosition): string {
       const cEarnedStr = formatAmount(cEarned, subscriptionAsset);
 
       return `
-    <tr class="pos-sub-row" style="display:none" data-ignore-row-edit="true">
+    <tr class="pos-sub-row" hidden data-ignore-row-edit="true">
       <td></td>
       <td class="mono">${formatAmount(c.amount, subscriptionAsset)}</td>
-      <td class="mono" style="font-weight:500">${c.apr.toFixed(2)}%</td>
+      <td class="mono pos-emphasis">${c.apr.toFixed(2)}%</td>
       <td class="mono" id="position-usd-${parent.id}-comp-${c.id}"></td>
       <td class="mono">${c.targetPrice > 0 ? c.targetPrice.toLocaleString() : '---'}</td>
       <td class="text-secondary pos-datetime-cell">${renderDateTimeCell(c.entryDate, c.entryTime)}</td>
@@ -139,7 +145,7 @@ function renderComponentRows(parent: DualPosition): string {
     })
     .join('');
 
-  return toggleRow + subRows;
+  return subRows;
 }
 
 function formatRemainingTime(position: DualPosition): string {
@@ -232,7 +238,7 @@ function productLabelHtml(position: DualPosition): string {
     : '';
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
-  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap"><img class="pos-pair-logo" src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async" onerror="this.dataset.fallback?(this.src=this.dataset.fallback,delete this.dataset.fallback):(this.style.display='none',this.nextElementSibling.style.display='inline-flex')"><span class="pos-pair-fallback mono" style="display:none">${safeMonogram}</span></span>${label}</span>`;
+  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap" data-asset-logo-root><img class="pos-pair-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="pos-pair-fallback mono" data-asset-logo-fallback>${safeMonogram}</span></span>${label}</span>`;
 }
 
 export function updateRemainingTimesInPlace(

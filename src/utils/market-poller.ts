@@ -5,6 +5,7 @@ type TickCallback = (forceRefresh: boolean) => void | Promise<void>;
 const subscribers = new Set<TickCallback>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let isHydrating = false;
+let nextTickAt: number | null = null;
 
 async function invokeSubscriber(callback: TickCallback, forceRefresh: boolean): Promise<void> {
   try {
@@ -32,15 +33,11 @@ async function runTick(forceRefresh = true): Promise<void> {
 
 function startTimer(): void {
   if (pollTimer) return;
+  nextTickAt = Date.now() + MARKET_POLL_INTERVAL_MS;
   pollTimer = setInterval(() => {
+    nextTickAt = Date.now() + MARKET_POLL_INTERVAL_MS;
     void runTick(true);
   }, MARKET_POLL_INTERVAL_MS);
-}
-
-function stopTimer(): void {
-  if (!pollTimer) return;
-  clearInterval(pollTimer);
-  pollTimer = null;
 }
 
 /**
@@ -66,8 +63,19 @@ export function subscribeToMarketTicks(callback: TickCallback, runImmediately = 
 
   return () => {
     subscribers.delete(callback);
-    if (subscribers.size === 0) {
-      stopTimer();
-    }
   };
+}
+
+export function getNextMarketPollAt(): number | null {
+  return nextTickAt;
+}
+
+export function resetMarketPollerForTests(): void {
+  subscribers.clear();
+  isHydrating = false;
+  nextTickAt = null;
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 }

@@ -6,7 +6,9 @@ import {
   loadCalcState,
   loadState,
   replacePositions,
+  replaceAutoPositions,
   updateBalance,
+  saveStoredPositionsMode,
   saveCalcState,
   saveState,
 } from './storage';
@@ -128,6 +130,46 @@ describe('storage', () => {
     expect(next.positions[0].id).toBe('bulk_1');
     expect(next.positions[0].entryTime).toBe('08:05');
     expect(next.positions[0].settlementTime).toBe('03:00');
+  });
+
+  it('preserves manual positions when syncing auto mode data', () => {
+    replacePositions([
+      {
+        id: 'manual_1',
+        asset: 'ETH',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 10,
+        targetPrice: 1900,
+        entryDate: '2026-02-19',
+        settlementDate: '2026-02-20',
+        apr: 80,
+      },
+    ]);
+
+    saveStoredPositionsMode('auto');
+    replaceAutoPositions([
+      {
+        id: 'binance_1',
+        asset: 'BTC',
+        direction: 'sell-high',
+        subscriptionAsset: 'BTC',
+        amount: 0.25,
+        targetPrice: 75000,
+        entryDate: '2026-02-20',
+        settlementDate: '2026-02-21',
+        apr: 45,
+      },
+    ]);
+
+    expect(loadState().positions.map((position) => position.id)).toEqual(['binance_1']);
+
+    saveStoredPositionsMode('manual');
+
+    const next = loadState();
+    expect(next.positions.map((position) => position.id)).toEqual(['manual_1']);
+    expect(next.manualPositions.map((position) => position.id)).toEqual(['manual_1']);
+    expect(next.autoPositions.map((position) => position.id)).toEqual(['binance_1']);
   });
 
   it('preserves grouped components when importing aggregated positions', () => {

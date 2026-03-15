@@ -6,6 +6,7 @@ import type {
   BalanceSnapshot,
   CalculadoraState,
   Purchase,
+  PositionsConfig,
 } from '../types';
 import { sanitizeISODate, todayISODateLocal } from './date';
 import { parseLooseNumber } from './parse-number';
@@ -57,7 +58,14 @@ function getDefaultState(): AppState {
   return {
     portfolio: getDefaultPortfolio(),
     positions: getDefaultPositions(),
+    manualPositions: getDefaultPositions(),
+    autoPositions: getDefaultPositions(),
+    positionsConfig: getDefaultPositionsConfig(),
   };
+}
+
+function getDefaultPositionsConfig(): PositionsConfig {
+  return { mode: 'manual' };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -233,11 +241,42 @@ function sanitizePositions(rawPositions: unknown): DualPosition[] {
   return rawPositions.map((position, index) => sanitizePosition(position, index));
 }
 
+function isBinancePositionId(value: string): boolean {
+  return value.startsWith('binance_');
+}
+
+function sanitizePositionsConfig(rawConfig: unknown): PositionsConfig {
+  const record = isRecord(rawConfig) ? rawConfig : {};
+  return {
+    mode: record.mode === 'auto' ? 'auto' : 'manual',
+  };
+}
+
 function sanitizeAppState(raw: Partial<AppState> | null | undefined): AppState {
   const state = isRecord(raw) ? raw : {};
+  const positions = sanitizePositions(state.positions);
+  const manualPositions = sanitizePositions(state.manualPositions);
+  const autoPositions = sanitizePositions(state.autoPositions);
+  const inferredManualPositions =
+    manualPositions.length > 0
+      ? manualPositions
+      : positions.filter((position) => !isBinancePositionId(position.id));
+  const inferredAutoPositions =
+    autoPositions.length > 0
+      ? autoPositions
+      : positions.filter((position) => isBinancePositionId(position.id));
+
   return {
     portfolio: sanitizePortfolio(state.portfolio),
-    positions: sanitizePositions(state.positions),
+    positions,
+    manualPositions:
+      inferredManualPositions.length > 0 ||
+      inferredAutoPositions.length > 0 ||
+      positions.length === 0
+        ? inferredManualPositions
+        : positions,
+    autoPositions: inferredAutoPositions,
+    positionsConfig: sanitizePositionsConfig(state.positionsConfig),
   };
 }
 
@@ -323,15 +362,67 @@ export function loadState(): AppState {
   }
 }
 
-export function saveState(state: AppState): void {
+function syncActivePositionsForMode(
+  state: AppState,
+  mode: PositionsConfig['mode'] = state.positionsConfig.mode,
+): AppState {
+  const prevMode = state.positionsConfig.mode;
+
+  // When actually switching modes, persist current positions into the previous bucket
+  if (mode !== prevMode) {
+    if (prevMode === 'manual' && state.positions.length > 0 && state.manualPositions.length === 0) {
+      state.manualPositions = [...state.positions];
+    } else if (
+      prevMode === 'auto' &&
+      state.positions.length > 0 &&
+      state.autoPositions.length === 0
+    ) {
+      state.autoPositions = [...state.positions];
+    }
+  }
+
+  state.positionsConfig.mode = mode;
+  state.positions = mode === 'auto' ? [...state.autoPositions] : [...state.manualPositions];
+  return state;
+}
+
+export function saveState(state: AppState | Partial<AppState>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeAppState(state)));
   } catch (err) {
     if (import.meta.env.DEV) {
       console.warn('[storage] failed to save app state', err);
     }
     notifyStorageError();
   }
+}
+
+export function loadStoredPositionsMode(): PositionsConfig['mode'] | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed) || !isRecord(parsed.positionsConfig)) return null;
+    return parsed.positionsConfig.mode === 'auto' ? 'auto' : 'manual';
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredPositionsMode(mode: PositionsConfig['mode']): AppState {
+  const state = loadState();
+  const next =
+    state.positionsConfig.mode === mode ? state : syncActivePositionsForMode(state, mode);
+  saveState(next);
+  return next;
+}
+
+export function replaceAutoPositions(positions: DualPosition[]): AppState {
+  const state = loadState();
+  state.autoPositions = sanitizePositions(positions);
+  const next = state.positionsConfig.mode === 'auto' ? syncActivePositionsForMode(state) : state;
+  saveState(next);
+  return next;
 }
 
 // ── Portfolio updates ──
@@ -365,33 +456,41 @@ export function updateBalance(balance: number): AppState {
 
 export function addPosition(position: DualPosition): AppState {
   const state = loadState();
-  state.positions.push(sanitizePosition(position, state.positions.length));
-  saveState(state);
-  return state;
+  const nextPosition = sanitizePosition(position, state.manualPositions.length);
+  state.manualPositions.push(nextPosition);
+  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
+  saveState(next);
+  return next;
 }
 
 export function replacePositions(positions: DualPosition[]): AppState {
   const state = loadState();
-  state.positions = sanitizePositions(positions);
-  saveState(state);
-  return state;
+  state.manualPositions = sanitizePositions(positions);
+  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
+  saveState(next);
+  return next;
 }
 
 export function updatePosition(id: string, updates: Partial<DualPosition>): AppState {
   const state = loadState();
-  const idx = state.positions.findIndex((p: DualPosition) => p.id === id);
+  const idx = state.manualPositions.findIndex((p: DualPosition) => p.id === id);
   if (idx >= 0) {
-    state.positions[idx] = sanitizePosition({ ...state.positions[idx], ...updates }, idx);
+    state.manualPositions[idx] = sanitizePosition(
+      { ...state.manualPositions[idx], ...updates },
+      idx,
+    );
   }
-  saveState(state);
-  return state;
+  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
+  saveState(next);
+  return next;
 }
 
 export function deletePosition(id: string): AppState {
   const state = loadState();
-  state.positions = state.positions.filter((p: DualPosition) => p.id !== id);
-  saveState(state);
-  return state;
+  state.manualPositions = state.manualPositions.filter((p: DualPosition) => p.id !== id);
+  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
+  saveState(next);
+  return next;
 }
 
 // ── Backup ──

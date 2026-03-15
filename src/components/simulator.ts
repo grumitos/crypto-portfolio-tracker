@@ -13,11 +13,9 @@ import {
   type MilestoneKey,
   type MilestoneResolution,
 } from '../utils/projection-milestones';
-import { calculatePositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
-import { iconRefreshCw, iconTarget } from '../utils/icons';
-import { getChartColors } from '../utils/theme';
+import { getSharedMarketData } from '../utils/api-runtime-cache';
 import {
   getDefaultViewState,
   loadSimulatorViewState,
@@ -25,21 +23,24 @@ import {
   type AutoState,
 } from './simulator.state';
 import type { CompoundFrequency, DualPosition } from '../types';
-import type { ChartDataset } from 'chart.js';
 import { subscribeToMarketTicks } from '../utils/market-poller';
 import {
   setAnimatedNumber,
   setAnimatedText,
   stopValueAnimation as stopAnimationFrame,
 } from '../utils/animation';
+import { getSimulatorElements } from './simulator.dom';
+import { PROJECTION_MAX_MONTH, RESULT_NUMBER_ANIM_MS, SIMULATOR_COPY } from './simulator.constants';
+import {
+  formatAutoAprHint,
+  projectionTableSkeletonHtml,
+  renderProjectionTable,
+  renderSimulatorTemplate,
+} from './simulator.template';
+import { destroyProjectionChart, renderProjectionChart } from './simulator.chart';
 
-const PROJECTION_MAX_MONTH = 12;
-const RESULT_NUMBER_ANIM_MS = 560;
-const AUTO_CAPITAL_HINT = 'Capital en posiciones';
-const AUTO_APR_HINT_PREFIX = 'Promedio ponderado (USD):';
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
-let chartJsRegistered = false;
 
 interface TriggerSimulationOptions {
   persist?: boolean;
@@ -50,54 +51,22 @@ interface RunSimulationOptions {
   animate?: boolean;
 }
 
-function formatAutoAprHint(apr: number | null): string {
-  if (Number.isFinite(apr) && (apr as number) > 0) {
-    return `${AUTO_APR_HINT_PREFIX} ${(apr as number).toFixed(2)}%`;
-  }
-  return `${AUTO_APR_HINT_PREFIX} N/D`;
-}
-
-function projectionTableSkeletonHtml(): string {
-  const head = `
-    <div class="sim-projection-table-head">
-      <span class="skeleton" style="width:36px;height:0.78rem"></span>
-      <span class="skeleton" style="width:72px;height:0.78rem"></span>
-      <span class="skeleton" style="width:74px;height:0.78rem"></span>
-      <span class="skeleton" style="width:116px;height:0.78rem"></span>
-    </div>
-  `;
-  const row = `
-    <div class="sim-projection-table-row">
-      <span class="skeleton" style="width:22px;height:0.95rem"></span>
-      <span class="skeleton" style="width:84px;height:0.95rem"></span>
-      <span class="skeleton" style="width:94px;height:0.95rem"></span>
-      <span class="skeleton" style="width:108px;height:0.95rem"></span>
-    </div>
-  `;
-
-  return `
-    <div class="sim-projection-table-skeleton">
-      ${head}
-      ${row}
-      ${row}
-      ${row}
-      ${row}
-    </div>
-  `;
-}
-
 function renderProjectionLoadingState(container: HTMLElement): void {
-  const tableContainer = container.querySelector('#sim-table-container') as HTMLElement | null;
-  const tableEl = container.querySelector('#sim-table') as HTMLElement | null;
-  const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
-  const chartSkeleton = container.querySelector(
-    '#sim-projection-chart-skeleton',
-  ) as HTMLElement | null;
+  const elements = getSimulatorElements(container);
 
-  if (tableContainer) tableContainer.style.display = 'block';
-  if (canvas) canvas.style.display = 'none';
-  if (chartSkeleton) chartSkeleton.style.display = 'flex';
-  if (tableEl) tableEl.innerHTML = projectionTableSkeletonHtml();
+  if (elements.tableContainer) {
+    elements.tableContainer.hidden = false;
+    elements.tableContainer.style.display = 'block';
+  }
+  if (elements.chartCanvas) {
+    elements.chartCanvas.hidden = true;
+    elements.chartCanvas.style.display = 'none';
+  }
+  if (elements.chartSkeleton) {
+    elements.chartSkeleton.hidden = false;
+    elements.chartSkeleton.style.display = 'flex';
+  }
+  if (elements.table) elements.table.innerHTML = projectionTableSkeletonHtml();
 }
 
 function setTagMode(tag: HTMLElement, isAuto: boolean): void {
@@ -174,7 +143,7 @@ function setDurationOutput(
 }
 
 function getReachedLabel(key: MilestoneKey): string {
-  return key === 'be' ? 'BE alcanzado' : 'Meta alcanzada';
+  return key === 'be' ? SIMULATOR_COPY.reachedBreakEven : SIMULATOR_COPY.reachedGoal;
 }
 
 function setMilestoneOutputs(
@@ -207,26 +176,21 @@ function setMilestoneOutputs(
 }
 
 function setInvalidSimulationOutputs(container: HTMLElement): void {
-  const beDateEl = container.querySelector('#sim-out-be-date') as HTMLElement | null;
-  const beTimeEl = container.querySelector('#sim-out-be-time') as HTMLElement | null;
-  const goalDateEl = container.querySelector('#sim-out-goal-date') as HTMLElement | null;
-  const goalTimeEl = container.querySelector('#sim-out-goal-time') as HTMLElement | null;
-  const dailyEl = container.querySelector('#sim-out-daily') as HTMLElement | null;
-  const monthlyEl = container.querySelector('#sim-out-monthly') as HTMLElement | null;
-  const rateEl = container.querySelector('#sim-out-rate') as HTMLElement | null;
-  const finalEl = container.querySelector('#sim-out-final') as HTMLElement | null;
-  const tableContainer = container.querySelector('#sim-table-container') as HTMLElement | null;
+  const elements = getSimulatorElements(container);
 
-  setStaticOutput(beDateEl, '---');
-  setStaticOutput(beTimeEl, '---');
-  setStaticOutput(goalDateEl, '---');
-  setStaticOutput(goalTimeEl, '---');
-  setStaticOutput(dailyEl, '---');
-  setStaticOutput(monthlyEl, '---');
-  setStaticOutput(rateEl, '---');
-  setStaticOutput(finalEl, '---');
+  setStaticOutput(elements.beDate, '---');
+  setStaticOutput(elements.beTime, '---');
+  setStaticOutput(elements.goalDate, '---');
+  setStaticOutput(elements.goalTime, '---');
+  setStaticOutput(elements.daily, '---');
+  setStaticOutput(elements.monthly, '---');
+  setStaticOutput(elements.rate, '---');
+  setStaticOutput(elements.final, '---');
 
-  if (tableContainer) tableContainer.style.display = 'none';
+  if (elements.tableContainer) {
+    elements.tableContainer.hidden = true;
+    elements.tableContainer.style.display = 'none';
+  }
 }
 
 function resolveProjectionRowClasses(
@@ -255,134 +219,7 @@ export function renderSimulator(container: HTMLElement): () => void {
     goal: viewState.autoGoal,
   };
 
-  container.innerHTML = `
-    <div class="section">
-      <div class="section-header">
-        <h2 class="section-title">Simulador de recuperacion</h2>
-      </div>
-
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-title mb-md">Parametros</div>
-          <div class="form-group">
-            <label class="label-with-badge">
-              Capital actual (USD)
-              <span class="auto-tag ${autoState.capital ? 'is-auto' : 'is-manual'}" id="sim-capital-tag">${autoState.capital ? 'AUTO' : 'MANUAL'}</span>
-            </label>
-            <input type="number" id="sim-capital" step="1" value="${autoState.capital ? '' : viewState.capital.toFixed(2)}">
-            <div class="text-muted hint-text" id="sim-capital-hint">
-              ${autoState.capital ? AUTO_CAPITAL_HINT : 'Valor personalizado'}
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="label-with-badge">
-              APR esperado (%)
-              <span class="auto-tag ${autoState.apr ? 'is-auto' : 'is-manual'}" id="sim-apr-tag">${autoState.apr ? 'AUTO' : 'MANUAL'}</span>
-            </label>
-            <input type="number" id="sim-apr" step="1" value="${autoState.apr ? '' : viewState.apr.toFixed(2)}">
-            <div class="text-muted hint-text" id="sim-apr-hint">
-              ${autoState.apr ? formatAutoAprHint(null) : 'Valor personalizado'}
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="sim-frequency">Capitalizacion</label>
-            <select id="sim-frequency">
-              <option value="daily" ${viewState.frequency === 'daily' ? 'selected' : ''}>Diaria</option>
-              <option value="weekly" ${viewState.frequency === 'weekly' ? 'selected' : ''}>Semanal</option>
-              <option value="biweekly" ${viewState.frequency === 'biweekly' ? 'selected' : ''}>Quincenal</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="label-with-badge">
-              Meta (USD)
-              <span class="auto-tag ${autoState.goal ? 'is-auto' : 'is-manual'}" id="sim-goal-tag">${autoState.goal ? 'AUTO' : 'MANUAL'}</span>
-            </label>
-            <input type="number" id="sim-goal" step="1" value="${(autoState.goal ? state.portfolio.goalAmount : viewState.goal).toFixed(2)}">
-            <div class="text-muted hint-text" id="sim-goal-hint">
-              ${autoState.goal ? 'Meta del dashboard' : 'Valor personalizado'}
-            </div>
-          </div>
-          <div class="flex-row gap-sm">
-            <button class="btn btn-sm flex-1" id="btn-sim-reset">${iconRefreshCw(14)} Resetear AUTO</button>
-            <button class="btn btn-primary flex-2" id="btn-simulate">${iconTarget(14)} Simular</button>
-          </div>
-        </div>
-
-        <div class="card" id="sim-results">
-          <div class="card-title mb-lg">Resultados</div>
-          <div class="sim-results-container">
-            <div class="sim-milestones-grid">
-              <div class="sim-milestone-col">
-                <div class="sim-result-label">BE</div>
-                <div class="sim-result-item">
-                  <div class="sim-result-label">Fecha estimada</div>
-                  <div class="sim-result-value medium mono text-accent" id="sim-out-be-date">
-                    <span class="skeleton" style="width:140px;height:1.1rem"></span>
-                  </div>
-                </div>
-                <div class="sim-result-item">
-                  <div class="sim-result-label">Tiempo restante</div>
-                  <div class="sim-result-value medium mono" id="sim-out-be-time">
-                    <span class="skeleton" style="width:92px;height:1.1rem"></span>
-                  </div>
-                </div>
-              </div>
-              <div class="sim-milestone-col">
-                <div class="sim-result-label">Meta</div>
-                <div class="sim-result-item">
-                  <div class="sim-result-label">Fecha estimada</div>
-                  <div class="sim-result-value medium mono text-accent" id="sim-out-goal-date">
-                    <span class="skeleton" style="width:140px;height:1.1rem"></span>
-                  </div>
-                </div>
-                <div class="sim-result-item">
-                  <div class="sim-result-label">Tiempo restante</div>
-                  <div class="sim-result-value medium mono" id="sim-out-goal-time">
-                    <span class="skeleton" style="width:92px;height:1.1rem"></span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="sim-result-item">
-              <div class="sim-result-label">Run-rate diario estimado</div>
-              <div class="sim-result-value medium text-gain mono" id="sim-out-daily">
-                <span class="skeleton" style="width:100px;height:1.1rem"></span>
-              </div>
-            </div>
-            <div class="sim-result-item">
-              <div class="sim-result-label">Run-rate mensual estimado</div>
-              <div class="sim-result-value medium text-gain mono" id="sim-out-monthly">
-                <span class="skeleton" style="width:100px;height:1.1rem"></span>
-              </div>
-            </div>
-            <div class="sim-result-item">
-              <div class="sim-result-label">Tasa diaria comp. / APY</div>
-              <div class="sim-result-value small mono" id="sim-out-rate">
-                <span class="skeleton" style="width:60px;height:1rem"></span>
-              </div>
-            </div>
-            <div class="sim-result-item">
-              <div class="sim-result-label">Balance final (ultimo mes proyectado)</div>
-              <div class="sim-result-value medium mono" id="sim-out-final">
-                <span class="skeleton" style="width:100px;height:1.1rem"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" id="sim-table-container">
-        <div class="card-title mb-md">Proyeccion mensual</div>
-        <div class="chart-container mb-lg">
-          <canvas id="projection-chart" style="display:none"></canvas>
-          <div class="sim-projection-chart-skeleton" id="sim-projection-chart-skeleton">
-            <span class="skeleton" style="width:100%;height:184px"></span>
-          </div>
-        </div>
-        <div class="table-container" id="sim-table"></div>
-      </div>
-    </div>
-  `;
+  container.innerHTML = renderSimulatorTemplate(viewState, autoState, state.portfolio.goalAmount);
 
   renderProjectionLoadingState(container);
 
@@ -400,8 +237,7 @@ export function renderSimulator(container: HTMLElement): () => void {
 
   const syncAutoGoal = (state: ReturnType<typeof loadState> = loadState()): boolean => {
     if (!autoState.goal) return false;
-    const goalInput = container.querySelector('#sim-goal') as HTMLInputElement | null;
-    const goalHint = container.querySelector('#sim-goal-hint') as HTMLElement | null;
+    const { goalInput, goalHint } = getSimulatorElements(container);
     if (!goalInput) return false;
 
     const nextGoal = state.portfolio.goalAmount.toFixed(2);
@@ -410,7 +246,7 @@ export function renderSimulator(container: HTMLElement): () => void {
       goalInput.value = nextGoal;
       changed = true;
     }
-    if (goalHint) goalHint.textContent = 'Meta del dashboard';
+    if (goalHint) goalHint.textContent = SIMULATOR_COPY.autoGoalHint;
     return changed;
   };
 
@@ -453,7 +289,7 @@ export function renderSimulator(container: HTMLElement): () => void {
   return () => {
     disposed = true;
     unsubscribeMarket();
-    void destroyProjectionChart(container);
+    void destroyProjectionChart(getSimulatorElements(container).chartCanvas, isJsdomEnv());
   };
 }
 
@@ -463,10 +299,7 @@ async function hydrateAutoValues(
   autoState: AutoState,
   forceRefresh = false,
 ): Promise<boolean> {
-  const capitalInput = container.querySelector('#sim-capital') as HTMLInputElement | null;
-  const aprInput = container.querySelector('#sim-apr') as HTMLInputElement | null;
-  const capitalHint = container.querySelector('#sim-capital-hint') as HTMLElement | null;
-  const aprHint = container.querySelector('#sim-apr-hint') as HTMLElement | null;
+  const { capitalInput, aprInput, capitalHint, aprHint } = getSimulatorElements(container);
   if (!capitalInput || !aprInput || !capitalHint || !aprHint) return false;
 
   let changed = false;
@@ -474,15 +307,15 @@ async function hydrateAutoValues(
   if (positions.length === 0) {
     if (autoState.capital) {
       capitalInput.value = '0.00';
-      capitalHint.textContent = AUTO_CAPITAL_HINT;
+      capitalHint.textContent = SIMULATOR_COPY.autoCapitalHint;
     }
     if (autoState.apr) aprHint.textContent = formatAutoAprHint(null);
     return false;
   }
 
   try {
-    const metrics = await calculatePositionMetrics(positions, { forceRefresh });
-    registerApiLastUpdatedAt(metrics.marketLastUpdatedAt);
+    const { snapshot, metrics } = await getSharedMarketData(positions, forceRefresh);
+    registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
     if (metrics.hasStalePrices || metrics.hasUnavailablePrices) {
       registerApiFailure();
       showApiErrorBanner('No se pudo actualizar precios de mercado.');
@@ -496,7 +329,7 @@ async function hydrateAutoValues(
           changed = true;
         }
       }
-      capitalHint.textContent = AUTO_CAPITAL_HINT;
+      capitalHint.textContent = SIMULATOR_COPY.autoCapitalHint;
     }
 
     if (autoState.apr) {
@@ -523,35 +356,51 @@ function bindSimulatorEvents(
   autoState: AutoState,
   triggerSimulation: (options?: TriggerSimulationOptions) => void,
 ): void {
-  const capitalInput = container.querySelector('#sim-capital') as HTMLInputElement;
-  const aprInput = container.querySelector('#sim-apr') as HTMLInputElement;
-  const frequencyInput = container.querySelector('#sim-frequency') as HTMLSelectElement;
-  const goalInput = container.querySelector('#sim-goal') as HTMLInputElement;
-  const capitalTag = container.querySelector('#sim-capital-tag') as HTMLElement;
-  const aprTag = container.querySelector('#sim-apr-tag') as HTMLElement;
-  const goalTag = container.querySelector('#sim-goal-tag') as HTMLElement;
-  const capitalHint = container.querySelector('#sim-capital-hint') as HTMLElement;
-  const aprHint = container.querySelector('#sim-apr-hint') as HTMLElement;
-  const goalHint = container.querySelector('#sim-goal-hint') as HTMLElement;
+  const {
+    capitalInput,
+    aprInput,
+    frequencyInput,
+    goalInput,
+    capitalTag,
+    aprTag,
+    goalTag,
+    capitalHint,
+    aprHint,
+    goalHint,
+  } = getSimulatorElements(container);
+  if (
+    !capitalInput ||
+    !aprInput ||
+    !frequencyInput ||
+    !goalInput ||
+    !capitalTag ||
+    !aprTag ||
+    !goalTag ||
+    !capitalHint ||
+    !aprHint ||
+    !goalHint
+  ) {
+    return;
+  }
 
   capitalInput.addEventListener('input', () => {
     autoState.capital = false;
     setTagMode(capitalTag, false);
-    capitalHint.textContent = 'Valor personalizado';
+    capitalHint.textContent = SIMULATOR_COPY.manualHint;
     persistSimulatorViewState(container, autoState);
   });
 
   aprInput.addEventListener('input', () => {
     autoState.apr = false;
     setTagMode(aprTag, false);
-    aprHint.textContent = 'Valor personalizado';
+    aprHint.textContent = SIMULATOR_COPY.manualHint;
     persistSimulatorViewState(container, autoState);
   });
 
   goalInput.addEventListener('input', () => {
     autoState.goal = false;
     setTagMode(goalTag, false);
-    goalHint.textContent = 'Valor personalizado';
+    goalHint.textContent = SIMULATOR_COPY.manualHint;
     persistSimulatorViewState(container, autoState);
   });
 
@@ -569,13 +418,13 @@ function bindSimulatorEvents(
 
     const state = loadState();
     capitalInput.value = '';
-    capitalHint.textContent = AUTO_CAPITAL_HINT;
+    capitalHint.textContent = SIMULATOR_COPY.autoCapitalHint;
 
     aprInput.value = '';
     aprHint.textContent = formatAutoAprHint(null);
 
     goalInput.value = state.portfolio.goalAmount.toFixed(2);
-    goalHint.textContent = 'Meta del dashboard';
+    goalHint.textContent = SIMULATOR_COPY.autoGoalHint;
 
     void hydrateAutoValues(container, state.positions, autoState).then(() => {
       triggerSimulation({ persist: true, animate: true });
@@ -601,19 +450,18 @@ function runSimulation(
   options: RunSimulationOptions = {},
 ): void {
   const animate = options.animate !== false;
-  const capital = parseFloat((container.querySelector('#sim-capital') as HTMLInputElement).value);
-  const apr = parseFloat((container.querySelector('#sim-apr') as HTMLInputElement).value);
-  const frequency = (container.querySelector('#sim-frequency') as HTMLSelectElement)
-    .value as CompoundFrequency;
+  const elements = getSimulatorElements(container);
+  const capital = parseFloat(elements.capitalInput?.value ?? '');
+  const apr = parseFloat(elements.aprInput?.value ?? '');
+  const frequency = (elements.frequencyInput?.value ?? 'daily') as CompoundFrequency;
   const state = loadState();
-  const goalInput = container.querySelector('#sim-goal') as HTMLInputElement | null;
-  const goalHint = container.querySelector('#sim-goal-hint') as HTMLElement | null;
+  const { goalInput, goalHint } = elements;
 
   if (goalInput && autoState.goal) {
     goalInput.value = state.portfolio.goalAmount.toFixed(2);
   }
   if (goalHint) {
-    goalHint.textContent = autoState.goal ? 'Meta del dashboard' : 'Valor personalizado';
+    goalHint.textContent = autoState.goal ? SIMULATOR_COPY.autoGoalHint : SIMULATOR_COPY.manualHint;
   }
 
   const rawGoal = autoState.goal ? state.portfolio.goalAmount : parseFloat(goalInput?.value ?? '');
@@ -627,7 +475,7 @@ function runSimulation(
 
   if (hasInvalidCore || hasInvalidBreakevenTarget) {
     setInvalidSimulationOutputs(container);
-    void destroyProjectionChart(container);
+    void destroyProjectionChart(elements.chartCanvas, isJsdomEnv());
     return;
   }
 
@@ -639,19 +487,10 @@ function runSimulation(
     invested,
   });
   const milestones = resolveSimulationMilestones(snapshot);
-  const beDateEl = container.querySelector('#sim-out-be-date') as HTMLElement | null;
-  const beTimeEl = container.querySelector('#sim-out-be-time') as HTMLElement | null;
-  const goalDateEl = container.querySelector('#sim-out-goal-date') as HTMLElement | null;
-  const goalTimeEl = container.querySelector('#sim-out-goal-time') as HTMLElement | null;
-  const dailyEl = container.querySelector('#sim-out-daily') as HTMLElement | null;
-  const monthlyEl = container.querySelector('#sim-out-monthly') as HTMLElement | null;
-  const rateEl = container.querySelector('#sim-out-rate') as HTMLElement | null;
-  const finalEl = container.querySelector('#sim-out-final') as HTMLElement | null;
-
-  setMilestoneOutputs(beDateEl, beTimeEl, 'be', milestones.byMilestone.be, animate, true);
+  setMilestoneOutputs(elements.beDate, elements.beTime, 'be', milestones.byMilestone.be, animate, true);
   setMilestoneOutputs(
-    goalDateEl,
-    goalTimeEl,
+    elements.goalDate,
+    elements.goalTime,
     'goal',
     milestones.byMilestone.goal,
     animate,
@@ -662,191 +501,71 @@ function runSimulation(
   const monthlyRunRate = calcMonthlyEarnings(capital, apr);
   const { dailyCompoundedPct, apyPct } = compoundedRateMetrics(apr, frequency);
 
-  setCurrencyOutput(dailyEl, dailyRunRate, animate, ' /dia');
-  setCurrencyOutput(monthlyEl, monthlyRunRate, animate, ' /mes');
+  setCurrencyOutput(elements.daily, dailyRunRate, animate, ' /dia');
+  setCurrencyOutput(elements.monthly, monthlyRunRate, animate, ' /mes');
   setTextOutput(
-    rateEl,
+    elements.rate,
     `${dailyCompoundedPct.toFixed(4)}% / ${apyPct.toFixed(2)}%`,
     animate,
     'scramble',
   );
-  setCurrencyOutput(finalEl, snapshot.lastRow?.balance ?? null, animate);
+  setCurrencyOutput(elements.final, snapshot.lastRow?.balance ?? null, animate);
 
   const projectedRows = snapshot.rows.filter(
     (row) => row.month >= 1 && row.month <= PROJECTION_MAX_MONTH,
   );
-  const tableContainer = container.querySelector('#sim-table-container') as HTMLElement | null;
-  const tableEl = container.querySelector('#sim-table') as HTMLElement | null;
-  const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
-  const chartSkeleton = container.querySelector(
-    '#sim-projection-chart-skeleton',
-  ) as HTMLElement | null;
-  if (!tableContainer || !tableEl || projectedRows.length === 0) {
-    if (tableContainer) tableContainer.style.display = 'none';
-    if (canvas) canvas.style.display = 'none';
-    if (chartSkeleton) chartSkeleton.style.display = 'none';
-    void destroyProjectionChart(container);
+  if (!elements.tableContainer || !elements.table || projectedRows.length === 0) {
+    if (elements.tableContainer) {
+      elements.tableContainer.hidden = true;
+      elements.tableContainer.style.display = 'none';
+    }
+    if (elements.chartCanvas) {
+      elements.chartCanvas.hidden = true;
+      elements.chartCanvas.style.display = 'none';
+    }
+    if (elements.chartSkeleton) {
+      elements.chartSkeleton.hidden = true;
+      elements.chartSkeleton.style.display = 'none';
+    }
+    void destroyProjectionChart(elements.chartCanvas, isJsdomEnv());
     return;
   }
 
   const beCrossMonth = milestones.byMilestone.be.row?.month ?? null;
   const goalCrossMonth = milestones.byMilestone.goal.row?.month ?? null;
 
-  tableContainer.style.display = 'block';
-  if (canvas) canvas.style.display = 'block';
-  if (chartSkeleton) chartSkeleton.style.display = 'none';
-  tableEl.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Mes</th>
-          <th>Fecha</th>
-          <th>Balance</th>
-          <th>Ganancia acumulada</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${projectedRows
-          .map((row) => {
-            const rowClass = resolveProjectionRowClasses(
-              row.month,
-              milestones.primaryKey,
-              beCrossMonth,
-              goalCrossMonth,
-            );
-            return `
-            <tr${rowClass ? ` class="${rowClass}"` : ''}>
-              <td class="mono">${row.month}</td>
-              <td>${formatDateLatin(row.date)}</td>
-              <td class="mono">${formatUSD(row.balance)}</td>
-              <td class="mono ${row.earned > 0 ? 'text-gain' : ''}">${formatUSD(row.earned)}</td>
-            </tr>
-          `;
-          })
-          .join('')}
-      </tbody>
-    </table>
-  `;
+  elements.tableContainer.hidden = false;
+  elements.tableContainer.style.display = 'block';
+  if (elements.chartCanvas) {
+    elements.chartCanvas.hidden = false;
+    elements.chartCanvas.style.display = 'block';
+  }
+  if (elements.chartSkeleton) {
+    elements.chartSkeleton.hidden = true;
+    elements.chartSkeleton.style.display = 'none';
+  }
+  elements.table.innerHTML = renderProjectionTable(
+    projectedRows.map((row) => ({
+      ...row,
+      rowClass: resolveProjectionRowClasses(
+        row.month,
+        milestones.primaryKey,
+        beCrossMonth,
+        goalCrossMonth,
+      ),
+    })),
+    formatDateLatin,
+    formatUSD,
+  );
 
-  void renderProjectionChart(container, projectedRows, snapshot.targetByMilestone);
+  void renderProjectionChart(
+    elements.chartCanvas,
+    projectedRows,
+    snapshot.targetByMilestone,
+    isJsdomEnv(),
+  );
 }
 
-async function destroyProjectionChart(container: HTMLElement): Promise<void> {
-  const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
-  if (!canvas) return;
-  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) return;
-
-  try {
-    const { Chart } = await import('chart.js');
-    const existingChart = Chart.getChart(canvas);
-    if (existingChart) {
-      existingChart.destroy();
-    }
-  } catch (err) {
-    if (import.meta.env.DEV) console.warn('[Simulator] chart cleanup failed:', err);
-  }
-}
-
-async function renderProjectionChart(
-  container: HTMLElement,
-  rows: { month: number; date: string; balance: number }[],
-  targets: { be: number; goal: number },
-): Promise<void> {
-  const canvas = container.querySelector('#projection-chart') as HTMLCanvasElement | null;
-  if (!canvas) return;
-  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) return;
-
-  try {
-    const context = canvas.getContext('2d');
-    if (!context) return;
-
-    const { Chart, registerables } = await import('chart.js');
-    if (!chartJsRegistered) {
-      Chart.register(...registerables);
-      chartJsRegistered = true;
-    }
-
-    const existingChart = Chart.getChart(canvas);
-    if (existingChart) existingChart.destroy();
-
-    const cc = getChartColors();
-    const datasets: ChartDataset<'line', number[]>[] = [
-      {
-        label: 'Balance proyectado',
-        data: rows.map((row) => row.balance),
-        borderColor: cc.line,
-        backgroundColor: cc.fill,
-        fill: true,
-        tension: 0.3,
-        pointRadius: rows.length > 30 ? 0 : 3,
-        pointBackgroundColor: cc.pointBg,
-        borderWidth: 1.5,
-      },
-    ];
-
-    if (targets.be > 0) {
-      datasets.push({
-        label: 'BE',
-        data: rows.map(() => targets.be),
-        borderColor: cc.beTarget,
-        borderDash: [6, 4],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false,
-      });
-    }
-
-    if (targets.goal > 0) {
-      datasets.push({
-        label: 'Meta',
-        data: rows.map(() => targets.goal),
-        borderColor: cc.goalTarget,
-        borderDash: [8, 4],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false,
-      });
-    }
-
-    new Chart(context, {
-      type: 'line',
-      data: {
-        labels: rows.map((row) => (row.month === 0 ? 'Hoy' : `M${row.month}`)),
-        datasets,
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { intersect: false, mode: 'index' },
-        plugins: {
-          legend: {
-            labels: { color: cc.legend, font: { size: 12 } },
-          },
-          tooltip: {
-            callbacks: {
-              label: (ctx) =>
-                `${ctx.dataset.label}: $${(ctx.parsed?.y ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
-            },
-          },
-        },
-        scales: {
-          x: {
-            ticks: { color: cc.tick, font: { size: 11 }, maxTicksLimit: 20 },
-            grid: { color: cc.grid },
-          },
-          y: {
-            ticks: {
-              color: cc.tick,
-              font: { size: 11 },
-              callback: (value) => '$' + Number(value).toLocaleString(),
-            },
-            grid: { color: cc.grid },
-          },
-        },
-      },
-    });
-  } catch (err) {
-    if (import.meta.env.DEV) console.warn('[Simulator] Chart.js error:', err);
-    return;
-  }
+function isJsdomEnv(): boolean {
+  return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
 }

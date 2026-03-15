@@ -19,7 +19,6 @@
 
 .modal-overlay::backdrop {
   background: var(--modal-scrim);
-  backdrop-filter: blur(8px);
 }
 
 @keyframes fadeIn {
@@ -36,13 +35,17 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: var(--space-xl);
+  padding: var(--panel-padding);
   width: 100%;
   max-width: min(460px, calc(100vw - 2 * var(--space-lg)));
   max-height: 90vh;
   overflow-y: auto;
   animation: modalSlideIn 0.25s var(--ease-out-quint);
   box-shadow: var(--shadow-lg);
+}
+
+.modal--wide {
+  max-width: min(900px, calc(100vw - 2 * var(--space-lg)));
 }
 
 @keyframes modalSlideIn {
@@ -69,4 +72,9 @@
   gap: var(--space-sm);
   justify-content: flex-end;
   margin-top: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.modal-action-spacer {
+  margin-right: auto;
 }
