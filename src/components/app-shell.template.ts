@@ -14,6 +14,7 @@ function renderNavButton(item: AppShellNavItem): string {
 }
 
 export function renderAppShell(
+  syncIcon: string,
   configIcon: string,
   themeIcon: string,
   navItems: AppShellNavItem[],
@@ -29,6 +30,15 @@ export function renderAppShell(
           ${navItems.map(renderNavButton).join('')}
         </nav>
         <div class="app-utility-actions" role="group" aria-label="${APP_SHELL_COPY.utilityActionsLabel}">
+          <button
+            type="button"
+            class="utility-btn utility-btn--icon-only"
+            id="btn-sync-positions"
+            title="${APP_SHELL_COPY.syncLabel}"
+            aria-label="${APP_SHELL_COPY.syncLabel}"
+          >
+            ${syncIcon}
+          </button>
           <button
             type="button"
             class="utility-btn utility-btn--icon-only"

@@ -11,6 +11,7 @@ import {
   iconTrendingUp,
   iconCalculator,
   iconSettings,
+  iconRefreshCw,
   iconSun,
   iconMoon,
 } from './utils/icons';
@@ -22,6 +23,9 @@ import { openApiConfigModal } from './components/positions/api-config-modal';
 import { renderAppShell } from './components/app-shell.template';
 import type { AppShellNavItem } from './components/app-shell.constants';
 import { applyTypographyConfig } from './utils/typography';
+import { hasApiCredentials, isAutoMode } from './utils/binance-auth';
+import { syncPositionsFromBinance } from './utils/binance-sync';
+import { rememberAutoPortfolioSnapshot, rememberBalanceSummary } from './utils/api-runtime-cache';
 
 let disposeActiveView: (() => void) | null = null;
 
@@ -43,7 +47,7 @@ function init(): void {
     { view: 'simulator', label: 'Simulador', icon: iconTrendingUp(15), active: false },
     { view: 'calculadora', label: 'Calculadora', icon: iconCalculator(15), active: false },
   ];
-  app.innerHTML = renderAppShell(iconSettings(15), themeIcon(), navItems);
+  app.innerHTML = renderAppShell(iconRefreshCw(14), iconSettings(15), themeIcon(), navItems);
 
   // Nav events (bound once)
   app.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
@@ -68,6 +72,28 @@ function init(): void {
 
   app.querySelector('#btn-config')?.addEventListener('click', () => {
     openApiConfigModal();
+  });
+
+  app.querySelector('#btn-sync-positions')?.addEventListener('click', async () => {
+    const syncBtn = app.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
+    if (!syncBtn || syncBtn.disabled || !isAutoMode() || !hasApiCredentials()) return;
+
+    syncBtn.disabled = true;
+    syncBtn.classList.add('syncing');
+
+    try {
+      const snapshot = await syncPositionsFromBinance(true);
+      rememberAutoPortfolioSnapshot(snapshot);
+      rememberBalanceSummary({
+        balances: snapshot.balances,
+        totalUsdEstimate: snapshot.totalUsdEstimate,
+      });
+      renderView(app, getCurrentView());
+    } finally {
+      syncBtn.disabled = false;
+      syncBtn.classList.remove('syncing');
+      updatePositionsSyncButton(app);
+    }
   });
 
   enhanceNumberSteppers(app);
@@ -129,6 +155,7 @@ function renderView(app: HTMLElement, view: View): void {
   if (!viewContainer) return;
 
   updateActiveNavButton(app, view);
+  updatePositionsSyncButton(app);
   syncApiLastUpdatedLabel();
 
   const onStateChange = () => renderView(app, getCurrentView());
@@ -149,6 +176,18 @@ function renderView(app: HTMLElement, view: View): void {
   }
 
   handleTransitionEntry(viewContainer);
+}
+
+function updatePositionsSyncButton(app: HTMLElement): void {
+  const syncBtn = app.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
+  if (!syncBtn) return;
+
+  const isAvailable = isAutoMode() && hasApiCredentials();
+  syncBtn.disabled = !isAvailable;
+
+  if (!isAvailable) {
+    syncBtn.classList.remove('syncing');
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -391,7 +391,7 @@ async function performAutoSync(
   onStateChange: () => void,
   forceRefresh = false,
 ): Promise<void> {
-  const syncBtn = container.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
+  const syncBtn = document.getElementById('btn-sync-positions') as HTMLButtonElement | null;
   if (syncBtn) {
     syncBtn.disabled = true;
     syncBtn.classList.add('syncing');
@@ -484,12 +484,6 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   let disposed = false;
   let latestKnownPositions = positions;
   let remainingTicker: ReturnType<typeof setInterval> | null = null;
-
-  // Sync button (auto mode)
-  container.querySelector('#btn-sync-positions')?.addEventListener('click', () => {
-    void performAutoSync(container, onStateChange, true);
-  });
-
   const syncRemainingTicker = (hasSubMinuteCountdown: boolean): void => {
     if (hasSubMinuteCountdown) {
       if (remainingTicker) return;

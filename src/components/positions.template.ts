@@ -1,4 +1,3 @@
-import { iconRefreshCw } from '../utils/icons';
 import { escapeHtml, skeletonSpan } from '../utils/ui-helpers';
 import { POSITIONS_COPY, SPOT_CHANGE_SKELETON_WIDTH, SPOT_VALUE_SKELETON_WIDTH } from './positions.constants';
 
@@ -9,18 +8,6 @@ interface PositionsTemplateInput {
   buyLowMarkup: string;
   sellHighMarkup: string;
   hasPositions: boolean;
-}
-
-function renderHeaderActions(autoMode: boolean, hasApi: boolean): string {
-  if (autoMode && hasApi) {
-    return `
-      <div class="section-actions">
-        <button type="button" class="btn btn-sm" id="btn-sync-positions" title="Actualizar datos desde Binance">${iconRefreshCw(13)}Actualizar</button>
-      </div>
-    `;
-  }
-
-  return '';
 }
 
 function renderEmptyState(autoMode: boolean, hasApi: boolean): string {
@@ -46,10 +33,7 @@ function renderEmptyState(autoMode: boolean, hasApi: boolean): string {
 export function renderPositionsTemplate(input: PositionsTemplateInput): string {
   return `
     <div class="section">
-      <div class="section-header positions-header">
-        <h2 class="visually-hidden">${POSITIONS_COPY.title}</h2>
-        ${renderHeaderActions(input.autoMode, input.hasApi)}
-      </div>
+      <h2 class="visually-hidden">${POSITIONS_COPY.title}</h2>
 
       <div class="grid-4 positions-summary-grid">
         <div class="stat-card positions-stat-card" data-shared-card="apr">

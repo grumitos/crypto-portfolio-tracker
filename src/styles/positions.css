@@ -1,7 +1,3 @@
-.positions-header {
-  align-items: end;
-}
-
 .positions-summary-grid {
   gap: var(--layout-gap-tight);
 }
@@ -155,10 +151,6 @@ tr:hover .pos-row-actions {
 }
 
 @media (max-width: 768px) {
-  .positions-header {
-    align-items: flex-start;
-  }
-
   .positions-group-card {
     padding: 0;
   }
@@ -411,6 +403,10 @@ td {
   color: var(--text-secondary);
   white-space: nowrap;
   font-size: var(--type-meta);
+}
+
+.positions-table tbody > tr:last-child td {
+  border-bottom-color: transparent;
 }
 
 tr:hover td {

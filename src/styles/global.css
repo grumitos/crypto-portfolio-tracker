@@ -140,9 +140,11 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  flex: 1 1 40rem;
-  min-width: min(100%, 22rem);
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 0;
   flex-wrap: nowrap;
+  max-width: 100%;
 }
 
 .nav {
@@ -154,7 +156,8 @@ body {
   border-radius: var(--radius-lg);
   padding: 6px;
   min-width: 0;
-  flex: 1 1 24rem;
+  flex: 0 0 auto;
+  width: auto;
   flex-wrap: nowrap;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-card) 12%, transparent);
 }
@@ -184,7 +187,7 @@ body {
   min-height: 46px;
   min-width: 0;
   border: 1px solid transparent;
-  flex: 1 1 0;
+  flex: 0 0 auto;
 }
 
 .nav-btn svg {
@@ -1603,6 +1606,7 @@ select:focus-visible {
   .app-header,
   .modal-overlay,
   .theme-toggle,
+  #btn-sync-positions,
   #btn-config,
   .api-error-banner {
     display: none !important;

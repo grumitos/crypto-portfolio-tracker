@@ -13,6 +13,7 @@ export const APP_SHELL_COPY = {
   lastUpdatePending: 'Actualizado: pendiente',
   navLabel: 'Vistas principales',
   utilityActionsLabel: 'Acciones globales',
+  syncLabel: 'Actualizar posiciones',
   configLabel: 'Configuración, importación y exportación',
   themeLabel: 'Cambiar tema',
 };

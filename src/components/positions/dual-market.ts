@@ -258,13 +258,6 @@ export function openDualMarketModal(onPrefillPosition: (product: DualProductScor
   loadProducts(ctx, wrappedPrefill);
 }
 
-function refreshModal(
-  ctx: DualMarketContext,
-  onPrefillPosition: (product: DualProductScored) => void,
-): void {
-  renderModalContent(ctx, onPrefillPosition);
-}
-
 function renderModalContent(
   ctx: DualMarketContext,
   onPrefillPosition: (product: DualProductScored) => void,
