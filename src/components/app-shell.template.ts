@@ -31,12 +31,12 @@ export function renderAppShell(
         <div class="app-utility-actions" role="group" aria-label="${APP_SHELL_COPY.utilityActionsLabel}">
           <button
             type="button"
-            class="utility-btn"
+            class="utility-btn utility-btn--icon-only"
             id="btn-config"
             title="${APP_SHELL_COPY.configLabel}"
             aria-label="${APP_SHELL_COPY.configLabel}"
           >
-            ${configIcon}Configurar
+            ${configIcon}
           </button>
           <button
             type="button"
