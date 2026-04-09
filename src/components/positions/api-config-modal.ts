@@ -145,7 +145,7 @@ function getOrCreateModal(): HTMLDialogElement {
               Exporta o restaura tus datos sin abrir otra pantalla.
             </p>
           </div>
-          ${renderBackupSection()}
+          ${renderBackupSection({ embedded: true })}
         </section>
       </div>
 

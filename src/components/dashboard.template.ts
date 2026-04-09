@@ -48,26 +48,27 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
 
   return `
     <article class="dashboard-balance-entry">
-      <div class="dashboard-balance-entry-main">
-        <span class="dashboard-balance-logo-wrap" data-asset-logo-root>
-          <img class="dashboard-balance-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async">
-          <span class="dashboard-balance-fallback" data-asset-logo-fallback>${safeMonogram}</span>
-        </span>
-        <span class="dashboard-balance-card-meta">
-          <span class="dashboard-balance-asset">${safeAsset}</span>
-          <span class="dashboard-balance-caption">${DASHBOARD_COPY.balanceBreakdownCaption}</span>
-        </span>
-      </div>
-      <div class="dashboard-balance-amount">
-        <span class="dashboard-balance-amount-value mono">${formatBalanceAmount(total)}</span>
-        <span class="dashboard-balance-amount-asset">${safeAsset}</span>
+      <div class="dashboard-balance-entry-top">
+        <div class="dashboard-balance-entry-main">
+          <span class="dashboard-balance-logo-wrap" data-asset-logo-root>
+            <img class="dashboard-balance-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async">
+            <span class="dashboard-balance-fallback" data-asset-logo-fallback>${safeMonogram}</span>
+          </span>
+          <span class="dashboard-balance-card-meta">
+            <span class="dashboard-balance-asset">${safeAsset}</span>
+          </span>
+        </div>
+        <div class="dashboard-balance-total">
+          <span class="dashboard-balance-total-label">Total</span>
+          <span class="dashboard-balance-total-value mono">${formatBalanceAmount(total)} ${safeAsset}</span>
+        </div>
       </div>
       <dl class="dashboard-balance-breakdown">
-        <div class="dashboard-balance-breakdown-item">
+        <div class="dashboard-balance-breakdown-row">
           <dt class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.freeLabel}</dt>
           <dd class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.free)}</dd>
         </div>
-        <div class="dashboard-balance-breakdown-item${balance.locked > 0 ? ' is-locked' : ''}">
+        <div class="dashboard-balance-breakdown-row${balance.locked > 0 ? ' is-locked' : ''}">
           <dt class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.lockedLabel}</dt>
           <dd class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.locked)}</dd>
         </div>
@@ -81,23 +82,27 @@ export function renderBalanceLoadingCards(count = DASHBOARD_BALANCE_LOADING_CARD
     { length: count },
     () => `
     <article class="dashboard-balance-entry is-loading" aria-hidden="true">
-      <div class="dashboard-balance-entry-main">
-        <span class="dashboard-balance-logo-wrap">
-          <span class="dashboard-balance-fallback skeleton" style="display:inline-flex;width:24px;height:24px"></span>
-        </span>
-        <span class="dashboard-balance-card-meta">
-          <span class="skeleton skeleton-text" style="width:44px"></span>
-          <span class="skeleton skeleton-text" style="width:96px"></span>
-        </span>
-      </div>
-      <div class="dashboard-balance-amount">
-        <span class="skeleton skeleton-number" style="width:104px"></span>
+      <div class="dashboard-balance-entry-top">
+        <div class="dashboard-balance-entry-main">
+          <span class="dashboard-balance-logo-wrap">
+            <span class="dashboard-balance-fallback skeleton" style="display:inline-flex;width:24px;height:24px"></span>
+          </span>
+          <span class="dashboard-balance-card-meta">
+            <span class="skeleton skeleton-text" style="width:44px"></span>
+          </span>
+        </div>
+        <div class="dashboard-balance-total">
+          <span class="skeleton skeleton-text" style="width:34px"></span>
+          <span class="skeleton skeleton-number" style="width:110px"></span>
+        </div>
       </div>
       <div class="dashboard-balance-breakdown">
-        <span class="dashboard-balance-breakdown-item">
+        <span class="dashboard-balance-breakdown-row">
+          <span class="skeleton skeleton-text" style="width:36px"></span>
           <span class="skeleton skeleton-text" style="width:76px"></span>
         </span>
-        <span class="dashboard-balance-breakdown-item">
+        <span class="dashboard-balance-breakdown-row">
+          <span class="skeleton skeleton-text" style="width:36px"></span>
           <span class="skeleton skeleton-text" style="width:76px"></span>
         </span>
       </div>

@@ -344,14 +344,9 @@
   display: grid;
   gap: clamp(14px, 1.8vw, 20px);
   margin-top: 0;
-  padding: clamp(16px, 1.8vw, 22px);
-  border: 1px solid color-mix(in srgb, var(--accent-warm) 14%, var(--border));
-  border-radius: calc(var(--radius-lg) + 2px);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent-warm-muted) 10%, var(--bg-card)) 0,
-    var(--bg-card) 100%
-  );
+  padding: clamp(16px, 1.8vw, 22px) 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: transparent;
 }
 
 .dashboard-balance-panel-head {
@@ -383,13 +378,11 @@
 .dashboard-balance-panel-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   justify-self: start;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: var(--radius-pill);
-  background: var(--accent-warm-muted);
-  color: var(--accent-warm);
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
   font-size: var(--font-size-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -399,24 +392,30 @@
 .dashboard-balance-panel-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--border) 78%, transparent);
+  gap: 0 var(--space-lg);
+  overflow: visible;
+  border: 0;
+  background: transparent;
 }
 
 .dashboard-balance-entry {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 12px;
   min-width: 0;
-  padding: 15px 16px 16px;
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-secondary));
+  padding: 16px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: transparent;
 }
 
 .dashboard-balance-entry.is-loading {
   justify-content: center;
+}
+
+.dashboard-balance-entry-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
 }
 
 .dashboard-balance-entry-main {
@@ -460,77 +459,67 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 2px;
+  gap: 0;
   line-height: 1.15;
 }
 
 .dashboard-balance-asset {
-  font-size: var(--font-size-meta);
+  font-size: var(--font-size-body);
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.dashboard-balance-caption {
+.dashboard-balance-total {
+  display: grid;
+  gap: 3px;
+  text-align: right;
+  justify-items: end;
+}
+
+.dashboard-balance-total-label {
   font-size: var(--font-size-overline);
   color: var(--text-muted);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.dashboard-balance-amount {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-  font-size: clamp(1.02rem, 1.2vw, 1.18rem);
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.dashboard-balance-amount-value {
-  font-family: var(--font-family-mono);
-}
-
-.dashboard-balance-amount-asset {
-  font-family: var(--font-family-ui);
-  font-size: var(--font-size-meta);
-  font-weight: 600;
+.dashboard-balance-total-value {
+  font-size: clamp(1.02rem, 1.18vw, 1.14rem);
+  line-height: 1.1;
   color: var(--text-primary);
 }
 
 .dashboard-balance-breakdown {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
+  display: grid;
+  gap: 6px;
   margin: 0;
 }
 
-.dashboard-balance-breakdown-item {
-  display: inline-grid;
-  grid-auto-flow: column;
-  align-items: center;
+.dashboard-balance-breakdown-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
   gap: 8px;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-secondary) 86%, var(--bg-card));
-  color: var(--text-muted);
-  font-size: var(--font-size-overline);
+  color: var(--text-secondary);
+  font-size: var(--font-size-meta);
   font-variant-numeric: tabular-nums;
 }
 
 .dashboard-balance-breakdown-label {
   font-family: var(--font-family-ui);
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   margin: 0;
 }
 
 .dashboard-balance-breakdown-value {
   font-family: var(--font-family-mono);
+  justify-self: end;
   margin: 0;
 }
 
-.dashboard-balance-breakdown-item.is-locked {
-  background: var(--accent-warm-muted);
+.dashboard-balance-breakdown-row.is-locked .dashboard-balance-breakdown-value {
   color: var(--accent-warm);
 }
 
@@ -589,10 +578,20 @@
 
   .dashboard-balance-panel-grid {
     grid-template-columns: 1fr;
+    gap: 0;
   }
 
   .dashboard-balance-entry {
-    padding: 14px;
+    padding-top: 14px;
+  }
+
+  .dashboard-balance-entry-top {
+    flex-direction: column;
+  }
+
+  .dashboard-balance-total {
+    text-align: left;
+    justify-items: start;
   }
 
   .goal-progress-legend {

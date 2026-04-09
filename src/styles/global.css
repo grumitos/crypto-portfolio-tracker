@@ -1507,6 +1507,11 @@ select:focus-visible {
   );
 }
 
+.backup-inline {
+  display: grid;
+  gap: var(--space-md);
+}
+
 .backup-panel-copy {
   display: flex;
   flex-direction: column;
@@ -1531,6 +1536,33 @@ select:focus-visible {
   display: grid;
   gap: var(--space-md);
   align-content: start;
+}
+
+.backup-inline-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.backup-inline-export,
+.backup-inline-import {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.backup-inline-label {
+  font-size: var(--font-size-overline);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.backup-inline-import {
+  padding-left: var(--space-md);
+  border-left: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
 }
 
 .backup-import-section {
@@ -1581,8 +1613,16 @@ select:focus-visible {
 }
 
 @media (max-width: 768px) {
-  .backup-panel {
+  .backup-panel,
+  .backup-inline-body {
     grid-template-columns: 1fr;
+  }
+
+  .backup-inline-import {
+    padding-left: 0;
+    padding-top: var(--space-md);
+    border-left: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   }
 
   .backup-import-trigger {

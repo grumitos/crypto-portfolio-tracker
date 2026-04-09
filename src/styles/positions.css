@@ -921,10 +921,24 @@ tr:hover .pos-row-actions {
   color: var(--color-warning);
 }
 
+#modal-api-config.modal-overlay {
+  overflow-y: auto;
+}
+
+#modal-api-config.modal-overlay[open] {
+  align-items: flex-start;
+}
+
+#modal-api-config .modal-api-config {
+  max-height: none;
+  overflow: visible;
+  margin-block: clamp(8px, 3vh, 28px);
+}
+
 .modal-api-config {
   container-type: inline-size;
   display: grid;
-  gap: clamp(18px, 2vw, 24px);
+  gap: clamp(20px, 2vw, 26px);
   max-width: min(980px, calc(100vw - 2 * var(--space-xl)));
   padding: clamp(18px, 2vw, 28px);
 }
@@ -960,7 +974,7 @@ tr:hover .pos-row-actions {
 .modal-api-config-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.92fr);
-  gap: var(--space-lg);
+  gap: clamp(18px, 2vw, 28px);
   align-items: start;
 }
 
@@ -968,23 +982,20 @@ tr:hover .pos-row-actions {
   display: grid;
   gap: var(--space-md);
   min-width: 0;
-  padding: clamp(16px, 1.6vw, 20px);
-  border: 1px solid color-mix(in srgb, var(--accent-warm) 12%, var(--border));
-  border-radius: calc(var(--radius-md) + 1px);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent-warm-muted) 8%, var(--bg-card)) 0,
-    var(--bg-card) 100%
-  );
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .modal-api-block--backup {
   grid-column: 1 / -1;
+  padding-top: clamp(16px, 1.8vw, 22px);
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .modal-api-block-head {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .modal-api-block-kicker {
@@ -1036,10 +1047,9 @@ tr:hover .pos-row-actions {
 .modal-mode-panel {
   display: grid;
   gap: 10px;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-card));
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .modal-mode-panel-head {
@@ -1094,39 +1104,13 @@ tr:hover .pos-row-actions {
 }
 
 .modal-api-config-actions {
-  position: sticky;
-  bottom: calc(-1 * clamp(18px, 2vw, 28px));
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin: 0 calc(-1 * clamp(18px, 2vw, 28px)) calc(-1 * clamp(18px, 2vw, 28px));
-  padding: var(--space-md) clamp(18px, 2vw, 28px) clamp(18px, 2vw, 28px);
+  margin: 0;
+  padding-top: var(--space-md);
   border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-card) 6%, transparent) 0,
-    var(--bg-card) 22%
-  );
-}
-
-.modal-api-block--backup .backup-panel {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
-  gap: var(--space-md);
-  padding: 0;
-  border: 0;
   background: transparent;
-}
-
-.modal-api-block--backup .backup-body {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-}
-
-.modal-api-block--backup .backup-import-section {
-  border-top: 0;
-  border-left: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  padding-top: 0;
-  padding-left: var(--space-md);
 }
 
 .modal-api-block--backup .backup-import-trigger,
@@ -1201,8 +1185,7 @@ tr:hover .pos-row-actions {
 
   .modal-api-config-layout,
   .modal-api-form-grid--portfolio,
-  .modal-api-block--backup .backup-panel,
-  .modal-api-block--backup .backup-body {
+  .modal-api-block--backup .backup-inline-body {
     grid-template-columns: 1fr;
   }
 
@@ -1216,13 +1199,6 @@ tr:hover .pos-row-actions {
   .modal-api-config-actions .modal-action-spacer {
     width: 100%;
     margin-right: 0;
-  }
-
-  .modal-api-block--backup .backup-import-section {
-    border-left: 0;
-    border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    padding-left: 0;
-    padding-top: var(--space-md);
   }
 }
 

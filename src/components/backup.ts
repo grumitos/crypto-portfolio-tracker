@@ -4,7 +4,46 @@ import { todayISODateLocal } from '../utils/date';
 import { bindModalEvents, openModal, closeModal } from '../utils/modal-manager';
 import { showAlertDialog } from '../utils/dialogs';
 
-export function renderBackupSection(): string {
+interface BackupSectionOptions {
+  embedded?: boolean;
+}
+
+function renderBackupControls(embedded = false): string {
+  return `
+    <div class="${embedded ? 'backup-inline-body' : 'backup-body'}">
+      <div class="backup-inline-export">
+        ${embedded ? '<span class="backup-inline-label">Exportar estado actual</span>' : ''}
+        <button type="button" class="btn btn-primary" id="btn-export">${iconDownload(15)}Exportar JSON</button>
+      </div>
+      <div class="${embedded ? 'backup-inline-import' : 'backup-import-section'}">
+        <label class="backup-import-label text-secondary" for="backup-file-input">
+          ${iconUpload(14)}Importar backup JSON
+        </label>
+        <div class="backup-import-control">
+          <label class="backup-import-trigger btn" for="backup-file-input">Seleccionar archivo</label>
+          <span class="backup-file-name text-muted" id="backup-file-name">Ningún archivo seleccionado</span>
+        </div>
+        <input
+          type="file"
+          id="backup-file-input"
+          accept=".json"
+          class="backup-file-input"
+          aria-describedby="backup-file-name"
+        >
+      </div>
+    </div>
+  `;
+}
+
+export function renderBackupSection(options: BackupSectionOptions = {}): string {
+  if (options.embedded) {
+    return `
+      <div class="backup-inline">
+        ${renderBackupControls(true)}
+      </div>
+    `;
+  }
+
   return `
     <div class="backup-panel">
       <div class="backup-panel-copy">
@@ -13,25 +52,7 @@ export function renderBackupSection(): string {
           Exporta un JSON completo o restaura uno existente sin salir del flujo actual.
         </p>
       </div>
-      <div class="backup-body">
-        <button type="button" class="btn btn-primary" id="btn-export">${iconDownload(15)}Exportar JSON</button>
-        <div class="backup-import-section">
-          <label class="backup-import-label text-secondary" for="backup-file-input">
-            ${iconUpload(14)}Importar backup JSON
-          </label>
-          <div class="backup-import-control">
-            <label class="backup-import-trigger btn" for="backup-file-input">Seleccionar archivo</label>
-            <span class="backup-file-name text-muted" id="backup-file-name">Ningún archivo seleccionado</span>
-          </div>
-          <input
-            type="file"
-            id="backup-file-input"
-            accept=".json"
-            class="backup-file-input"
-            aria-describedby="backup-file-name"
-          >
-        </div>
-      </div>
+      ${renderBackupControls()}
     </div>
   `;
 }
