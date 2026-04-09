@@ -622,7 +622,7 @@ describe('dashboard legends', () => {
   });
 
   it('renders account balance detail in dashboard when Binance auto mode is active', async () => {
-    seedState({ mode: 'auto' });
+    seedState({ mode: 'auto', positions: [] });
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     vi.mocked(fetchBalanceSummary).mockResolvedValue({
       totalUsdEstimate: 260,
@@ -648,6 +648,61 @@ describe('dashboard legends', () => {
     expect(container.querySelector('#dashboard-balance-strip-items')?.textContent).toContain(
       '260.00',
     );
+
+    dispose();
+    container.remove();
+  });
+
+  it('adds active auto positions to the locked amount in the account balance detail', async () => {
+    seedState({
+      mode: 'auto',
+      positions: [
+        {
+          id: 'eth-1',
+          asset: 'ETH',
+          direction: 'sell-high',
+          subscriptionAsset: 'ETH',
+          amount: 9.93127984,
+          targetPrice: 2400,
+          entryDate: '2026-02-20',
+          settlementDate: '2026-02-22',
+          apr: 40,
+        },
+        {
+          id: 'sol-1',
+          asset: 'SOL',
+          direction: 'sell-high',
+          subscriptionAsset: 'SOL',
+          amount: 234.41857548,
+          targetPrice: 180,
+          entryDate: '2026-02-20',
+          settlementDate: '2026-02-22',
+          apr: 28,
+        },
+      ],
+    });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(fetchBalanceSummary).mockResolvedValue({
+      totalUsdEstimate: 25,
+      balances: [
+        { asset: 'USDC', free: 22.80919709, locked: 0 },
+        { asset: 'USDT', free: 0.08945718, locked: 0 },
+        { asset: 'SOL', free: 0.000575, locked: 0 },
+        { asset: 'ETH', free: 0.00008, locked: 0 },
+      ],
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    const stripText = container.querySelector('#dashboard-balance-strip-items')?.textContent ?? '';
+
+    expect(stripText).toContain('ETH');
+    expect(stripText).toContain('9.9314');
+    expect(stripText).toContain('SOL');
+    expect(stripText).toContain('234.42');
 
     dispose();
     container.remove();

@@ -116,6 +116,64 @@ describe('binance client', () => {
     });
   });
 
+  it('normalizes Binance LD asset wrappers and merges balances by underlying asset', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        balances: [
+          { asset: 'USDC', free: '12.5', locked: '0' },
+          { asset: 'LDUSDC', free: '7.25', locked: '1.25' },
+          { asset: 'LDBTC', free: '0.010000', locked: '0' },
+          { asset: 'BTC', free: '0.020000', locked: '0.005000' },
+          { asset: 'USDT', free: '0', locked: '0' },
+        ],
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    const balances = await client.fetchAccountBalances(true);
+
+    expect(balances).toEqual([
+      { asset: 'USDC', free: 19.75, locked: 1.25 },
+      { asset: 'BTC', free: 0.03, locked: 0.005 },
+    ]);
+  });
+
+  it('normalizes LD assets in dual positions to their underlying symbol', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        total: 1,
+        list: [
+          {
+            id: '1',
+            investCoin: 'LDUSDC',
+            exercisedCoin: 'BTC',
+            subscriptionAmount: '250',
+            strikePrice: '45000',
+            duration: 2,
+            settleDate: 1708416000000,
+            purchaseStatus: 'PURCHASE_SUCCESS',
+            apr: '0.12',
+            orderId: 7973677530,
+            purchaseEndTime: 1708329600000,
+            optionType: 'PUT',
+          },
+        ],
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    const positions = await client.fetchDualPositions(true);
+
+    expect(positions[0]).toMatchObject({
+      investCoin: 'USDC',
+      exercisedCoin: 'BTC',
+    });
+  });
+
   it('requests dual market products with required invest and exercised coins', async () => {
     const fetchMock = vi.fn().mockImplementation(async (input: string | URL) => {
       const url = new URL(String(input), 'https://example.test');

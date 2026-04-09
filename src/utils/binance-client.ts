@@ -29,6 +29,40 @@ let productCache: CacheEntry<DualProduct[]> | null = null;
 let positionsCache: CacheEntry<BinanceDualPosition[]> | null = null;
 let balanceCache: CacheEntry<BinanceAccountBalance[]> | null = null;
 
+function normalizeBinanceAssetCode(asset: string): string {
+  const normalized = asset.toUpperCase().trim();
+
+  // Binance can surface Simple Earn flexible balances with an `LD` prefix
+  // (for example `LDUSDC`). Present them as the underlying asset.
+  if (/^LD[A-Z0-9]{3,}$/u.test(normalized)) {
+    return normalized.slice(2);
+  }
+
+  return normalized;
+}
+
+function mergeAccountBalances(rows: BinanceAccountBalance[]): BinanceAccountBalance[] {
+  const merged = new Map<string, BinanceAccountBalance>();
+
+  rows.forEach((row) => {
+    const asset = normalizeBinanceAssetCode(row.asset);
+    const current = merged.get(asset);
+    if (current) {
+      current.free += row.free;
+      current.locked += row.locked;
+      return;
+    }
+
+    merged.set(asset, {
+      asset,
+      free: row.free,
+      locked: row.locked,
+    });
+  });
+
+  return [...merged.values()].filter((row) => row.free > 0 || row.locked > 0);
+}
+
 // ── HMAC-SHA256 Signing ──
 
 async function hmacSign(secret: string, message: string): Promise<string> {
@@ -106,13 +140,13 @@ export async function fetchAccountBalances(forceRefresh = false): Promise<Binanc
   }
 
   const raw = await fetchSigned<RawAccountInfo>(API_PROXY_BASE, '/account');
-  const balances: BinanceAccountBalance[] = raw.balances
-    .map((b) => ({
+  const balances = mergeAccountBalances(
+    raw.balances.map((b) => ({
       asset: b.asset,
       free: parseFloat(b.free),
       locked: parseFloat(b.locked),
-    }))
-    .filter((b) => b.free > 0 || b.locked > 0);
+    })),
+  );
 
   balanceCache = { data: balances, ts: Date.now() };
   return balances;
@@ -154,8 +188,8 @@ export async function fetchDualPositions(forceRefresh = false): Promise<BinanceD
   const positions: BinanceDualPosition[] = (raw.list ?? [])
     .map((p) => ({
       id: p.id,
-      investCoin: p.investCoin,
-      exercisedCoin: p.exercisedCoin,
+      investCoin: normalizeBinanceAssetCode(p.investCoin),
+      exercisedCoin: normalizeBinanceAssetCode(p.exercisedCoin),
       orderId: p.orderId !== undefined ? String(p.orderId) : undefined,
       strikePrice: parseFloat(p.strikePrice),
       amount: parseFloat(p.subscriptionAmount),
@@ -239,8 +273,8 @@ async function fetchDualProductsForPair(
 
     return (raw.list ?? []).map((p) => ({
       id: p.id,
-      investCoin: p.investCoin,
-      exercisedCoin: p.exercisedCoin,
+      investCoin: normalizeBinanceAssetCode(p.investCoin),
+      exercisedCoin: normalizeBinanceAssetCode(p.exercisedCoin),
       orderId: p.orderId !== undefined ? String(p.orderId) : undefined,
       strikePrice: parseFloat(p.strikePrice),
       duration: p.duration,

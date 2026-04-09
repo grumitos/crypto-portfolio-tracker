@@ -47,8 +47,8 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
   const safeAsset = escapeHtml(balance.asset);
 
   return `
-    <article class="dashboard-balance-card">
-      <div class="dashboard-balance-card-head">
+    <article class="dashboard-balance-entry">
+      <div class="dashboard-balance-entry-main">
         <span class="dashboard-balance-logo-wrap" data-asset-logo-root>
           <img class="dashboard-balance-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async">
           <span class="dashboard-balance-fallback" data-asset-logo-fallback>${safeMonogram}</span>
@@ -62,16 +62,16 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
         <span class="dashboard-balance-amount-value mono">${formatBalanceAmount(total)}</span>
         <span class="dashboard-balance-amount-asset">${safeAsset}</span>
       </div>
-      <div class="dashboard-balance-breakdown">
-        <span class="dashboard-balance-breakdown-item">
-          <span class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.freeLabel}</span>
-          <span class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.free)}</span>
-        </span>
-        <span class="dashboard-balance-breakdown-item${balance.locked > 0 ? ' is-locked' : ''}">
-          <span class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.lockedLabel}</span>
-          <span class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.locked)}</span>
-        </span>
-      </div>
+      <dl class="dashboard-balance-breakdown">
+        <div class="dashboard-balance-breakdown-item">
+          <dt class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.freeLabel}</dt>
+          <dd class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.free)}</dd>
+        </div>
+        <div class="dashboard-balance-breakdown-item${balance.locked > 0 ? ' is-locked' : ''}">
+          <dt class="dashboard-balance-breakdown-label">${DASHBOARD_COPY.lockedLabel}</dt>
+          <dd class="dashboard-balance-breakdown-value mono">${formatBalanceAmount(balance.locked)}</dd>
+        </div>
+      </dl>
     </article>
   `;
 }
@@ -80,8 +80,8 @@ export function renderBalanceLoadingCards(count = DASHBOARD_BALANCE_LOADING_CARD
   return Array.from(
     { length: count },
     () => `
-    <article class="dashboard-balance-card is-loading" aria-hidden="true">
-      <div class="dashboard-balance-card-head">
+    <article class="dashboard-balance-entry is-loading" aria-hidden="true">
+      <div class="dashboard-balance-entry-main">
         <span class="dashboard-balance-logo-wrap">
           <span class="dashboard-balance-fallback skeleton" style="display:inline-flex;width:24px;height:24px"></span>
         </span>
@@ -90,10 +90,16 @@ export function renderBalanceLoadingCards(count = DASHBOARD_BALANCE_LOADING_CARD
           <span class="skeleton skeleton-text" style="width:96px"></span>
         </span>
       </div>
-      <div class="skeleton skeleton-number" style="width:104px"></div>
+      <div class="dashboard-balance-amount">
+        <span class="skeleton skeleton-number" style="width:104px"></span>
+      </div>
       <div class="dashboard-balance-breakdown">
-        <span class="skeleton skeleton-text" style="width:76px"></span>
-        <span class="skeleton skeleton-text" style="width:76px"></span>
+        <span class="dashboard-balance-breakdown-item">
+          <span class="skeleton skeleton-text" style="width:76px"></span>
+        </span>
+        <span class="dashboard-balance-breakdown-item">
+          <span class="skeleton skeleton-text" style="width:76px"></span>
+        </span>
       </div>
     </article>
   `,
@@ -109,7 +115,10 @@ export function renderBalanceEmptyState(): string {
   `;
 }
 
-export function renderBalanceDetailCards(container: HTMLElement, balances: BinanceAccountBalance[]): void {
+export function renderBalanceDetailCards(
+  container: HTMLElement,
+  balances: BinanceAccountBalance[],
+): void {
   container.innerHTML = balances.map((balance) => renderBalanceItem(balance)).join('');
   bindAssetLogoFallbacks(container);
 }

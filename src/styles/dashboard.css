@@ -47,7 +47,11 @@
   padding: clamp(18px, 2.2vw, 28px);
   border-color: color-mix(in srgb, var(--accent-warm) 22%, var(--border));
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0, var(--bg-card) 52%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0,
+      var(--bg-card) 52%
+    ),
     var(--bg-card);
   box-shadow:
     var(--shadow-card),
@@ -337,24 +341,24 @@
 }
 
 .dashboard-balance-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
+  display: grid;
+  gap: clamp(14px, 1.8vw, 20px);
   margin-top: 0;
-  padding: var(--panel-padding);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
+  padding: clamp(16px, 1.8vw, 22px);
+  border: 1px solid color-mix(in srgb, var(--accent-warm) 14%, var(--border));
+  border-radius: calc(var(--radius-lg) + 2px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-warm-muted) 10%, var(--bg-card)) 0,
+    var(--bg-card) 100%
+  );
 }
 
 .dashboard-balance-panel-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding-bottom: var(--space-sm);
-  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-sm) var(--space-md);
 }
 
 .dashboard-balance-panel-title {
@@ -363,16 +367,16 @@
   gap: 8px;
   font-size: var(--font-size-meta);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-primary);
 }
 
 .dashboard-balance-panel-copy {
-  margin: var(--space-xs) 0 0;
-  max-width: 46ch;
-  font-size: var(--font-size-body);
-  line-height: 1.45;
+  margin: 6px 0 0;
+  max-width: 36ch;
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-body);
   color: var(--text-muted);
 }
 
@@ -380,6 +384,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  justify-self: start;
   min-height: 28px;
   padding: 0 10px;
   border-radius: var(--radius-pill);
@@ -393,29 +398,32 @@
 
 .dashboard-balance-panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(188px, 1fr));
-  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--border) 78%, transparent);
 }
 
-.dashboard-balance-card {
+.dashboard-balance-entry {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 12px;
   min-width: 0;
-  padding: var(--panel-padding-compact);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
+  padding: 15px 16px 16px;
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-secondary));
 }
 
-.dashboard-balance-card.is-loading {
-  justify-content: space-between;
+.dashboard-balance-entry.is-loading {
+  justify-content: center;
 }
 
-.dashboard-balance-card-head {
+.dashboard-balance-entry-main {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 .dashboard-balance-logo-wrap {
@@ -474,8 +482,8 @@
   align-items: baseline;
   gap: 0.35rem;
   flex-wrap: wrap;
-  font-size: var(--font-size-number-sm);
-  color: var(--text-secondary);
+  font-size: clamp(1.02rem, 1.2vw, 1.18rem);
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -494,16 +502,18 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
+  margin: 0;
 }
 
 .dashboard-balance-breakdown-item {
-  display: inline-flex;
+  display: inline-grid;
+  grid-auto-flow: column;
   align-items: center;
-  gap: 6px;
-  min-height: 24px;
-  padding: 0 8px;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: var(--radius-pill);
-  background: var(--bg-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 86%, var(--bg-card));
   color: var(--text-muted);
   font-size: var(--font-size-overline);
   font-variant-numeric: tabular-nums;
@@ -511,10 +521,12 @@
 
 .dashboard-balance-breakdown-label {
   font-family: var(--font-family-ui);
+  margin: 0;
 }
 
 .dashboard-balance-breakdown-value {
   font-family: var(--font-family-mono);
+  margin: 0;
 }
 
 .dashboard-balance-breakdown-item.is-locked {
@@ -567,7 +579,8 @@
   }
 
   .dashboard-balance-panel-head {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .dashboard-balance-panel-badge {
@@ -576,6 +589,10 @@
 
   .dashboard-balance-panel-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-balance-entry {
+    padding: 14px;
   }
 
   .goal-progress-legend {

@@ -55,8 +55,16 @@ html[data-theme='dark'] {
 body {
   font-family: var(--font-family-ui);
   background:
-    radial-gradient(circle at top center, color-mix(in srgb, var(--accent-warm-muted) 26%, transparent), transparent 42%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 28%, var(--bg-primary)) 0, var(--bg-primary) 180px);
+    radial-gradient(
+      circle at top center,
+      color-mix(in srgb, var(--accent-warm-muted) 26%, transparent),
+      transparent 42%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-secondary) 28%, var(--bg-primary)) 0,
+      var(--bg-primary) 180px
+    );
   color: var(--text-primary);
   line-height: var(--line-height-body);
   min-height: 100vh;
@@ -793,7 +801,6 @@ select:focus-visible {
   gap: var(--space-md);
 }
 
-
 .positions-spot-strip-wrap {
   display: flex;
   justify-content: flex-start;
@@ -1487,12 +1494,17 @@ select:focus-visible {
 /* ── Backup modal ── */
 .backup-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(280px, 0.92fr);
   gap: var(--space-lg);
-  padding: var(--panel-padding);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
+  align-items: start;
+  padding: clamp(16px, 1.8vw, 22px);
+  border: 1px solid color-mix(in srgb, var(--accent-warm) 12%, var(--border));
+  border-radius: calc(var(--radius-md) + 1px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-warm-muted) 9%, var(--bg-card)) 0,
+    var(--bg-card) 100%
+  );
 }
 
 .backup-panel-copy {
@@ -1503,45 +1515,78 @@ select:focus-visible {
 
 .backup-panel-copy p {
   margin: 0;
-  max-width: 42ch;
+  max-width: 34ch;
   line-height: var(--line-height-body);
 }
 
 .backup-panel-title {
   font-size: var(--font-size-meta);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-primary);
 }
 
 .backup-body {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--space-md);
+  align-content: start;
 }
 
 .backup-import-section {
-  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   padding-top: var(--space-md);
 }
 
 .backup-import-label {
-  font-size: var(--font-size-meta);
+  font-size: var(--font-size-overline);
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: var(--space-sm);
+  margin-bottom: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.backup-import-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.backup-import-trigger {
+  width: fit-content;
+}
+
+.backup-file-name {
+  min-width: 0;
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-snug);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .backup-file-input {
-  font-size: var(--font-size-meta);
-  color: var(--text-secondary);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 
 @media (max-width: 768px) {
   .backup-panel {
     grid-template-columns: 1fr;
+  }
+
+  .backup-import-trigger {
+    width: 100%;
   }
 }
 

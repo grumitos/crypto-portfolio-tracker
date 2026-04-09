@@ -18,7 +18,7 @@ export const CALCULADORA_COPY = {
   signalTitle: 'Señal actual',
   priceLabel: 'Precio activo',
   capitalLabel: 'Capital',
-  tradesLabel: 'Trades/Año',
+  tradesLabel: 'Rondas/Año',
   feeLabel: 'Comisión',
   resetLabel: 'Reset',
   addLabel: 'Agregar',

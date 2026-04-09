@@ -422,11 +422,50 @@ function updateDashboardSummaryVisual(
 function renderBalanceDetail(
   container: HTMLElement,
   balances: BinanceAccountBalance[] | null,
+  positions: AppState['positions'] = [],
 ): void {
   const { balanceStrip, balanceStripItems } = getDashboardElements(container);
   if (!balanceStrip || !balanceStripItems) return;
 
-  const relevant = (balances ?? [])
+  const mergedByAsset = new Map<string, BinanceAccountBalance>();
+
+  (balances ?? []).forEach((balance) => {
+    const asset = balance.asset.trim().toUpperCase();
+    if (!asset) return;
+
+    const current = mergedByAsset.get(asset);
+    if (current) {
+      current.free += balance.free;
+      current.locked += balance.locked;
+      return;
+    }
+
+    mergedByAsset.set(asset, {
+      asset,
+      free: balance.free,
+      locked: balance.locked,
+    });
+  });
+
+  positions.forEach((position) => {
+    const asset = position.subscriptionAsset.trim().toUpperCase();
+    const amount = position.amount;
+    if (!asset || !Number.isFinite(amount) || amount <= 0) return;
+
+    const current = mergedByAsset.get(asset);
+    if (current) {
+      current.locked += amount;
+      return;
+    }
+
+    mergedByAsset.set(asset, {
+      asset,
+      free: 0,
+      locked: amount,
+    });
+  });
+
+  const relevant = [...mergedByAsset.values()]
     .map((balance) => ({ ...balance, total: balance.free + balance.locked }))
     .sort((left, right) => right.total - left.total)
     .slice(0, DASHBOARD_BALANCE_VISIBLE_ITEMS);
@@ -568,7 +607,7 @@ async function hydrateDashboardMarketStats(
         autoBalanceSummary = await fetchBalanceSummary(forceRefresh);
         rememberBalanceSummary(autoBalanceSummary);
       }
-      renderBalanceDetail(container, autoBalanceSummary.balances);
+      renderBalanceDetail(container, autoBalanceSummary.balances, currentState.positions);
     } catch {
       renderBalanceDetail(container, null);
     }

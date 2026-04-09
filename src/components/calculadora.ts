@@ -1,4 +1,9 @@
-import { loadCalcState, saveCalcState } from '../utils/storage';
+import {
+  DEFAULT_CALC_REBUY_PCT,
+  DEFAULT_CALC_SELL_PCT,
+  loadCalcState,
+  saveCalcState,
+} from '../utils/storage';
 import { formatUSD } from '../utils/calculator';
 import type {
   AchievedResults,
@@ -83,6 +88,7 @@ function getEffectiveFee(): { maker: number; label: string } {
 // ── Render ──
 
 export function renderCalculadora(container: HTMLElement): () => void {
+  const eventController = new AbortController();
   cancelScheduledRecalculate();
   loadAndInit();
 
@@ -92,11 +98,12 @@ export function renderCalculadora(container: HTMLElement): () => void {
   );
 
   renderPurchaseRows(container);
-  bindEvents(container);
+  bindEvents(container, eventController.signal);
   cancelScheduledRecalculate();
   recalculate(container, { animate: false });
 
   return () => {
+    eventController.abort();
     cancelScheduledRecalculate();
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -138,7 +145,7 @@ function renderPurchaseRows(container: HTMLElement): void {
 
 // ── Events ──
 
-function bindEvents(container: HTMLElement): void {
+function bindEvents(container: HTMLElement, signal: AbortSignal): void {
   const priceInput = container.querySelector('#calc-price') as HTMLInputElement;
   const capitalInput = container.querySelector('#calc-capital') as HTMLInputElement;
   const tradesInput = container.querySelector('#calc-trades') as HTMLInputElement;
@@ -160,7 +167,7 @@ function bindEvents(container: HTMLElement): void {
       state[key] = el.value;
       scheduleRecalculate(container);
       scheduleSave();
-    });
+    }, { signal });
   }
 
   // Sell price ↔ sell % bidirectional sync
@@ -172,7 +179,7 @@ function bindEvents(container: HTMLElement): void {
     sellPriceInput.classList.remove('calc-locked');
     cancelScheduledRecalculate();
     recalculate(container, { animate: false });
-  });
+  }, { signal });
 
   sellPctInput.addEventListener('focus', () => {
     state.sellSyncSource = 'percent';
@@ -182,21 +189,21 @@ function bindEvents(container: HTMLElement): void {
     sellPctInput.classList.remove('calc-locked');
     cancelScheduledRecalculate();
     recalculate(container, { animate: false });
-  });
+  }, { signal });
 
   sellPriceInput.addEventListener('input', () => {
     state.sellPrice = sellPriceInput.value;
     state.sellSyncSource = 'price';
     scheduleRecalculate(container);
     scheduleSave();
-  });
+  }, { signal });
 
   sellPctInput.addEventListener('input', () => {
     state.sellPct = sellPctInput.value;
     state.sellSyncSource = 'percent';
     scheduleRecalculate(container);
     scheduleSave();
-  });
+  }, { signal });
 
   // Fee preset buttons
   container.querySelector('#calc-fee-spot')?.addEventListener('click', () => {
@@ -206,7 +213,7 @@ function bindEvents(container: HTMLElement): void {
     cancelScheduledRecalculate();
     recalculate(container, { animate: true });
     save();
-  });
+  }, { signal });
 
   container.querySelector('#calc-fee-futures')?.addEventListener('click', () => {
     state.feePreset = 'futures';
@@ -215,7 +222,7 @@ function bindEvents(container: HTMLElement): void {
     cancelScheduledRecalculate();
     recalculate(container, { animate: true });
     save();
-  });
+  }, { signal });
 
   container.querySelector('#calc-fee-fdusd')?.addEventListener('click', () => {
     if (state.feePreset !== 'spot') return;
@@ -224,17 +231,17 @@ function bindEvents(container: HTMLElement): void {
     cancelScheduledRecalculate();
     recalculate(container, { animate: true });
     save();
-  });
+  }, { signal });
 
   // Reset execution
   container.querySelector('#calc-reset-exec')?.addEventListener('click', () => {
     state.sellPrice = '';
-    state.sellPct = '0.98';
-    state.rebuyPct = '0.85';
+    state.sellPct = DEFAULT_CALC_SELL_PCT;
+    state.rebuyPct = DEFAULT_CALC_REBUY_PCT;
     state.sellSyncSource = 'percent';
     sellPriceInput.value = '';
-    sellPctInput.value = '0.98';
-    rebuyPctInput.value = '0.85';
+    sellPctInput.value = DEFAULT_CALC_SELL_PCT;
+    rebuyPctInput.value = DEFAULT_CALC_REBUY_PCT;
     sellPriceInput.readOnly = true;
     sellPriceInput.classList.add('calc-locked');
     sellPctInput.readOnly = false;
@@ -242,7 +249,7 @@ function bindEvents(container: HTMLElement): void {
     cancelScheduledRecalculate();
     recalculate(container, { animate: true });
     save();
-  });
+  }, { signal });
 
   // Add purchase
   container.querySelector('#calc-add-purchase')?.addEventListener('click', () => {
@@ -251,7 +258,7 @@ function bindEvents(container: HTMLElement): void {
     cancelScheduledRecalculate();
     recalculate(container, { animate: true });
     save();
-  });
+  }, { signal });
 
   // Clear purchases
   container.querySelector('#calc-clear-purchases')?.addEventListener('click', async () => {
@@ -270,12 +277,12 @@ function bindEvents(container: HTMLElement): void {
     save();
     const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
     if (clearBtn) clearBtn.disabled = true;
-  });
+  }, { signal });
 
-  bindPurchaseListEvents(container);
+  bindPurchaseListEvents(container, signal);
 }
 
-function bindPurchaseListEvents(container: HTMLElement): void {
+function bindPurchaseListEvents(container: HTMLElement, signal: AbortSignal): void {
   const list = container.querySelector('#calc-purchases-list') as HTMLElement;
   if (!list) return;
 
@@ -303,7 +310,7 @@ function bindPurchaseListEvents(container: HTMLElement): void {
       scheduleRecalculate(container);
       scheduleSave();
     }
-  });
+  }, { signal });
 
   list.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest('[data-remove-id]') as HTMLElement | null;
@@ -316,7 +323,7 @@ function bindPurchaseListEvents(container: HTMLElement): void {
     save();
     const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
     if (clearBtn) clearBtn.disabled = state.purchases.length === 0;
-  });
+  }, { signal });
 }
 
 // ── Fee UI update ──

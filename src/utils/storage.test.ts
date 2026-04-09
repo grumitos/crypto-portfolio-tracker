@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_CALC_REBUY_PCT,
+  DEFAULT_CALC_SELL_PCT,
   exportBackup,
   getDefaultCalcState,
   importBackup,
@@ -291,7 +293,8 @@ describe('storage', () => {
 
     expect(appState.positions).toHaveLength(0);
     expect(appState.portfolio.goalAmount).toBe(0);
-    expect(calcState.sellPct).toBe('0.98');
+    expect(calcState.sellPct).toBe(DEFAULT_CALC_SELL_PCT);
+    expect(calcState.rebuyPct).toBe(DEFAULT_CALC_REBUY_PCT);
   });
 
   it('deduplicates and sorts balance history during sanitization', () => {

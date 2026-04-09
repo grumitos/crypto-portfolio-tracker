@@ -12,6 +12,7 @@ import { clearBinanceSyncCaches } from '../../utils/binance-sync';
 import { clearApiRuntimeCache } from '../../utils/api-runtime-cache';
 import { clearMarketCaches } from '../../utils/market';
 import { escapeHtml } from '../../utils/ui-helpers';
+import { iconArchive, iconLock, iconWallet } from '../../utils/icons';
 import { loadState, updatePortfolio, updateBalance } from '../../utils/storage';
 import { parseFlexibleNumber } from '../../utils/parse-number';
 import { bindBackupControls, renderBackupSection } from '../backup';
@@ -41,77 +42,114 @@ function getOrCreateModal(): HTMLDialogElement {
   dialog.innerHTML = `
     <div class="modal modal--wide modal-api-config">
       <div class="modal-api-config-head">
-        <div>
-          <h3 class="modal-title">Configuración</h3>
-          <p class="text-muted modal-api-config-copy">
-            Ajusta el modo de trabajo, la meta del portfolio y el acceso a Binance en un solo lugar.
-          </p>
+        <div class="modal-api-config-headline">
+          <span class="modal-api-config-eyebrow">Centro de control</span>
+          <h3 class="modal-title modal-title--flush">Configuración</h3>
         </div>
-      </div>
-
-      <!-- Mode toggle -->
-      <div class="form-group">
-        <label>Modo de operacion</label>
-        <div class="mode-toggle">
-          <button type="button" class="mode-btn${!isAuto ? ' active' : ''}" data-mode="manual" id="mode-manual">Manual</button>
-          <button type="button" class="mode-btn${isAuto ? ' active' : ''}" data-mode="auto" id="mode-auto">Binance</button>
-        </div>
-        <div class="text-muted hint-text" id="mode-hint">
-          ${isAuto ? 'Binance sincroniza datos y saldo de forma automatica.' : 'Manual: la app muestra los datos guardados localmente o restaurados desde backup.'}
-        </div>
-      </div>
-
-      <!-- Financial config -->
-      <div class="dual-market-divider"></div>
-
-      <div class="form-group">
-        <label for="input-cfg-invested">Total invertido (USD)</label>
-        <input type="text" id="input-cfg-invested" inputmode="decimal" value="${formatEditableCurrency(portfolio.totalInvested)}">
-      </div>
-      <div class="form-group">
-        <label for="input-cfg-goal">Meta (USD)</label>
-        <input type="text" id="input-cfg-goal" inputmode="decimal" value="${formatEditableCurrency(portfolio.goalAmount)}">
-      </div>
-      <div id="cfg-savings-section" ${isAuto ? 'hidden' : ''}>
-        <div class="form-group">
-          <label for="input-cfg-savings">Ahorros / stablecoins fuera de posiciones (USD)</label>
-          <input type="text" id="input-cfg-savings" inputmode="decimal" value="${formatEditableCurrency(portfolio.savings)}">
-        </div>
-      </div>
-
-      <!-- Binance API config (always visible) -->
-      <div id="api-config-fields">
-        <div class="dual-market-divider"></div>
-
-        <div class="form-group">
-          <label for="input-api-key">API Key</label>
-          <input type="text" id="input-api-key" placeholder="Tu API Key de Binance"
-                 value="${escapeHtml(creds?.apiKey ?? '')}" autocomplete="off" spellcheck="false">
-        </div>
-        <div class="form-group">
-          <label for="input-api-secret">API Secret</label>
-          <input type="password" id="input-api-secret" placeholder="Tu API Secret"
-                 value="${escapeHtml(creds?.apiSecret ?? '')}" autocomplete="off" spellcheck="false">
-        </div>
+        <p class="text-muted modal-api-config-copy">
+          Ajusta portfolio, modo de lectura y acceso a Binance desde una sola vista.
+        </p>
       </div>
 
       <div id="api-config-status" class="dual-market-status" hidden></div>
 
-      <div class="dual-market-divider"></div>
-
-      <section class="modal-api-config-section" aria-labelledby="backup-section-title">
-        <div class="modal-api-config-section-head">
-          <div>
-            <div class="card-title" id="backup-section-title">Importar y exportar</div>
-            <p class="text-muted modal-api-config-section-copy">
-              Gestiona tus respaldos sin salir de Configuración.
+      <div class="modal-api-config-layout">
+        <section class="modal-api-block modal-api-block--portfolio" aria-labelledby="config-portfolio-title">
+          <div class="modal-api-block-head">
+            <div class="modal-api-block-kicker" id="config-portfolio-title">${iconWallet(14)} Portfolio y modo</div>
+            <p class="text-muted modal-api-block-copy">
+              Define cómo calcula la app el saldo y cuál es el objetivo que persigues.
             </p>
           </div>
-        </div>
-        ${renderBackupSection()}
-      </section>
 
-      <div class="modal-actions">
+          <div class="modal-mode-panel">
+            <div class="modal-mode-panel-head">
+              <span class="modal-field-label">Modo de operación</span>
+              <span class="modal-mode-pill${isAuto ? ' is-auto' : ''}" id="mode-current-badge">
+                ${isAuto ? 'Binance' : 'Manual'}
+              </span>
+            </div>
+            <div class="mode-toggle">
+              <button
+                type="button"
+                class="mode-btn${!isAuto ? ' active' : ''}"
+                data-mode="manual"
+                id="mode-manual"
+                aria-pressed="${!isAuto ? 'true' : 'false'}"
+              >
+                Manual
+              </button>
+              <button
+                type="button"
+                class="mode-btn${isAuto ? ' active' : ''}"
+                data-mode="auto"
+                id="mode-auto"
+                aria-pressed="${isAuto ? 'true' : 'false'}"
+              >
+                Binance
+              </button>
+            </div>
+            <div class="text-muted hint-text modal-mode-hint" id="mode-hint">
+              ${isAuto ? 'Binance sincroniza datos y saldo de forma automática.' : 'Manual: la app usa los datos guardados o restaurados desde backup.'}
+            </div>
+          </div>
+
+          <div class="modal-api-form-grid modal-api-form-grid--portfolio">
+            <div class="form-group">
+              <label for="input-cfg-invested">Total invertido (USD)</label>
+              <input type="text" id="input-cfg-invested" inputmode="decimal" value="${formatEditableCurrency(portfolio.totalInvested)}">
+            </div>
+            <div class="form-group">
+              <label for="input-cfg-goal">Meta (USD)</label>
+              <input type="text" id="input-cfg-goal" inputmode="decimal" value="${formatEditableCurrency(portfolio.goalAmount)}">
+            </div>
+            <div id="cfg-savings-section" class="modal-api-form-span" ${isAuto ? 'hidden' : ''}>
+              <div class="form-group">
+                <label for="input-cfg-savings">Ahorros / stablecoins fuera de posiciones (USD)</label>
+                <input type="text" id="input-cfg-savings" inputmode="decimal" value="${formatEditableCurrency(portfolio.savings)}">
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="modal-api-block modal-api-block--binance" aria-labelledby="config-binance-title">
+          <div class="modal-api-block-head">
+            <div class="modal-api-block-kicker" id="config-binance-title">${iconLock(14)} Acceso Binance</div>
+            <p class="text-muted modal-api-block-copy">
+              Usa una API de solo lectura para sincronizar saldos y posiciones sin exponer permisos de trading.
+            </p>
+          </div>
+
+          <div id="api-config-fields" class="modal-api-form-grid">
+            <div class="form-group">
+              <label for="input-api-key">API Key</label>
+              <input type="text" id="input-api-key" placeholder="Tu API Key de Binance"
+                     value="${escapeHtml(creds?.apiKey ?? '')}" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+              <label for="input-api-secret">API Secret</label>
+              <input type="password" id="input-api-secret" placeholder="Tu API Secret"
+                     value="${escapeHtml(creds?.apiSecret ?? '')}" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+
+          <p class="text-muted modal-api-block-note">
+            Recomendado: deja la key sin permisos <span class="mono">TRADE</span> ni <span class="mono">WITHDRAW</span>.
+          </p>
+        </section>
+
+        <section class="modal-api-block modal-api-block--backup modal-api-config-section" aria-labelledby="backup-section-title">
+          <div class="modal-api-block-head">
+            <div class="modal-api-block-kicker" id="backup-section-title">${iconArchive(14)} Respaldo</div>
+            <p class="text-muted modal-api-block-copy">
+              Exporta o restaura tus datos sin abrir otra pantalla.
+            </p>
+          </div>
+          ${renderBackupSection()}
+        </section>
+      </div>
+
+      <div class="modal-actions modal-api-config-actions">
         <button type="button" class="btn" id="btn-api-config-cancel">Cancelar</button>
         <button type="button" class="btn btn-danger btn-sm modal-action-spacer" id="btn-api-config-clear" ${creds ? '' : 'hidden'}>Eliminar API</button>
         <button type="button" class="btn btn-sm" id="btn-api-config-test">Probar conexión</button>
@@ -142,23 +180,29 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     btn.addEventListener('click', () => {
       const mode = (btn as HTMLElement).dataset.mode as PositionsMode;
       selectedMode = mode;
-      dialog
-        .querySelectorAll('.mode-btn')
-        .forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.mode === mode));
+      dialog.querySelectorAll('.mode-btn').forEach((b) => {
+        const isActive = (b as HTMLElement).dataset.mode === mode;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
 
       const clearBtn = dialog.querySelector('#btn-api-config-clear') as HTMLElement;
       const hintEl = dialog.querySelector('#mode-hint') as HTMLElement;
+      const modeBadge = dialog.querySelector('#mode-current-badge') as HTMLElement;
       const savingsSection = dialog.querySelector('#cfg-savings-section') as HTMLElement;
 
       if (mode === 'auto') {
         savingsSection.hidden = true;
         clearBtn.hidden = !hasApiCredentials();
-        hintEl.textContent = 'Binance sincroniza datos y saldo de forma automatica.';
+        hintEl.textContent = 'Binance sincroniza datos y saldo de forma automática.';
+        modeBadge.textContent = 'Binance';
+        modeBadge.classList.add('is-auto');
       } else {
         savingsSection.hidden = false;
         clearBtn.hidden = !hasApiCredentials();
-        hintEl.textContent =
-          'Manual: la app muestra los datos guardados localmente o restaurados desde backup.';
+        hintEl.textContent = 'Manual: la app usa los datos guardados o restaurados desde backup.';
+        modeBadge.textContent = 'Manual';
+        modeBadge.classList.remove('is-auto');
       }
     });
   });
@@ -178,7 +222,7 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     const prevCreds = loadApiCredentials();
     saveApiCredentials({ apiKey: key, apiSecret: secret });
 
-    showStatus(statusEl, 'Probando conexion...', 'info');
+    showStatus(statusEl, 'Probando conexión...', 'info');
 
     const result = await testApiConnection();
 
@@ -189,11 +233,11 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
       if (hasWritePermissions) {
         showStatus(
           statusEl,
-          `Conexion exitosa, pero tu API key no es de solo lectura. Por seguridad, usa una key sin permisos TRADE ni WITHDRAW. Permisos: ${perms}`,
+          `Conexión exitosa, pero tu API key no es de solo lectura. Por seguridad, usa una key sin permisos TRADE ni WITHDRAW. Permisos: ${perms}`,
           'warning',
         );
       } else {
-        showStatus(statusEl, `Conexion exitosa. Permisos: ${perms}`, 'success');
+        showStatus(statusEl, `Conexión exitosa. Permisos: ${perms}`, 'success');
       }
     } else {
       // Restore previous creds on failure

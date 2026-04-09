@@ -508,41 +508,33 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const runInitialHydration = async (): Promise<void> => {
     if (disposed || !container.isConnected) return;
 
-    let hasSubMinuteCountdown = false;
     if (autoMode && hasApiCredentials() && !getCachedAutoPortfolioSnapshot()) {
       await performAutoSync(container, onStateChange, false);
       latestKnownPositions = loadState().positions;
-      hasSubMinuteCountdown = updateRemainingTimesInPlace(container, latestKnownPositions);
-    } else {
-      latestKnownPositions = loadState().positions;
-      hasSubMinuteCountdown = await hydratePositionMarketData(container, latestKnownPositions, false);
+      syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
+      return;
     }
 
-    syncRemainingTicker(hasSubMinuteCountdown);
+    latestKnownPositions = loadState().positions;
+    syncRemainingTicker(await hydratePositionMarketData(container, latestKnownPositions, false));
   };
 
   void runInitialHydration();
 
   const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
     if (disposed || !container.isConnected) return;
-    let hasSubMinuteCountdown = false;
 
     if (autoMode && hasApiCredentials()) {
       await performAutoSync(container, onStateChange, forceRefresh);
       const { positions: syncedPositions } = loadState();
       latestKnownPositions = syncedPositions;
-      hasSubMinuteCountdown = updateRemainingTimesInPlace(container, latestKnownPositions);
-    } else {
-      const { positions: latestPositions } = loadState();
-      latestKnownPositions = latestPositions;
-      hasSubMinuteCountdown = await hydratePositionMarketData(
-        container,
-        latestPositions,
-        forceRefresh,
-      );
+      syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
+      return;
     }
 
-    syncRemainingTicker(hasSubMinuteCountdown);
+    const { positions: latestPositions } = loadState();
+    latestKnownPositions = latestPositions;
+    syncRemainingTicker(await hydratePositionMarketData(container, latestPositions, forceRefresh));
   }, false);
 
   return () => {

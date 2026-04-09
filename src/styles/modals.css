@@ -38,7 +38,7 @@
   padding: var(--panel-padding);
   width: 100%;
   max-width: min(460px, calc(100vw - 2 * var(--space-lg)));
-  max-height: 90vh;
+  max-height: 92vh;
   overflow-y: auto;
   animation: modalSlideIn 0.25s var(--ease-out-quint);
   box-shadow: var(--shadow-lg);
@@ -93,4 +93,20 @@
 
 .modal-action-spacer {
   margin-right: auto;
+}
+
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: var(--space-sm);
+  }
+
+  .modal-overlay[open] {
+    align-items: flex-start;
+  }
+
+  .modal {
+    max-width: 100%;
+    max-height: calc(100vh - 2 * var(--space-sm));
+    border-radius: calc(var(--radius-lg) - 2px);
+  }
 }

@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderCalculadora } from './calculadora';
 import { createMemoryStorage, mockMatchMedia, resetDom } from '../test/test-utils';
-import { saveCalcState } from '../utils/storage';
+import {
+  DEFAULT_CALC_REBUY_PCT,
+  DEFAULT_CALC_SELL_PCT,
+  saveCalcState,
+} from '../utils/storage';
+import * as storage from '../utils/storage';
 
 function parseDisplayedNumber(value: string | null): number {
   if (!value) return NaN;
@@ -145,9 +150,9 @@ describe('calculadora integration', () => {
 
     resetBtn.click();
 
-    expect(sellPriceInput.value).toBe('100.98');
-    expect(sellPctInput.value).toBe('0.98');
-    expect(rebuyPctInput.value).toBe('0.85');
+    expect(sellPriceInput.value).toBe('102.30');
+    expect(sellPctInput.value).toBe(DEFAULT_CALC_SELL_PCT);
+    expect(rebuyPctInput.value).toBe(DEFAULT_CALC_REBUY_PCT);
     expect(sellPriceInput.readOnly).toBe(true);
     expect(sellPctInput.readOnly).toBe(false);
   });
@@ -171,5 +176,34 @@ describe('calculadora integration', () => {
 
     expect(typeof dispose).toBe('function');
     expect(() => dispose()).not.toThrow();
+  });
+
+  it('cancels pending debounced saves when disposed', () => {
+    const saveSpy = vi.spyOn(storage, 'saveCalcState');
+    saveCalcState({
+      price: '100',
+      capital: '1000',
+      trades: '10',
+      sellPrice: '',
+      sellPct: '0.98',
+      rebuyPct: '0.85',
+      feePreset: 'spot',
+      fdusdEnabled: false,
+      sellSyncSource: 'percent',
+      purchases: [],
+    });
+
+    const container = document.createElement('div');
+    const dispose = renderCalculadora(container);
+    saveSpy.mockClear();
+
+    const priceInput = container.querySelector('#calc-price') as HTMLInputElement;
+    priceInput.value = '125';
+    priceInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    dispose();
+    vi.advanceTimersByTime(250);
+
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 });

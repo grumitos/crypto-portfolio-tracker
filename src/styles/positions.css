@@ -22,7 +22,11 @@
 .positions-stat-card--hero {
   border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-warm-muted) 16%, var(--bg-card)) 0, var(--bg-card) 100%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-warm-muted) 16%, var(--bg-card)) 0,
+      var(--bg-card) 100%
+    ),
     var(--bg-card);
 }
 
@@ -40,8 +44,11 @@
   gap: 8px;
   padding-block: clamp(42px, 8vw, 72px);
   border-style: dashed;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 80%, var(--bg-secondary)) 0, var(--bg-card) 100%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-card) 80%, var(--bg-secondary)) 0,
+    var(--bg-card) 100%
+  );
 }
 
 .positions-empty-title {
@@ -476,8 +483,6 @@ tr:hover .pos-row-actions {
 .positions-table tr:hover td {
   background: var(--bg-hover);
 }
-
-
 
 /* ── Direction toggle ── */
 .direction-toggle {
@@ -917,18 +922,162 @@ tr:hover .pos-row-actions {
 }
 
 .modal-api-config {
-  max-width: min(640px, calc(100vw - 2 * var(--space-lg)));
+  container-type: inline-size;
+  display: grid;
+  gap: clamp(18px, 2vw, 24px);
+  max-width: min(980px, calc(100vw - 2 * var(--space-xl)));
+  padding: clamp(18px, 2vw, 28px);
 }
 
 .modal-api-config-head {
-  margin-bottom: var(--space-lg);
+  display: grid;
+  gap: 10px;
+}
+
+.modal-api-config-headline {
+  display: grid;
+  gap: 6px;
+}
+
+.modal-api-config-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-size-overline);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-warm);
 }
 
 .modal-api-config-copy,
 .modal-api-config-section-copy {
-  margin: 6px 0 0;
-  font-size: var(--font-size-body-strong);
+  margin: 0;
+  max-width: 58ch;
+  font-size: var(--font-size-body);
   line-height: var(--line-height-body);
+}
+
+.modal-api-config-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.92fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.modal-api-block {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+  padding: clamp(16px, 1.6vw, 20px);
+  border: 1px solid color-mix(in srgb, var(--accent-warm) 12%, var(--border));
+  border-radius: calc(var(--radius-md) + 1px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-warm-muted) 8%, var(--bg-card)) 0,
+    var(--bg-card) 100%
+  );
+}
+
+.modal-api-block--backup {
+  grid-column: 1 / -1;
+}
+
+.modal-api-block-head {
+  display: grid;
+  gap: 6px;
+}
+
+.modal-api-block-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-overline);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.modal-api-block-copy,
+.modal-api-block-note {
+  margin: 0;
+  max-width: 54ch;
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-body);
+}
+
+.modal-api-block-note {
+  color: var(--text-muted);
+}
+
+.modal-api-config .form-group {
+  margin-bottom: 0;
+}
+
+.modal-api-config .form-group label {
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.modal-api-form-grid {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.modal-api-form-grid--portfolio {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.modal-api-form-span {
+  grid-column: 1 / -1;
+}
+
+.modal-mode-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-card));
+}
+
+.modal-mode-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.modal-field-label {
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-size-overline);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.modal-mode-pill.is-auto {
+  background: var(--accent-warm-muted);
+  color: var(--accent-warm);
+}
+
+.modal-mode-hint {
+  margin-top: 0;
+  max-width: 52ch;
 }
 
 .modal-api-config-section {
@@ -942,6 +1091,48 @@ tr:hover .pos-row-actions {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
+}
+
+.modal-api-config-actions {
+  position: sticky;
+  bottom: calc(-1 * clamp(18px, 2vw, 28px));
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 calc(-1 * clamp(18px, 2vw, 28px)) calc(-1 * clamp(18px, 2vw, 28px));
+  padding: var(--space-md) clamp(18px, 2vw, 28px) clamp(18px, 2vw, 28px);
+  border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-card) 6%, transparent) 0,
+    var(--bg-card) 22%
+  );
+}
+
+.modal-api-block--backup .backup-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: var(--space-md);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.modal-api-block--backup .backup-body {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.modal-api-block--backup .backup-import-section {
+  border-top: 0;
+  border-left: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  padding-top: 0;
+  padding-left: var(--space-md);
+}
+
+.modal-api-block--backup .backup-import-trigger,
+.modal-api-block--backup #btn-export {
+  width: 100%;
+  justify-content: center;
 }
 
 /* Extra small button */
@@ -1004,39 +1195,77 @@ tr:hover .pos-row-actions {
     grid-template-columns: 1fr;
   }
 
+  .modal-api-config {
+    gap: var(--space-md);
+  }
+
+  .modal-api-config-layout,
+  .modal-api-form-grid--portfolio,
+  .modal-api-block--backup .backup-panel,
+  .modal-api-block--backup .backup-body {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-api-config-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .modal-api-config-actions .btn,
+  .modal-api-config-actions .modal-action-spacer {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .modal-api-block--backup .backup-import-section {
+    border-left: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    padding-left: 0;
+    padding-top: var(--space-md);
+  }
 }
 
 /* ── Mode toggle ── */
 .mode-toggle {
-  display: flex;
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 18%, var(--bg-secondary));
 }
 
 .mode-btn {
-  flex: 1;
-  padding: 8px var(--space-md);
-  background: var(--bg-input);
-  border: none;
+  min-height: 44px;
+  padding: 10px var(--space-md);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) + 1px);
   color: var(--text-secondary);
   font-family: var(--font-family-ui);
   font-size: var(--font-size-body);
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition:
     color 0.15s var(--ease-out),
-    background 0.15s var(--ease-out);
+    background 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out),
+    box-shadow 0.15s var(--ease-out);
 }
 
 .mode-btn:first-child {
-  border-right: 1px solid var(--border);
+  border-right: 1px solid transparent;
 }
 
 .mode-btn.active {
-  background: var(--accent-warm-muted);
-  color: var(--accent-warm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-warm) 22%, var(--border));
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--shadow-lg) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--bg-card) 24%, transparent);
 }
 
 .mode-btn:hover:not(.active) {

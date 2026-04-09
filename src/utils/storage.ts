@@ -25,6 +25,8 @@ export const CALC_KEY = 'crypto-calculadora';
 export const SIMULATOR_VIEW_KEY = 'crypto-simulator-view';
 export const DASHBOARD_VIEW_KEY = 'crypto-dashboard-view';
 export const API_LAST_UPDATED_KEY = 'crypto-api-last-updated-at';
+export const DEFAULT_CALC_SELL_PCT = '2.30';
+export const DEFAULT_CALC_REBUY_PCT = '1.70';
 const HHMM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function getDefaultPortfolio(): PortfolioData {
@@ -572,8 +574,8 @@ export function getDefaultCalcState(): CalculadoraState {
     capital: '20000',
     trades: '200',
     sellPrice: '',
-    sellPct: '0.98',
-    rebuyPct: '0.85',
+    sellPct: DEFAULT_CALC_SELL_PCT,
+    rebuyPct: DEFAULT_CALC_REBUY_PCT,
     feePreset: 'spot',
     fdusdEnabled: false,
     sellSyncSource: null,

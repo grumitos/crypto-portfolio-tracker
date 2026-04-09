@@ -10,7 +10,7 @@ export function renderBackupSection(): string {
       <div class="backup-panel-copy">
         <div class="backup-panel-title">Respaldo de datos</div>
         <p class="text-muted">
-          Exporta un JSON con todo tu historial o importa un backup existente.
+          Exporta un JSON completo o restaura uno existente sin salir del flujo actual.
         </p>
       </div>
       <div class="backup-body">
@@ -19,7 +19,17 @@ export function renderBackupSection(): string {
           <label class="backup-import-label text-secondary" for="backup-file-input">
             ${iconUpload(14)}Importar backup JSON
           </label>
-          <input type="file" id="backup-file-input" accept=".json" class="backup-file-input">
+          <div class="backup-import-control">
+            <label class="backup-import-trigger btn" for="backup-file-input">Seleccionar archivo</label>
+            <span class="backup-file-name text-muted" id="backup-file-name">Ningún archivo seleccionado</span>
+          </div>
+          <input
+            type="file"
+            id="backup-file-input"
+            accept=".json"
+            class="backup-file-input"
+            aria-describedby="backup-file-name"
+          >
         </div>
       </div>
     </div>
@@ -53,9 +63,20 @@ export function bindBackupControls(root: ParentNode, onImportSuccess: () => void
   });
 
   const fileInput = root.querySelector('#backup-file-input') as HTMLInputElement | null;
+  const fileName = root.querySelector('#backup-file-name') as HTMLElement | null;
+
+  const resetSelectedFile = () => {
+    if (fileName) fileName.textContent = 'Ningún archivo seleccionado';
+  };
+
   fileInput?.addEventListener('change', () => {
     const file = fileInput.files?.[0];
-    if (!file) return;
+    if (!file) {
+      resetSelectedFile();
+      return;
+    }
+
+    if (fileName) fileName.textContent = file.name;
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -70,6 +91,7 @@ export function bindBackupControls(root: ParentNode, onImportSuccess: () => void
         void showAlertDialog('Error al importar el archivo. Asegúrate de que sea un JSON válido.');
       } finally {
         fileInput.value = '';
+        resetSelectedFile();
       }
     };
     reader.readAsText(file);

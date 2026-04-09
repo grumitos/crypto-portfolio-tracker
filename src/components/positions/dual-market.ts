@@ -26,6 +26,7 @@ interface DualMarketContext {
   currentPage: number;
   disposed: boolean;
   onClose: () => void;
+  eventSignal: AbortSignal;
 }
 
 // ── State persistence ──
@@ -211,12 +212,13 @@ async function showScoreInfoDialog(): Promise<void> {
   `;
 
   document.body.appendChild(dialog);
-  openModal(dialog);
-  bindModalEvents(dialog, [dialog.querySelector('#dm-score-close') as HTMLElement]);
-  dialog.querySelector('#dm-score-close')?.addEventListener('click', () => {
+  const cleanup = (): void => {
     closeModal(dialog);
     dialog.remove();
-  });
+  };
+  openModal(dialog);
+  dialog.addEventListener('close', cleanup, { once: true });
+  bindModalEvents(dialog, [dialog.querySelector('#dm-score-close') as HTMLElement]);
 }
 
 // ── Main render ──
@@ -226,9 +228,12 @@ export function openDualMarketModal(onPrefillPosition: (product: DualProductScor
 
   const dialog = document.createElement('dialog');
   dialog.className = 'modal-overlay';
+  const eventController = new AbortController();
 
   const cleanup = () => {
+    if (ctx.disposed) return;
     ctx.disposed = true;
+    eventController.abort();
     closeModal(dialog);
     dialog.remove();
   };
@@ -243,6 +248,7 @@ export function openDualMarketModal(onPrefillPosition: (product: DualProductScor
     currentPage: 1,
     disposed: false,
     onClose: cleanup,
+    eventSignal: eventController.signal,
   };
 
   const wrappedPrefill = (product: DualProductScored): void => {
@@ -254,6 +260,7 @@ export function openDualMarketModal(onPrefillPosition: (product: DualProductScor
 
   document.body.appendChild(dialog);
   openModal(dialog);
+  dialog.addEventListener('close', cleanup, { once: true });
 
   loadProducts(ctx, wrappedPrefill);
 }
@@ -291,20 +298,27 @@ function renderModalContent(
 
   bindSectionEvents(ctx, onPrefillPosition);
   bindModalEvents(ctx.container, [ctx.container.querySelector('#dm-btn-close') as HTMLElement]);
-  ctx.container.querySelector('#dm-btn-close')?.addEventListener('click', ctx.onClose);
 }
 
 function bindSectionEvents(
   ctx: DualMarketContext,
   onPrefillPosition: (product: DualProductScored) => void,
 ): void {
-  ctx.container.querySelector('#dm-btn-score-info')?.addEventListener('click', () => {
-    void showScoreInfoDialog();
-  });
+  ctx.container.querySelector('#dm-btn-score-info')?.addEventListener(
+    'click',
+    () => {
+      void showScoreInfoDialog();
+    },
+    { signal: ctx.eventSignal },
+  );
 
-  ctx.container.querySelector('#dm-btn-refresh')?.addEventListener('click', () => {
-    loadProducts(ctx, onPrefillPosition, true);
-  });
+  ctx.container.querySelector('#dm-btn-refresh')?.addEventListener(
+    'click',
+    () => {
+      loadProducts(ctx, onPrefillPosition, true);
+    },
+    { signal: ctx.eventSignal },
+  );
 
   // Filter changes
   bindFilterEvents(ctx, onPrefillPosition);
@@ -313,12 +327,16 @@ function bindSectionEvents(
   bindProductActions(ctx, onPrefillPosition);
 
   ctx.container.querySelectorAll<HTMLButtonElement>('.dm-page-btn[data-page]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const page = parseInt(btn.dataset.page ?? '', 10);
-      if (!Number.isFinite(page) || page < 1) return;
-      ctx.currentPage = page;
-      updateTableView(ctx, onPrefillPosition);
-    });
+    btn.addEventListener(
+      'click',
+      () => {
+        const page = parseInt(btn.dataset.page ?? '', 10);
+        if (!Number.isFinite(page) || page < 1) return;
+        ctx.currentPage = page;
+        updateTableView(ctx, onPrefillPosition);
+      },
+      { signal: ctx.eventSignal },
+    );
   });
 }
 
@@ -342,25 +360,33 @@ function bindFilterEvents(
   };
 
   ctx.container.querySelectorAll<HTMLButtonElement>('.dm-chip[data-asset]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const nextAsset = button.dataset.asset || undefined;
-      ctx.state.filters.asset = nextAsset || undefined;
-      applyFilters();
-    });
+    button.addEventListener(
+      'click',
+      () => {
+        const nextAsset = button.dataset.asset || undefined;
+        ctx.state.filters.asset = nextAsset || undefined;
+        applyFilters();
+      },
+      { signal: ctx.eventSignal },
+    );
   });
 
   ctx.container
     .querySelectorAll<HTMLButtonElement>('.dm-chip[data-direction]')
     .forEach((button) => {
-      button.addEventListener('click', () => {
-        const nextDirection = (button.dataset.direction as Direction | '') || undefined;
-        ctx.state.filters.direction = nextDirection;
-        applyFilters();
-      });
+      button.addEventListener(
+        'click',
+        () => {
+          const nextDirection = (button.dataset.direction as Direction | '') || undefined;
+          ctx.state.filters.direction = nextDirection;
+          applyFilters();
+        },
+        { signal: ctx.eventSignal },
+      );
     });
 
-  minAprEl?.addEventListener('input', applyFilters);
-  maxDurEl?.addEventListener('input', applyFilters);
+  minAprEl?.addEventListener('input', applyFilters, { signal: ctx.eventSignal });
+  maxDurEl?.addEventListener('input', applyFilters, { signal: ctx.eventSignal });
 }
 
 function bindProductActions(
@@ -369,11 +395,15 @@ function bindProductActions(
 ): void {
   // Prefill buttons
   ctx.container.querySelectorAll('.dm-btn-prefill').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = (btn as HTMLElement).dataset.productId;
-      const product = ctx.products.find((p) => p.id === id);
-      if (product) onPrefillPosition(product);
-    });
+    btn.addEventListener(
+      'click',
+      () => {
+        const id = (btn as HTMLElement).dataset.productId;
+        const product = ctx.products.find((p) => p.id === id);
+        if (product) onPrefillPosition(product);
+      },
+      { signal: ctx.eventSignal },
+    );
   });
 }
 
@@ -472,12 +502,15 @@ function updateTableView(
   tableContainer.innerHTML = renderTable(ctx);
   bindProductActions(ctx, onPrefillPosition);
   ctx.container.querySelectorAll<HTMLButtonElement>('.dm-page-btn[data-page]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const page = parseInt(btn.dataset.page ?? '', 10);
-      if (!Number.isFinite(page) || page < 1) return;
-      ctx.currentPage = page;
-      updateTableView(ctx, onPrefillPosition);
-    });
+    btn.addEventListener(
+      'click',
+      () => {
+        const page = parseInt(btn.dataset.page ?? '', 10);
+        if (!Number.isFinite(page) || page < 1) return;
+        ctx.currentPage = page;
+        updateTableView(ctx, onPrefillPosition);
+      },
+      { signal: ctx.eventSignal },
+    );
   });
 }
-
