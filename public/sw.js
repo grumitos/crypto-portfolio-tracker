@@ -1,5 +1,6 @@
-const CACHE_NAME = 'crypto-tracker-v1';
+const CACHE_NAME = 'crypto-tracker-v2';
 const STATIC_ASSETS = ['/'];
+const API_PATH_PREFIXES = ['/api/', '/binance-api/', '/binance-sapi/'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -20,10 +21,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Skip non-GET and API requests
+  // Skip non-GET, API, and cross-origin requests
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (API_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return;
 
   // Cache-first for hashed assets (immutable)
   if (url.pathname.startsWith('/assets/')) {
@@ -33,10 +35,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for HTML (always get latest)
+  // Network-first for HTML navigations only (always get latest)
+  if (request.mode !== 'navigate') return;
+
   event.respondWith(
     fetch(request)
       .then((response) => {
+        if (!response.ok) return response;
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         return response;
@@ -47,6 +52,7 @@ self.addEventListener('fetch', (event) => {
 
 async function fetchAndCache(request) {
   const response = await fetch(request);
+  if (!response.ok) return response;
   const cache = await caches.open(CACHE_NAME);
   cache.put(request, response.clone());
   return response;
