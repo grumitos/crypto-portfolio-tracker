@@ -2,17 +2,8 @@
   container-type: inline-size;
 }
 
-.dashboard-header {
-  align-items: flex-end;
-}
-
-.dashboard-heading-block {
-  display: grid;
-  gap: 6px;
-}
-
-.dashboard-section-title {
-  max-width: 14ch;
+.dashboard-overview {
+  gap: var(--layout-gap-tight);
 }
 
 .dashboard-summary-grid,
@@ -20,8 +11,15 @@
   align-items: stretch;
 }
 
+.dashboard-summary-shell {
+  padding: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-secondary));
+}
+
 .dashboard-summary-grid {
   grid-template-columns: 1.08fr 1.08fr 0.84fr;
+  gap: 0;
 }
 
 .dashboard-card,
@@ -30,11 +28,16 @@
 }
 
 .dashboard-card {
-  background: color-mix(in srgb, var(--bg-card) 84%, var(--bg-secondary));
+  padding: clamp(16px, 1.9vw, 22px);
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.dashboard-summary-grid .dashboard-card {
-  min-height: 156px;
+.dashboard-summary-grid .dashboard-card:last-child {
+  border-right: 0;
 }
 
 .dashboard-summary-grid .dashboard-card .card-title {
@@ -44,18 +47,7 @@
 .dashboard-goal-card {
   display: grid;
   gap: var(--space-md);
-  padding: clamp(18px, 2.2vw, 28px);
-  border-color: color-mix(in srgb, var(--accent-warm) 22%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0,
-      var(--bg-card) 52%
-    ),
-    var(--bg-card);
-  box-shadow:
-    var(--shadow-card),
-    inset 0 1px 0 color-mix(in srgb, var(--bg-card) 22%, transparent);
+  box-shadow: none;
 }
 
 .dashboard-goal-card .card-title {
@@ -311,7 +303,7 @@
 
 .dashboard-stat-card {
   min-height: 108px;
-  background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-secondary));
+  background: color-mix(in srgb, var(--bg-card) 82%, var(--bg-secondary));
 }
 
 .dashboard-stat-card .card-title {
@@ -344,9 +336,6 @@
   display: grid;
   gap: clamp(14px, 1.8vw, 20px);
   margin-top: 0;
-  padding: clamp(16px, 1.8vw, 22px) 0 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  background: transparent;
 }
 
 .dashboard-balance-panel-head {
@@ -394,8 +383,6 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0 var(--space-lg);
   overflow: visible;
-  border: 0;
-  background: transparent;
 }
 
 .dashboard-balance-entry {
@@ -546,6 +533,15 @@
     grid-template-columns: 1fr;
   }
 
+  .dashboard-summary-shell .dashboard-card {
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  }
+
+  .dashboard-summary-shell .dashboard-card:last-child {
+    border-bottom: 0;
+  }
+
   .goal-progress-head {
     flex-direction: column;
     align-items: flex-start;
@@ -565,6 +561,10 @@
   .dashboard-summary-grid,
   .dashboard-metrics-grid {
     gap: var(--space-md);
+  }
+
+  .dashboard-summary-grid {
+    gap: 0;
   }
 
   .dashboard-balance-panel-head {

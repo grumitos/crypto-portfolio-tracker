@@ -12,11 +12,20 @@ function hideBanner(banner: HTMLElement): void {
   }
 }
 
+function getBannerHost(): HTMLElement {
+  const inlineHost = document.querySelector('[data-inline-status-region]');
+  return inlineHost instanceof HTMLElement ? inlineHost : document.body;
+}
+
 function ensureApiErrorBanner(): HTMLElement | null {
   if (typeof document === 'undefined') return null;
 
+  const host = getBannerHost();
   const existing = document.getElementById(API_ERROR_BANNER_ID);
-  if (existing) return existing;
+  if (existing) {
+    if (existing.parentElement !== host) host.appendChild(existing);
+    return existing;
+  }
 
   const banner = document.createElement('div');
   banner.id = API_ERROR_BANNER_ID;
@@ -34,7 +43,7 @@ function ensureApiErrorBanner(): HTMLElement | null {
   closeBtn.addEventListener('click', () => hideBanner(banner));
 
   banner.append(text, closeBtn);
-  document.body.appendChild(banner);
+  host.appendChild(banner);
   return banner;
 }
 

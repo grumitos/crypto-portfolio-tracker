@@ -1,10 +1,20 @@
+.positions-summary-shell {
+  padding: 0;
+  overflow: hidden;
+}
+
 .positions-summary-grid {
-  gap: var(--layout-gap-tight);
+  gap: 0;
 }
 
 .positions-stat-card {
+  padding: clamp(15px, 1.6vw, 19px);
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   min-height: 106px;
-  background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-secondary));
 }
 
 .positions-stat-card .card-title {
@@ -20,14 +30,11 @@
 }
 
 .positions-stat-card--hero {
-  border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-warm-muted) 16%, var(--bg-card)) 0,
-      var(--bg-card) 100%
-    ),
-    var(--bg-card);
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--accent-warm-muted));
+}
+
+.positions-summary-grid > :last-child {
+  border-right: 0;
 }
 
 .positions-spot-strip--panel {
@@ -74,7 +81,7 @@
 #positions-tables-container {
   display: flex;
   flex-direction: column;
-  gap: var(--layout-gap-tight);
+  gap: var(--layout-gap);
 }
 
 .positions-group-card {
@@ -84,11 +91,27 @@
   --positions-type-meta: var(--font-size-meta);
   --positions-type-micro: var(--font-size-overline);
   --positions-type-datetime: var(--font-size-body);
+  gap: var(--space-md);
   padding: var(--panel-padding-compact);
 }
 
 .positions-group-head {
-  margin-bottom: var(--space-sm);
+  margin-bottom: 0;
+}
+
+.positions-group-head .section-head {
+  align-items: end;
+}
+
+.positions-group-count--head {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  font-size: var(--positions-type-meta);
+  color: var(--text-muted);
 }
 
 .positions-group-count {
@@ -190,12 +213,28 @@ tr:hover .pos-row-actions {
 }
 
 @media (max-width: 768px) {
+  .positions-summary-shell {
+    padding: 0;
+  }
+
+  .positions-summary-grid {
+    gap: 0;
+  }
+
+  .positions-stat-card {
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  }
+
+  .positions-summary-grid > :last-child {
+    border-bottom: 0;
+  }
+
   .positions-group-card {
     padding: 0;
   }
 
   .positions-group-head {
-    margin-bottom: 0;
     padding: var(--panel-padding-compact) var(--panel-padding-compact) 0;
   }
 }

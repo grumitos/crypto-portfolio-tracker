@@ -11,18 +11,22 @@ import { ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from '../utils/constants';
 import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-logos';
 import { escapeHtml } from '../utils/ui-helpers';
 import type { DualPosition } from '../types';
+import { renderSectionHead } from './page-layout.template';
 
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
   const isBuyLow = positions[0]?.direction !== 'sell-high';
   const safeTitle = escapeHtml(title);
   const groupSummary = `${positions.length} posicion${positions.length > 1 ? 'es' : ''}`;
+  const groupId = isBuyLow ? 'positions-buy-low-title' : 'positions-sell-high-title';
   return `
-    <div class="card positions-group-card">
-      <div class="flex-between positions-group-head">
-        <div class="card-title form-group-inline">
-          <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${safeTitle}</span>
-          <span class="positions-group-count">${groupSummary}</span>
-        </div>
+    <section class="positions-group-card data-section" aria-labelledby="${groupId}">
+      <div class="positions-group-head">
+        ${renderSectionHead({
+          id: groupId,
+          title,
+          actionsHtml: `<span class="positions-group-count positions-group-count--head">${groupSummary}</span>`,
+          titleTag: 'h3',
+        })}
       </div>
       <div class="table-container">
         <table class="positions-table" aria-label="Tabla de posiciones ${safeTitle}">
@@ -58,7 +62,7 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   `;
 }
 

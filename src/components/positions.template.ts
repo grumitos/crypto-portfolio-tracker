@@ -1,5 +1,10 @@
 import { escapeHtml, skeletonSpan } from '../utils/ui-helpers';
 import { POSITIONS_COPY, SPOT_CHANGE_SKELETON_WIDTH, SPOT_VALUE_SKELETON_WIDTH } from './positions.constants';
+import {
+  renderInlineStatusRegion,
+  renderPageContextTags,
+  renderPageLead,
+} from './page-layout.template';
 
 interface PositionsTemplateInput {
   autoMode: boolean;
@@ -13,7 +18,7 @@ interface PositionsTemplateInput {
 function renderEmptyState(autoMode: boolean, hasApi: boolean): string {
   if (autoMode) {
     return `
-      <div class="card empty-state positions-empty-state" id="positions-empty-state">
+      <div class="page-panel empty-state positions-empty-state" id="positions-empty-state">
         <p class="positions-empty-title">${hasApi ? POSITIONS_COPY.autoEmptyTitle : POSITIONS_COPY.apiMissingTitle}</p>
         <p class="positions-empty-copy">${hasApi ? POSITIONS_COPY.autoEmptyBody : POSITIONS_COPY.apiMissingBody}</p>
         <p class="positions-empty-hint">${POSITIONS_COPY.emptyHintAuto}</p>
@@ -22,7 +27,7 @@ function renderEmptyState(autoMode: boolean, hasApi: boolean): string {
   }
 
   return `
-    <div class="card empty-state positions-empty-state">
+    <div class="page-panel empty-state positions-empty-state">
       <p class="positions-empty-title">${POSITIONS_COPY.manualEmptyTitle}</p>
       <p class="positions-empty-copy">${POSITIONS_COPY.manualEmptyBody}</p>
       <p class="positions-empty-hint">${POSITIONS_COPY.emptyHintManual}</p>
@@ -31,41 +36,64 @@ function renderEmptyState(autoMode: boolean, hasApi: boolean): string {
 }
 
 export function renderPositionsTemplate(input: PositionsTemplateInput): string {
+  const contextHtml = renderPageContextTags([
+    {
+      label:
+        input.autoMode && input.hasApi ? 'Binance' : input.autoMode ? 'AUTO sin API' : 'Manual',
+      tone: input.autoMode && input.hasApi ? 'accent' : 'neutral',
+    },
+    {
+      label: `${input.activeCount} ${input.activeCount === 1 ? 'activa' : 'activas'}`,
+      tone: input.activeCount > 0 ? 'success' : 'neutral',
+    },
+  ]);
+
   return `
-    <div class="section">
-      <h2 class="visually-hidden">${POSITIONS_COPY.title}</h2>
+    <section class="section positions-section" aria-labelledby="positions-heading">
+      ${renderPageLead({
+        id: 'positions-heading',
+        title: POSITIONS_COPY.title,
+        contextHtml,
+      })}
+      ${renderInlineStatusRegion()}
 
-      <div class="grid-4 positions-summary-grid">
-        <div class="stat-card positions-stat-card" data-shared-card="apr">
-          <div class="card-title">${POSITIONS_COPY.aprTitle}</div>
-          <div class="stat-value" id="positions-apr">${skeletonSpan('70px')}</div>
+      <section class="page-section positions-summary-section">
+        <div class="page-panel positions-summary-shell">
+          <div class="grid-4 positions-summary-grid">
+            <div class="positions-stat-card" data-shared-card="apr">
+              <div class="card-title">${POSITIONS_COPY.aprTitle}</div>
+              <div class="stat-value" id="positions-apr">${skeletonSpan('70px')}</div>
+            </div>
+            <div class="positions-stat-card" data-shared-card="capital">
+              <div class="card-title">${POSITIONS_COPY.capitalTitle}</div>
+              <div class="stat-value" id="positions-capital">${skeletonSpan('90px')}</div>
+            </div>
+            <div class="positions-stat-card" data-shared-card="daily">
+              <div class="card-title">${POSITIONS_COPY.dailyTitle}</div>
+              <div class="stat-value" id="positions-daily">${skeletonSpan('70px')}</div>
+            </div>
+            <div class="positions-stat-card positions-stat-card--hero" data-shared-card="positions">
+              <div class="card-title">${POSITIONS_COPY.countTitle}</div>
+              <div class="stat-value" id="positions-count">${input.activeCount}</div>
+            </div>
+          </div>
         </div>
-        <div class="stat-card positions-stat-card" data-shared-card="capital">
-          <div class="card-title">${POSITIONS_COPY.capitalTitle}</div>
-          <div class="stat-value" id="positions-capital">${skeletonSpan('90px')}</div>
-        </div>
-        <div class="stat-card positions-stat-card" data-shared-card="daily">
-          <div class="card-title">${POSITIONS_COPY.dailyTitle}</div>
-          <div class="stat-value" id="positions-daily">${skeletonSpan('70px')}</div>
-        </div>
-        <div class="stat-card positions-stat-card positions-stat-card--hero" data-shared-card="positions">
-          <div class="card-title">${POSITIONS_COPY.countTitle}</div>
-          <div class="stat-value" id="positions-count">${input.activeCount}</div>
-        </div>
-      </div>
+      </section>
 
-      <div class="positions-spot-strip-wrap">
-        <div class="positions-spot-strip positions-spot-strip--panel" id="positions-spot-strip" hidden></div>
-      </div>
+      <section class="page-section positions-spot-section">
+        <div class="positions-spot-strip-wrap">
+          <div class="positions-spot-strip positions-spot-strip--panel" id="positions-spot-strip" hidden></div>
+        </div>
+      </section>
 
-      <div id="positions-tables-container">
+      <section class="page-section page-section--data positions-tables-section" id="positions-tables-container" aria-label="Tablas de posiciones">
         ${
           input.hasPositions
             ? `${input.buyLowMarkup}${input.sellHighMarkup}`
             : renderEmptyState(input.autoMode, input.hasApi)
         }
-      </div>
-    </div>
+      </section>
+    </section>
   `;
 }
 

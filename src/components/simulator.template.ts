@@ -1,5 +1,11 @@
 import { iconRefreshCw, iconTarget } from '../utils/icons';
 import { SIMULATOR_COPY, SIMULATOR_FREQUENCY_OPTIONS } from './simulator.constants';
+import {
+  renderInlineStatusRegion,
+  renderPageContextTags,
+  renderPageLead,
+  renderSectionHead,
+} from './page-layout.template';
 import type { AutoState, SimulatorViewState } from './simulator.state';
 
 function renderAutoTag(id: string, isAuto: boolean): string {
@@ -82,13 +88,37 @@ export function renderSimulatorTemplate(
   autoState: AutoState,
   dashboardGoal: number,
 ): string {
+  const frequencyLabel =
+    SIMULATOR_FREQUENCY_OPTIONS.find((option) => option.value === viewState.frequency)?.label ??
+    viewState.frequency;
+  const hasAutoInputs = autoState.capital || autoState.apr || autoState.goal;
+  const contextHtml = renderPageContextTags([
+    {
+      label: hasAutoInputs ? 'Con datos AUTO' : 'Manual',
+      tone: hasAutoInputs ? 'accent' : 'neutral',
+    },
+    {
+      label: frequencyLabel,
+      tone: 'neutral',
+    },
+  ]);
+
   return `
-    <div class="section">
-      <h2 class="visually-hidden">${SIMULATOR_COPY.title}</h2>
+    <section class="section simulator-section" aria-labelledby="simulator-heading">
+      ${renderPageLead({
+        id: 'simulator-heading',
+        title: SIMULATOR_COPY.title,
+        contextHtml,
+      })}
+      ${renderInlineStatusRegion()}
 
       <div class="grid-2 simulator-shell">
-        <div class="card sim-parameters-card">
-          <div class="card-title mb-md">${SIMULATOR_COPY.parametersTitle}</div>
+        <section class="page-panel sim-parameters-card" aria-labelledby="sim-parameters-title">
+          ${renderSectionHead({
+            id: 'sim-parameters-title',
+            title: SIMULATOR_COPY.parametersTitle,
+            titleTag: 'h3',
+          })}
           <div class="form-group">
             <label class="label-with-badge">
               ${SIMULATOR_COPY.capitalLabel}
@@ -132,10 +162,14 @@ export function renderSimulatorTemplate(
             <button class="btn btn-sm flex-1" id="btn-sim-reset">${iconRefreshCw(14)} ${SIMULATOR_COPY.resetAutoLabel}</button>
             <button class="btn btn-primary flex-2" id="btn-simulate">${iconTarget(14)} ${SIMULATOR_COPY.simulateLabel}</button>
           </div>
-        </div>
+        </section>
 
-        <div class="card sim-results-card" id="sim-results">
-          <div class="card-title mb-lg">${SIMULATOR_COPY.resultsTitle}</div>
+        <section class="page-panel page-panel--accent sim-results-card" id="sim-results" aria-labelledby="sim-results-title">
+          ${renderSectionHead({
+            id: 'sim-results-title',
+            title: SIMULATOR_COPY.resultsTitle,
+            titleTag: 'h3',
+          })}
           <div class="sim-results-container">
             <div class="sim-milestones-grid">
               <div class="sim-milestone-col">
@@ -178,11 +212,15 @@ export function renderSimulatorTemplate(
               <div class="sim-result-value medium mono" id="sim-out-final">${renderResultSkeleton('sim-skeleton-w-100 sim-skeleton-h-md')}</div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
-      <div class="card sim-projection-card" id="sim-table-container">
-        <div class="card-title mb-md">${SIMULATOR_COPY.projectionTitle}</div>
+      <section class="page-section data-section sim-projection-card" id="sim-table-container" aria-labelledby="sim-projection-title">
+        ${renderSectionHead({
+          id: 'sim-projection-title',
+          title: SIMULATOR_COPY.projectionTitle,
+          titleTag: 'h3',
+        })}
         <div class="chart-container mb-lg">
           <canvas id="projection-chart" hidden></canvas>
           <div class="sim-projection-chart-skeleton" id="sim-projection-chart-skeleton">
@@ -190,7 +228,7 @@ export function renderSimulatorTemplate(
           </div>
         </div>
         <div class="table-container" id="sim-table"></div>
-      </div>
-    </div>
+      </section>
+    </section>
   `;
 }

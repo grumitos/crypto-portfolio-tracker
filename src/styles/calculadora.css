@@ -74,7 +74,9 @@
 .calc-metrics-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-sm);
+  gap: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  margin-top: 4px;
 }
 
 .calc-signal-card {
@@ -85,31 +87,24 @@
 }
 
 .calc-metric-card {
-  background: color-mix(in srgb, var(--bg-card) 56%, var(--bg-secondary));
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: var(--panel-padding-compact);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0;
+  padding: 0.95rem 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  transition: border-color 0.2s var(--ease-out);
-}
-
-.calc-metric-card:hover {
-  border-color: var(--border-hover);
 }
 
 .calc-metric-card.calc-hero {
-  border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
-  background: color-mix(in srgb, var(--bg-card) 92%, var(--accent-warm-muted));
-}
-
-.calc-metric-card.calc-hero:hover {
-  border-color: var(--border-hover);
+  background: color-mix(in srgb, var(--bg-card) 82%, var(--accent-warm-muted));
 }
 
 .calc-metric-card.calc-wide {
   grid-column: 1 / -1;
+  border-right: 0;
 }
 
 .calc-metric-label {
@@ -129,6 +124,14 @@
 
 .calc-metric-card.calc-hero .calc-metric-value {
   font-size: var(--font-size-number-lg);
+}
+
+.calc-metrics-grid > :nth-child(2n) {
+  border-right: 0;
+}
+
+.calc-metrics-grid > :last-child {
+  border-bottom: 0;
 }
 
 /* Purchases */
@@ -180,6 +183,10 @@
 
   .calc-metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .calc-metric-card {
+    border-right: 0;
   }
 
   .calc-purchase-header > :nth-child(3),
