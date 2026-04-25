@@ -204,7 +204,8 @@ function syncGoalProgressAccessibility(
   const { goalBar } = getDashboardElements(container);
   if (!goalBar) return;
 
-  const pct = details.targetAmount > 0 ? clampProgress(progressPct(balance, details.targetAmount)) : 0;
+  const pct =
+    details.targetAmount > 0 ? clampProgress(progressPct(balance, details.targetAmount)) : 0;
   goalBar.setAttribute('aria-valuenow', String(Math.round(pct)));
   goalBar.setAttribute(
     'aria-valuetext',
@@ -670,8 +671,7 @@ async function hydrateDashboardMarketStats(
       setTextResult(capital, '---', true);
     }
 
-    daily.style.color =
-      metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
+    daily.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
     if (metrics.dailyEarningsUsd > 0) {
       setCurrencyOutput(daily, metrics.dailyEarningsUsd, true);
     } else {

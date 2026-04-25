@@ -23,7 +23,11 @@
 .sim-results-card {
   border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0, var(--bg-card) 100%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0,
+      var(--bg-card) 100%
+    ),
     var(--bg-card);
 }
 
@@ -46,26 +50,17 @@
 .sim-milestones-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  gap: var(--space-md);
 }
 
 .sim-milestone-col {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0.9rem 0;
-  border: 0;
-  background: transparent;
-}
-
-.sim-milestone-col:first-child {
-  padding-right: var(--space-md);
-  border-right: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-}
-
-.sim-milestone-col:last-child {
-  padding-left: var(--space-md);
+  gap: 6px;
+  padding: 0.82rem;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-card) 74%, var(--bg-secondary));
 }
 
 .sim-result-item {
@@ -299,22 +294,6 @@
 @media (max-width: 768px) {
   .simulator-shell {
     grid-template-columns: 1fr;
-  }
-
-  .sim-milestones-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .sim-milestone-col:first-child {
-    padding-right: 0;
-    padding-bottom: var(--space-md);
-    border-right: 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  }
-
-  .sim-milestone-col:last-child {
-    padding-left: 0;
-    padding-top: var(--space-md);
   }
 
   .sim-projection-card table {

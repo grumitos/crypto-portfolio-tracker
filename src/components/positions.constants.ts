@@ -17,7 +17,8 @@ export const SPOT_CHANGE_SKELETON_WIDTH = '56px';
 export const POSITIONS_COPY = {
   title: 'Dual Investment',
   kicker: 'Operaciones activas',
-  intro: 'Seguimiento de posiciones abiertas, capital comprometido y contexto de mercado en tiempo real.',
+  intro:
+    'Seguimiento de posiciones abiertas, capital comprometido y contexto de mercado en tiempo real.',
   aprTitle: 'APR promedio',
   capitalTitle: 'En posiciones',
   dailyTitle: 'Run-rate diario est.',

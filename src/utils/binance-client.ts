@@ -1,7 +1,7 @@
 import type {
+  BinanceApiCredentials,
   BinanceAccountBalance,
   BinanceDualPosition,
-  DualProduct,
   DualOptionType,
 } from '../types';
 import { loadApiCredentials } from './binance-auth';
@@ -18,14 +18,10 @@ interface CacheEntry<T> {
   ts: number;
 }
 
-const PRODUCT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 const POSITIONS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 min
 const BALANCE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 min
-const DUAL_MARKET_ASSETS = ['BTC', 'ETH', 'BNB', 'SOL'] as const;
-const DUAL_MARKET_STABLES = ['USDT', 'USDC'] as const;
 const CLOSED_DUAL_POSITION_STATUSES = new Set(['SETTLED', 'PURCHASE_FAIL', 'REFUND_SUCCESS']);
 
-let productCache: CacheEntry<DualProduct[]> | null = null;
 let positionsCache: CacheEntry<BinanceDualPosition[]> | null = null;
 let balanceCache: CacheEntry<BinanceAccountBalance[]> | null = null;
 
@@ -98,8 +94,9 @@ async function fetchSigned<T>(
   baseUrl: string,
   path: string,
   params: Record<string, string | number> = {},
+  credentials?: BinanceApiCredentials,
 ): Promise<T> {
-  const creds = loadApiCredentials();
+  const creds = credentials ?? loadApiCredentials();
   if (!creds) throw new Error('API credentials not configured');
 
   const qs = await signedParams(params, creds.apiSecret);
@@ -208,109 +205,18 @@ export async function fetchDualPositions(forceRefresh = false): Promise<BinanceD
   return positions;
 }
 
-// ── Dual Investment products (READ) ──
-
-interface RawDualProductsResponse {
-  total: number;
-  list: Array<{
-    id: string;
-    investCoin: string;
-    exercisedCoin: string;
-    orderId?: string | number;
-    strikePrice: string;
-    duration: number;
-    settleDate: number;
-    apr: string;
-    minAmount: string;
-    maxAmount: string;
-    optionType: string;
-    purchaseDecimal: number;
-    perValue?: string;
-    purchaseEndTime: number;
-    canPurchase?: boolean;
-  }>;
-}
-
-export async function fetchDualProducts(forceRefresh = false): Promise<DualProduct[]> {
-  if (!forceRefresh && productCache && Date.now() - productCache.ts < PRODUCT_CACHE_TTL_MS) {
-    return productCache.data;
-  }
-
-  const requests: Array<Promise<DualProduct[]>> = [];
-
-  for (const asset of DUAL_MARKET_ASSETS) {
-    for (const stable of DUAL_MARKET_STABLES) {
-      requests.push(fetchDualProductsForPair('CALL', asset, stable));
-      requests.push(fetchDualProductsForPair('PUT', stable, asset));
-    }
-  }
-
-  const responses = await Promise.all(requests);
-  const deduped = new Map<string, DualProduct>();
-  responses.flat().forEach((product) => {
-    if (!product.canPurchase) return;
-    const key = `${product.id}:${product.orderId ?? ''}`;
-    deduped.set(key, product);
-  });
-
-  productCache = { data: [...deduped.values()], ts: Date.now() };
-  return productCache.data;
-}
-
-async function fetchDualProductsForPair(
-  optionType: DualOptionType,
-  investCoin: string,
-  exercisedCoin: string,
-): Promise<DualProduct[]> {
-  try {
-    const raw = await fetchSigned<RawDualProductsResponse>(SAPI_PROXY_BASE, '/dci/product/list', {
-      optionType,
-      investCoin,
-      exercisedCoin,
-      pageSize: 100,
-      pageIndex: 1,
-    });
-
-    return (raw.list ?? []).map((p) => ({
-      id: p.id,
-      investCoin: normalizeBinanceAssetCode(p.investCoin),
-      exercisedCoin: normalizeBinanceAssetCode(p.exercisedCoin),
-      orderId: p.orderId !== undefined ? String(p.orderId) : undefined,
-      strikePrice: parseFloat(p.strikePrice),
-      duration: p.duration,
-      settleDate: new Date(p.settleDate).toISOString().split('T')[0],
-      apr: parseFloat(p.apr) * 100,
-      minAmount: parseFloat(p.minAmount),
-      maxAmount: parseFloat(p.maxAmount),
-      optionType: (p.optionType || optionType) as DualOptionType,
-      purchaseDecimal: p.purchaseDecimal,
-      perValue: parseFloat(p.perValue ?? '0'),
-      purchaseEndTime: p.purchaseEndTime,
-      canPurchase: p.canPurchase !== false,
-    }));
-  } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn(
-        `[binance-client] Failed to fetch ${optionType} ${investCoin}/${exercisedCoin}:`,
-        err,
-      );
-    }
-    return [];
-  }
-}
-
 // ── Test API connection ──
 
-export async function testApiConnection(): Promise<{
+export async function testApiConnection(credentials?: BinanceApiCredentials): Promise<{
   success: boolean;
   permissions: string[];
   error?: string;
 }> {
   try {
-    const creds = loadApiCredentials();
+    const creds = credentials ?? loadApiCredentials();
     if (!creds) return { success: false, permissions: [], error: 'No API credentials' };
 
-    const raw = await fetchSigned<{ permissions: string[] }>(API_PROXY_BASE, '/account');
+    const raw = await fetchSigned<{ permissions: string[] }>(API_PROXY_BASE, '/account', {}, creds);
     return { success: true, permissions: raw.permissions ?? [] };
   } catch (err) {
     return {
@@ -324,7 +230,6 @@ export async function testApiConnection(): Promise<{
 // ── Cache management ──
 
 export function clearAllCaches(): void {
-  productCache = null;
   positionsCache = null;
   balanceCache = null;
 }

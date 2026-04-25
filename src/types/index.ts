@@ -163,50 +163,6 @@ export interface BinanceApiCredentials {
 
 export type DualOptionType = 'CALL' | 'PUT';
 
-export interface DualProduct {
-  id: string;
-  investCoin: string; // e.g. "USDT"
-  exercisedCoin: string; // e.g. "BTC"
-  orderId?: string;
-  strikePrice: number;
-  duration: number; // days
-  settleDate: string; // ISO date
-  apr: number;
-  minAmount: number;
-  maxAmount: number;
-  optionType: DualOptionType; // CALL = sell-high, PUT = buy-low
-  purchaseDecimal: number; // decimal places for amount
-  perValue: number; // per unit value
-  purchaseEndTime: number; // timestamp ms
-  canPurchase?: boolean;
-}
-
-export interface ScoreBreakdown {
-  yieldScore: number;
-  safetyScore: number;
-  durationScore: number;
-  trendScore: number;
-  compoundScore: number;
-}
-
-export interface DualProductScored extends DualProduct {
-  score: number;
-  scoreBreakdown: ScoreBreakdown;
-  spotPrice: number;
-  distancePercent: number; // (strike - spot) / spot for CALL, (spot - strike) / spot for PUT
-}
-
-export interface DualMarketFilters {
-  asset?: string;
-  direction?: Direction;
-  minApr?: number;
-  maxDuration?: number;
-}
-
-export interface DualMarketState {
-  filters: DualMarketFilters;
-}
-
 export interface BinanceAccountBalance {
   asset: string;
   free: number;

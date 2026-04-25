@@ -11,22 +11,18 @@ import { ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from '../utils/constants';
 import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-logos';
 import { escapeHtml } from '../utils/ui-helpers';
 import type { DualPosition } from '../types';
-import { renderSectionHead } from './page-layout.template';
 
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
   const isBuyLow = positions[0]?.direction !== 'sell-high';
   const safeTitle = escapeHtml(title);
   const groupSummary = `${positions.length} posicion${positions.length > 1 ? 'es' : ''}`;
-  const groupId = isBuyLow ? 'positions-buy-low-title' : 'positions-sell-high-title';
   return `
-    <section class="positions-group-card data-section" aria-labelledby="${groupId}">
-      <div class="positions-group-head">
-        ${renderSectionHead({
-          id: groupId,
-          title,
-          actionsHtml: `<span class="positions-group-count positions-group-count--head">${groupSummary}</span>`,
-          titleTag: 'h3',
-        })}
+    <div class="card positions-group-card">
+      <div class="flex-between positions-group-head">
+        <div class="card-title form-group-inline">
+          <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${safeTitle}</span>
+          <span class="positions-group-count">${groupSummary}</span>
+        </div>
       </div>
       <div class="table-container">
         <table class="positions-table" aria-label="Tabla de posiciones ${safeTitle}">
@@ -62,7 +58,7 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
           </tbody>
         </table>
       </div>
-    </section>
+    </div>
   `;
 }
 
@@ -208,10 +204,7 @@ function renderDateTimeCell(date: string, hint?: string | null): string {
   return `<span class="pos-datetime-wrap"${titleAttr}><span class="pos-date-value">${escapeHtml(formatDateLatin(date))}</span></span>`;
 }
 
-function getDateTimeHint(
-  position: DualPosition,
-  field: 'entry' | 'settlement',
-): string | null {
+function getDateTimeHint(position: DualPosition, field: 'entry' | 'settlement'): string | null {
   if (field === 'settlement') {
     if (position.settlementTimeSource === 'binance_settle_date_rule') {
       return 'Hora de liquidación calculada desde settleDate con la ventana estándar de Binance.';

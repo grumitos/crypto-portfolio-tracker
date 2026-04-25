@@ -487,7 +487,14 @@ function runSimulation(
     invested,
   });
   const milestones = resolveSimulationMilestones(snapshot);
-  setMilestoneOutputs(elements.beDate, elements.beTime, 'be', milestones.byMilestone.be, animate, true);
+  setMilestoneOutputs(
+    elements.beDate,
+    elements.beTime,
+    'be',
+    milestones.byMilestone.be,
+    animate,
+    true,
+  );
   setMilestoneOutputs(
     elements.goalDate,
     elements.goalTime,

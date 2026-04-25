@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderCalculadora } from './calculadora';
 import { createMemoryStorage, mockMatchMedia, resetDom } from '../test/test-utils';
-import {
-  DEFAULT_CALC_REBUY_PCT,
-  DEFAULT_CALC_SELL_PCT,
-  saveCalcState,
-} from '../utils/storage';
+import { DEFAULT_CALC_REBUY_PCT, DEFAULT_CALC_SELL_PCT, saveCalcState } from '../utils/storage';
 import * as storage from '../utils/storage';
 
 function parseDisplayedNumber(value: string | null): number {

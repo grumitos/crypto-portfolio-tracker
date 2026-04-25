@@ -3,6 +3,7 @@ import { loadStoredPositionsMode, saveStoredPositionsMode } from './storage';
 
 const STORAGE_KEY = 'crypto-binance-api';
 const LEGACY_MODE_KEY = 'crypto-positions-mode';
+let apiSecretSessionValue: string | null = null;
 
 // ── Positions mode (single source of truth: main app state) ──
 
@@ -51,13 +52,30 @@ export function isAutoMode(): boolean {
 // ── Credentials persistence ──
 
 export function saveApiCredentials(creds: BinanceApiCredentials): void {
+  apiSecretSessionValue = creds.apiSecret;
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ apiKey: creds.apiKey, apiSecret: creds.apiSecret }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey: creds.apiKey }));
   } catch {
     // storage full or unavailable
+  }
+}
+
+export function loadStoredApiKey(): string {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return '';
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'apiKey' in parsed &&
+      typeof (parsed as { apiKey: unknown }).apiKey === 'string'
+    ) {
+      return (parsed as { apiKey: string }).apiKey;
+    }
+    return '';
+  } catch {
+    return '';
   }
 }
 
@@ -70,13 +88,22 @@ export function loadApiCredentials(): BinanceApiCredentials | null {
       typeof parsed === 'object' &&
       parsed !== null &&
       'apiKey' in parsed &&
-      'apiSecret' in parsed &&
-      typeof (parsed as BinanceApiCredentials).apiKey === 'string' &&
-      typeof (parsed as BinanceApiCredentials).apiSecret === 'string'
+      typeof (parsed as BinanceApiCredentials).apiKey === 'string'
     ) {
+      if (
+        'apiSecret' in parsed &&
+        typeof (parsed as BinanceApiCredentials).apiSecret === 'string'
+      ) {
+        apiSecretSessionValue = (parsed as BinanceApiCredentials).apiSecret;
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ apiKey: (parsed as BinanceApiCredentials).apiKey }),
+        );
+      }
+      if (!apiSecretSessionValue) return null;
       return {
         apiKey: (parsed as BinanceApiCredentials).apiKey,
-        apiSecret: (parsed as BinanceApiCredentials).apiSecret,
+        apiSecret: apiSecretSessionValue,
       };
     }
     return null;
@@ -86,6 +113,7 @@ export function loadApiCredentials(): BinanceApiCredentials | null {
 }
 
 export function clearApiCredentials(): void {
+  apiSecretSessionValue = null;
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {

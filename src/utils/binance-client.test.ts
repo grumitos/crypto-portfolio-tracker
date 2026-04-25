@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryStorage } from '../test/test-utils';
-import { saveApiCredentials } from './binance-auth';
 
 function jsonResponse(payload: unknown): Response {
   return {
@@ -39,11 +38,15 @@ describe('binance client', () => {
       configurable: true,
       writable: true,
     });
-
-    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
   });
 
+  async function seedCredentials(): Promise<void> {
+    const { saveApiCredentials } = await import('./binance-auth');
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+  }
+
   it('maps dual positions using the current Binance response fields', async () => {
+    await seedCredentials();
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         total: 3,
@@ -117,6 +120,7 @@ describe('binance client', () => {
   });
 
   it('normalizes Binance LD asset wrappers and merges balances by underlying asset', async () => {
+    await seedCredentials();
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         balances: [
@@ -141,6 +145,7 @@ describe('binance client', () => {
   });
 
   it('normalizes LD assets in dual positions to their underlying symbol', async () => {
+    await seedCredentials();
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         total: 1,
@@ -174,60 +179,21 @@ describe('binance client', () => {
     });
   });
 
-  it('requests dual market products with required invest and exercised coins', async () => {
-    const fetchMock = vi.fn().mockImplementation(async (input: string | URL) => {
-      const url = new URL(String(input), 'https://example.test');
-      const optionType = url.searchParams.get('optionType');
-      const investCoin = url.searchParams.get('investCoin');
-      const exercisedCoin = url.searchParams.get('exercisedCoin');
-
-      if (
-        url.pathname.includes('/sapi/v1/dci/product/list') &&
-        optionType &&
-        investCoin &&
-        exercisedCoin
-      ) {
-        return jsonResponse({
-          total: 1,
-          list: [
-            {
-              id: '741590',
-              investCoin: 'USDT',
-              exercisedCoin: 'BNB',
-              strikePrice: '380',
-              duration: 4,
-              settleDate: 1709020800000,
-              purchaseDecimal: 8,
-              purchaseEndTime: 1708934400000,
-              canPurchase: true,
-              apr: '0.6076',
-              orderId: 8257205859,
-              minAmount: '0.1',
-              maxAmount: '25265.7',
-              optionType: 'PUT',
-            },
-          ],
-        });
-      }
-
-      return jsonResponse({ total: 0, list: [] });
-    });
-
+  it('tests explicit credentials without reading persisted credentials', async () => {
+    localStorage.clear();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ permissions: ['SPOT'] }));
     vi.stubGlobal('fetch', fetchMock);
 
     const client = await import('./binance-client');
-    await client.fetchDualProducts(true);
+    const result = await client.testApiConnection({
+      apiKey: 'direct-key',
+      apiSecret: 'direct-secret',
+    });
 
-    const urls = fetchMock.mock.calls.map(([input]) => String(input));
-    expect(
-      urls.some((rawUrl) => {
-        const url = new URL(rawUrl, 'https://example.test');
-        return (
-          url.searchParams.get('optionType') === 'PUT' &&
-          url.searchParams.get('investCoin') === 'USDT' &&
-          url.searchParams.get('exercisedCoin') === 'BNB'
-        );
-      }),
-    ).toBe(true);
+    expect(result).toEqual({ success: true, permissions: ['SPOT'] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('crypto-binance-api')).toBeNull();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['X-MBX-APIKEY']).toBe('direct-key');
   });
 });

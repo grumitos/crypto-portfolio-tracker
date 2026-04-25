@@ -1,6 +1,4 @@
-import {
-  loadState,
-} from '../utils/storage';
+import { loadState } from '../utils/storage';
 import { formatUSD, formatUSDCompact } from '../utils/calculator';
 import { normalizeAsset as normalizeAssetSymbol } from '../utils/market';
 import type { AssetPriceSnapshot, PositionMetrics } from '../utils/market';
@@ -378,7 +376,8 @@ function applyPositionMarketData(
         if (!componentRowEl) return;
         const ratio = component.amount / position.amount;
         const componentUsdValue = usdValue * ratio;
-        componentRowEl.textContent = componentUsdValue > 0 ? formatUSDCompact(componentUsdValue) : 'N/D';
+        componentRowEl.textContent =
+          componentUsdValue > 0 ? formatUSDCompact(componentUsdValue) : 'N/D';
       });
     }
   });

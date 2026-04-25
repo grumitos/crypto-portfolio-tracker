@@ -15,7 +15,7 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/",
-    "check": "npm run typecheck && npm run test:run && vite build",
+    "check": "npm run typecheck && npm run test:coverage && vite build",
     "check:ci": "npm run typecheck && npm run test:coverage && npm run build"
   },
   "devDependencies": {

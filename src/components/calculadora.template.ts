@@ -1,43 +1,14 @@
 import { iconPlus, iconRefreshCw, iconTrash, iconX } from '../utils/icons';
 import type { CalculadoraState } from '../types';
 import { CALCULADORA_COPY } from './calculadora.constants';
-import {
-  renderInlineStatusRegion,
-  renderPageContextTags,
-  renderPageLead,
-  renderSectionHead,
-} from './page-layout.template';
 
-export function renderCalculadoraTemplate(
-  state: CalculadoraState,
-  feeValue: number,
-): string {
-  const contextHtml = renderPageContextTags([
-    {
-      label: 'Manual',
-      tone: 'neutral',
-    },
-    {
-      label: `${state.purchases.length} ${state.purchases.length === 1 ? 'compra' : 'compras'}`,
-      tone: state.purchases.length > 0 ? 'success' : 'neutral',
-    },
-  ]);
-
+export function renderCalculadoraTemplate(state: CalculadoraState, feeValue: number): string {
   return `
-    <section class="section calculadora-section" aria-labelledby="calculadora-heading">
-      ${renderPageLead({
-        id: 'calculadora-heading',
-        title: CALCULADORA_COPY.title,
-        contextHtml,
-      })}
-      ${renderInlineStatusRegion()}
+    <div class="section">
+      <h2 class="visually-hidden">${CALCULADORA_COPY.title}</h2>
 
-      <section class="page-panel calc-config-card" aria-labelledby="calc-config-title">
-        ${renderSectionHead({
-          id: 'calc-config-title',
-          title: CALCULADORA_COPY.configTitle,
-          titleTag: 'h3',
-        })}
+      <div class="card calc-config-card">
+        <div class="card-title mb-md">${CALCULADORA_COPY.configTitle}</div>
         <div class="calc-config-bar">
           <div class="form-group form-group-inline">
             <label for="calc-price">${CALCULADORA_COPY.priceLabel}</label>
@@ -75,17 +46,15 @@ export function renderCalculadoraTemplate(
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
       <div class="grid-2 calc-shell">
-        <div class="calc-flow-stack">
-          <section class="page-panel calc-execution-panel" aria-labelledby="calc-execution-title">
-            ${renderSectionHead({
-              id: 'calc-execution-title',
-              title: CALCULADORA_COPY.executionTitle,
-              actionsHtml: `<button type="button" class="btn btn-sm" id="calc-reset-exec" title="Resetear valores">${iconRefreshCw(14)} ${CALCULADORA_COPY.resetLabel}</button>`,
-              titleTag: 'h3',
-            })}
+        <div>
+          <div class="card mb-md">
+            <div class="card-title flex-between mb-md">
+              ${CALCULADORA_COPY.executionTitle}
+              <button type="button" class="btn btn-sm" id="calc-reset-exec" title="Resetear valores">${iconRefreshCw(14)} ${CALCULADORA_COPY.resetLabel}</button>
+            </div>
             <div class="grid-3">
               <div class="form-group">
                 <label for="calc-sell-price">Precio ejecutado</label>
@@ -103,19 +72,16 @@ export function renderCalculadoraTemplate(
                 <input type="text" id="calc-rebuy-pct" inputmode="decimal" value="${state.rebuyPct}">
               </div>
             </div>
-          </section>
+          </div>
 
-          <section class="page-panel calc-positions-panel" aria-labelledby="calc-positions-title">
-            ${renderSectionHead({
-              id: 'calc-positions-title',
-              title: CALCULADORA_COPY.positionsTitle,
-              actionsHtml:
-                '<div class="flex-row gap-sm">' +
-                `<button type="button" class="btn btn-sm btn-danger" id="calc-clear-purchases" ${state.purchases.length === 0 ? 'disabled' : ''}>${iconTrash(14)} ${CALCULADORA_COPY.clearLabel}</button>` +
-                `<button type="button" class="btn btn-sm btn-primary" id="calc-add-purchase">${iconPlus(14)} ${CALCULADORA_COPY.addLabel}</button>` +
-                '</div>',
-              titleTag: 'h3',
-            })}
+          <div class="card">
+            <div class="card-title flex-between mb-md">
+              ${CALCULADORA_COPY.positionsTitle}
+              <div class="flex-row gap-sm">
+                <button type="button" class="btn btn-sm btn-danger" id="calc-clear-purchases" ${state.purchases.length === 0 ? 'disabled' : ''}>${iconTrash(14)} ${CALCULADORA_COPY.clearLabel}</button>
+                <button type="button" class="btn btn-sm btn-primary" id="calc-add-purchase">${iconPlus(14)} ${CALCULADORA_COPY.addLabel}</button>
+              </div>
+            </div>
 
             ${
               state.purchases.length > 0
@@ -135,15 +101,11 @@ export function renderCalculadoraTemplate(
             <div class="text-muted hint-text mt-md" id="calc-purchase-summary">
               ${state.purchases.length === 0 ? CALCULADORA_COPY.purchasesEmpty : ''}
             </div>
-          </section>
+          </div>
         </div>
 
-        <section class="page-panel page-panel--accent calc-signal-card" aria-labelledby="calc-signal-title">
-          ${renderSectionHead({
-            id: 'calc-signal-title',
-            title: CALCULADORA_COPY.signalTitle,
-            titleTag: 'h3',
-          })}
+        <div class="card calc-signal-card">
+          <div class="card-title mb-md">${CALCULADORA_COPY.signalTitle}</div>
           <div class="calc-metrics-grid">
             <div class="calc-metric-card calc-hero">
               <span class="calc-metric-label">APR real</span>
@@ -174,9 +136,9 @@ export function renderCalculadoraTemplate(
               <div class="calc-metric-value mono" id="calc-out-net-cycle-usd">-</div>
             </div>
           </div>
-        </section>
+        </div>
       </div>
-    </section>
+    </div>
   `;
 }
 

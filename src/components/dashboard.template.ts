@@ -1,5 +1,6 @@
 import { formatDateLatin, formatPct, formatUSD } from '../utils/calculator';
 import { escapeHtml, skeletonSpan } from '../utils/ui-helpers';
+import { iconWallet } from '../utils/icons';
 import {
   bindAssetLogoFallbacks,
   createAssetMonogram,
@@ -13,12 +14,6 @@ import {
   DASHBOARD_BALANCE_LOADING_CARD_COUNT,
   DASHBOARD_COPY,
 } from './dashboard.constants';
-import {
-  renderInlineStatusRegion,
-  renderPageContextTags,
-  renderPageLead,
-  renderSectionHead,
-} from './page-layout.template';
 
 export interface DashboardTemplateInput {
   balance: number;
@@ -137,125 +132,101 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
   const loss = input.balance - input.invested;
   const lossPct = input.invested > 0 ? (loss / input.invested) * 100 : 0;
   const remaining = Math.max(0, input.goalAmount - input.balance);
-  const contextHtml = renderPageContextTags([
-    {
-      label:
-        input.autoModeEnabled && input.hasApiCredentials ? DASHBOARD_COPY.accountBalanceBadge : 'Local',
-      tone: input.autoModeEnabled && input.hasApiCredentials ? 'accent' : 'neutral',
-    },
-    {
-      label: `${input.positionsCount} ${input.positionsCount === 1 ? 'posicion' : 'posiciones'}`,
-      tone: input.positionsCount > 0 ? 'success' : 'neutral',
-    },
-  ]);
 
   return `
     <section class="section dashboard-section" aria-labelledby="dashboard-heading">
-      ${renderPageLead({
-        id: 'dashboard-heading',
-        title: DASHBOARD_COPY.sectionTitle,
-        contextHtml,
-      })}
-      ${renderInlineStatusRegion()}
+      <h2 class="visually-hidden" id="dashboard-heading">${DASHBOARD_COPY.sectionTitle}</h2>
 
-      <section class="page-section dashboard-overview">
-        <div class="page-panel dashboard-summary-shell">
-          <div class="grid-3 dashboard-summary-grid">
-            <article class="dashboard-card" aria-labelledby="dash-invested-title">
-              <div class="card-title" id="dash-invested-title">${DASHBOARD_COPY.investedTitle}</div>
-              <output class="big-number" id="dash-invested" aria-live="polite">${formatUSD(input.invested)}</output>
-            </article>
-            <article class="dashboard-card" aria-labelledby="dash-balance-title">
-              <div class="card-title" id="dash-balance-title">${DASHBOARD_COPY.balanceTitle}</div>
-              <output class="big-number accent" id="dash-balance" aria-live="polite">${formatUSD(input.balance)}</output>
-              <div class="mono text-muted sub-text" id="dash-balance-date">${formatDateLatin(input.lastUpdatedIso)}</div>
-            </article>
-            <article class="dashboard-card" aria-labelledby="dash-pnl-title">
-              <div class="card-title" id="dash-pnl-title">${DASHBOARD_COPY.pnlTitle}</div>
-              <output class="big-number ${loss >= 0 ? 'gain' : 'loss'}" id="dash-pnl" aria-live="polite">${formatUSD(loss)}</output>
-              <div id="dash-pnl-pct" class="mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}">${formatPct(lossPct)}</div>
-            </article>
+      <div class="grid-3 dashboard-summary-grid">
+        <article class="card dashboard-card" aria-labelledby="dash-invested-title">
+          <div class="card-title" id="dash-invested-title">${DASHBOARD_COPY.investedTitle}</div>
+          <output class="big-number" id="dash-invested" aria-live="polite">${formatUSD(input.invested)}</output>
+        </article>
+        <article class="card dashboard-card" aria-labelledby="dash-balance-title">
+          <div class="card-title" id="dash-balance-title">${DASHBOARD_COPY.balanceTitle}</div>
+          <output class="big-number accent" id="dash-balance" aria-live="polite">${formatUSD(input.balance)}</output>
+          <div class="mono text-muted sub-text" id="dash-balance-date">${formatDateLatin(input.lastUpdatedIso)}</div>
+        </article>
+        <article class="card dashboard-card" aria-labelledby="dash-pnl-title">
+          <div class="card-title" id="dash-pnl-title">${DASHBOARD_COPY.pnlTitle}</div>
+          <output class="big-number ${loss >= 0 ? 'gain' : 'loss'}" id="dash-pnl" aria-live="polite">${formatUSD(loss)}</output>
+          <div id="dash-pnl-pct" class="mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}">${formatPct(lossPct)}</div>
+        </article>
+      </div>
+
+      <article class="card dashboard-card dashboard-goal-card" aria-labelledby="dashboard-goal-title">
+        <div class="card-title" id="dashboard-goal-title">${DASHBOARD_COPY.goalTitle}</div>
+        <div class="goal-progress-head">
+          <output class="mono goal-progress-value" id="dash-prog-current" aria-live="polite">${formatUSD(input.balance)}</output>
+          <span class="text-secondary goal-progress-value goal-progress-target" id="dash-prog-target">
+            <span class="goal-progress-target-label" id="dash-prog-target-label">${DASHBOARD_COPY.defaultGoalLabel}</span>
+            <output class="mono goal-progress-target-amount" id="dash-prog-target-amount" aria-live="polite">${formatUSD(input.goalAmount)}</output>
+          </span>
+        </div>
+        <div
+          class="progress-bar goal-progress-bar mode-both"
+          id="dash-goal-progress-bar"
+          role="progressbar"
+          aria-label="${DASHBOARD_COPY.progressRegionLabel}"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="${Math.round(input.progressFill)}"
+        >
+          <div class="goal-progress-zone-muted breakeven zone-first" id="dash-prog-muted-first" style="width:${input.firstMilestonePct}%"></div>
+          <div class="goal-progress-zone-muted goal zone-second" id="dash-prog-muted-second" style="left:${input.firstMilestonePct}%;width:${Math.max(0, input.secondMilestonePct - input.firstMilestonePct)}%"></div>
+          <div class="goal-progress-zone breakeven zone-first" id="dash-prog-solid-first" style="width:${Math.min(input.progressFill, input.firstMilestonePct)}%"></div>
+          <div class="goal-progress-zone goal zone-second" id="dash-prog-solid-second" style="left:${input.firstMilestonePct}%;width:${Math.max(0, Math.min(input.progressFill, input.secondMilestonePct) - input.firstMilestonePct)}%"></div>
+        </div>
+        <div class="goal-progress-foot">
+          <div class="text-secondary goal-progress-remaining" id="dash-prog-remaining" aria-live="polite">
+            <span id="dash-prog-remaining-text">${DASHBOARD_COPY.remainingText}</span>
+            <output class="mono" id="dash-prog-remaining-amount">${formatUSD(remaining)}</output>
+            <span id="dash-prog-remaining-prefix">${DASHBOARD_COPY.remainingPrefix}</span>
+            <span id="dash-prog-remaining-target">${DASHBOARD_COPY.goalTargetText}</span>
+          </div>
+          <div class="goal-progress-meta" aria-label="Controles de progreso">
+            <button type="button" class="goal-progress-legend is-active" id="dashboard-legend-be" data-legend="be" aria-pressed="true" aria-controls="dash-goal-progress-bar">
+              <span class="goal-progress-dot breakeven" aria-hidden="true"></span>${DASHBOARD_COPY.breakEvenLegend}
+            </button>
+            <button type="button" class="goal-progress-legend is-active" id="dashboard-legend-goal" data-legend="goal" aria-pressed="true" aria-controls="dash-goal-progress-bar">
+              <span class="goal-progress-dot goal" aria-hidden="true"></span>${DASHBOARD_COPY.goalLegend}
+            </button>
+            <span class="text-muted goal-progress-sep" id="dashboard-days-sep">/</span>
+            <output class="mono" id="dashboard-days" aria-live="polite" aria-label="${DASHBOARD_COPY.etaLabel}">${skeletonSpan('72px')}</output>
           </div>
         </div>
+      </article>
 
-        <article class="page-panel page-panel--accent dashboard-goal-card" aria-labelledby="dashboard-goal-title">
-          <div class="card-title" id="dashboard-goal-title">${DASHBOARD_COPY.goalTitle}</div>
-          <div class="goal-progress-head">
-            <output class="mono goal-progress-value" id="dash-prog-current" aria-live="polite">${formatUSD(input.balance)}</output>
-            <span class="text-secondary goal-progress-value goal-progress-target" id="dash-prog-target">
-              <span class="goal-progress-target-label" id="dash-prog-target-label">${DASHBOARD_COPY.defaultGoalLabel}</span>
-              <output class="mono goal-progress-target-amount" id="dash-prog-target-amount" aria-live="polite">${formatUSD(input.goalAmount)}</output>
-            </span>
-          </div>
-          <div
-            class="progress-bar goal-progress-bar mode-both"
-            id="dash-goal-progress-bar"
-            role="progressbar"
-            aria-label="${DASHBOARD_COPY.progressRegionLabel}"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow="${Math.round(input.progressFill)}"
-          >
-            <div class="goal-progress-zone-muted breakeven zone-first" id="dash-prog-muted-first" style="width:${input.firstMilestonePct}%"></div>
-            <div class="goal-progress-zone-muted goal zone-second" id="dash-prog-muted-second" style="left:${input.firstMilestonePct}%;width:${Math.max(0, input.secondMilestonePct - input.firstMilestonePct)}%"></div>
-            <div class="goal-progress-zone breakeven zone-first" id="dash-prog-solid-first" style="width:${Math.min(input.progressFill, input.firstMilestonePct)}%"></div>
-            <div class="goal-progress-zone goal zone-second" id="dash-prog-solid-second" style="left:${input.firstMilestonePct}%;width:${Math.max(0, Math.min(input.progressFill, input.secondMilestonePct) - input.firstMilestonePct)}%"></div>
-          </div>
-          <div class="goal-progress-foot">
-            <div class="text-secondary goal-progress-remaining" id="dash-prog-remaining" aria-live="polite">
-              <span id="dash-prog-remaining-text">${DASHBOARD_COPY.remainingText}</span>
-              <output class="mono" id="dash-prog-remaining-amount">${formatUSD(remaining)}</output>
-              <span id="dash-prog-remaining-prefix">${DASHBOARD_COPY.remainingPrefix}</span>
-              <span id="dash-prog-remaining-target">${DASHBOARD_COPY.goalTargetText}</span>
-            </div>
-            <div class="goal-progress-meta" aria-label="Controles de progreso">
-              <button type="button" class="goal-progress-legend is-active" id="dashboard-legend-be" data-legend="be" aria-pressed="true" aria-controls="dash-goal-progress-bar">
-                <span class="goal-progress-dot breakeven" aria-hidden="true"></span>${DASHBOARD_COPY.breakEvenLegend}
-              </button>
-              <button type="button" class="goal-progress-legend is-active" id="dashboard-legend-goal" data-legend="goal" aria-pressed="true" aria-controls="dash-goal-progress-bar">
-                <span class="goal-progress-dot goal" aria-hidden="true"></span>${DASHBOARD_COPY.goalLegend}
-              </button>
-              <span class="text-muted goal-progress-sep" id="dashboard-days-sep">/</span>
-              <output class="mono" id="dashboard-days" aria-live="polite" aria-label="${DASHBOARD_COPY.etaLabel}">${skeletonSpan('72px')}</output>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section class="page-section">
-        <div class="grid-4 dashboard-metrics-grid" aria-label="Metricas del portfolio">
-          <article class="metric-card dashboard-stat-card" data-shared-card="apr">
+      <div class="grid-4 dashboard-metrics-grid" aria-label="Métricas del portfolio">
+        <article class="stat-card dashboard-stat-card" data-shared-card="apr">
           <div class="card-title">${DASHBOARD_COPY.averageAprTitle}</div>
           <output class="stat-value" id="dashboard-apr" aria-live="polite">${skeletonSpan('70px')}</output>
         </article>
-          <article class="metric-card dashboard-stat-card" data-shared-card="capital">
+        <article class="stat-card dashboard-stat-card" data-shared-card="capital">
           <div class="card-title">${DASHBOARD_COPY.capitalTitle}</div>
           <output class="stat-value" id="dashboard-capital" aria-live="polite">${skeletonSpan('90px')}</output>
         </article>
-          <article class="metric-card dashboard-stat-card" data-shared-card="daily">
+        <article class="stat-card dashboard-stat-card" data-shared-card="daily">
           <div class="card-title">${DASHBOARD_COPY.dailyRunRateTitle}</div>
           <output class="stat-value" id="dashboard-daily" aria-live="polite">${skeletonSpan('70px')}</output>
         </article>
-          <article class="metric-card dashboard-stat-card" data-shared-card="positions">
+        <article class="stat-card dashboard-stat-card" data-shared-card="positions">
           <div class="card-title">${DASHBOARD_COPY.activePositionsTitle}</div>
           <output class="stat-value">${input.positionsCount}</output>
         </article>
-        </div>
-      </section>
+      </div>
 
       ${
         input.autoModeEnabled && input.hasApiCredentials
           ? `
-      <section class="page-section data-section dashboard-balance-panel" id="dashboard-balance-strip" hidden aria-labelledby="dashboard-balance-strip-title">
-        ${renderSectionHead({
-          id: 'dashboard-balance-strip-title',
-          title: `${DASHBOARD_COPY.accountBalanceTitle}`,
-          copy: DASHBOARD_COPY.accountBalanceCopy,
-          actionsHtml: '<span class="page-context-tag page-context-tag--accent">' +
-            DASHBOARD_COPY.accountBalanceBadge +
-            '</span>',
-          titleTag: 'h3',
-        })}
+      <section class="dashboard-balance-panel" id="dashboard-balance-strip" hidden aria-labelledby="dashboard-balance-strip-title">
+        <div class="dashboard-balance-panel-head">
+          <div>
+            <span class="dashboard-balance-panel-title" id="dashboard-balance-strip-title">${iconWallet(14)} ${DASHBOARD_COPY.accountBalanceTitle}</span>
+            <p class="dashboard-balance-panel-copy">${DASHBOARD_COPY.accountBalanceCopy}</p>
+          </div>
+          <span class="dashboard-balance-panel-badge">${DASHBOARD_COPY.accountBalanceBadge}</span>
+        </div>
         <div class="dashboard-balance-panel-grid" id="dashboard-balance-strip-items" aria-live="polite">
           ${renderBalanceLoadingCards()}
         </div>

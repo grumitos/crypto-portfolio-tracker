@@ -1,6 +1,7 @@
 import { openModal, closeModal, bindModalEvents } from '../../utils/modal-manager';
 import {
   loadApiCredentials,
+  loadStoredApiKey,
   saveApiCredentials,
   clearApiCredentials,
   hasApiCredentials,
@@ -35,6 +36,7 @@ function getOrCreateModal(): HTMLDialogElement {
   dialog.className = 'modal-overlay';
 
   const creds = loadApiCredentials();
+  const apiKey = creds?.apiKey ?? loadStoredApiKey();
   const mode = loadPositionsMode();
   const isAuto = mode === 'auto';
   const { portfolio } = loadState();
@@ -124,7 +126,7 @@ function getOrCreateModal(): HTMLDialogElement {
             <div class="form-group">
               <label for="input-api-key">API Key</label>
               <input type="text" id="input-api-key" placeholder="Tu API Key de Binance"
-                     value="${escapeHtml(creds?.apiKey ?? '')}" autocomplete="off" spellcheck="false">
+                     value="${escapeHtml(apiKey)}" autocomplete="off" spellcheck="false">
             </div>
             <div class="form-group">
               <label for="input-api-secret">API Secret</label>
@@ -218,13 +220,9 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
       return;
     }
 
-    // Temporarily save to test
-    const prevCreds = loadApiCredentials();
-    saveApiCredentials({ apiKey: key, apiSecret: secret });
-
     showStatus(statusEl, 'Probando conexión...', 'info');
 
-    const result = await testApiConnection();
+    const result = await testApiConnection({ apiKey: key, apiSecret: secret });
 
     if (result.success) {
       const perms = result.permissions.join(', ') || 'N/A';
@@ -240,9 +238,6 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
         showStatus(statusEl, `Conexión exitosa. Permisos: ${perms}`, 'success');
       }
     } else {
-      // Restore previous creds on failure
-      if (prevCreds) saveApiCredentials(prevCreds);
-      else clearApiCredentials();
       showStatus(statusEl, `Error: ${result.error ?? 'Unknown'}`, 'error');
     }
   });

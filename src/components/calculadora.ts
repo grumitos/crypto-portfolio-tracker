@@ -5,12 +5,7 @@ import {
   saveCalcState,
 } from '../utils/storage';
 import { formatUSD } from '../utils/calculator';
-import type {
-  AchievedResults,
-  CalculadoraState,
-  PurchaseTotals,
-  StrategyResults,
-} from '../types';
+import type { AchievedResults, CalculadoraState, PurchaseTotals, StrategyResults } from '../types';
 import {
   computeAchievedResults,
   computeFeeMultiplier,
@@ -92,10 +87,7 @@ export function renderCalculadora(container: HTMLElement): () => void {
   cancelScheduledRecalculate();
   loadAndInit();
 
-  container.innerHTML = renderCalculadoraTemplate(
-    state,
-    getEffectiveFee().maker,
-  );
+  container.innerHTML = renderCalculadoraTemplate(state, getEffectiveFee().maker);
 
   renderPurchaseRows(container);
   bindEvents(container, eventController.signal);
@@ -163,121 +155,165 @@ function bindEvents(container: HTMLElement, signal: AbortSignal): void {
   ];
 
   for (const [el, key] of inputMap) {
-    el.addEventListener('input', () => {
-      state[key] = el.value;
-      scheduleRecalculate(container);
-      scheduleSave();
-    }, { signal });
+    el.addEventListener(
+      'input',
+      () => {
+        state[key] = el.value;
+        scheduleRecalculate(container);
+        scheduleSave();
+      },
+      { signal },
+    );
   }
 
   // Sell price ↔ sell % bidirectional sync
-  sellPriceInput.addEventListener('focus', () => {
-    state.sellSyncSource = 'price';
-    sellPriceInput.readOnly = false;
-    sellPctInput.readOnly = true;
-    sellPctInput.classList.add('calc-locked');
-    sellPriceInput.classList.remove('calc-locked');
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: false });
-  }, { signal });
+  sellPriceInput.addEventListener(
+    'focus',
+    () => {
+      state.sellSyncSource = 'price';
+      sellPriceInput.readOnly = false;
+      sellPctInput.readOnly = true;
+      sellPctInput.classList.add('calc-locked');
+      sellPriceInput.classList.remove('calc-locked');
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: false });
+    },
+    { signal },
+  );
 
-  sellPctInput.addEventListener('focus', () => {
-    state.sellSyncSource = 'percent';
-    sellPctInput.readOnly = false;
-    sellPriceInput.readOnly = true;
-    sellPriceInput.classList.add('calc-locked');
-    sellPctInput.classList.remove('calc-locked');
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: false });
-  }, { signal });
+  sellPctInput.addEventListener(
+    'focus',
+    () => {
+      state.sellSyncSource = 'percent';
+      sellPctInput.readOnly = false;
+      sellPriceInput.readOnly = true;
+      sellPriceInput.classList.add('calc-locked');
+      sellPctInput.classList.remove('calc-locked');
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: false });
+    },
+    { signal },
+  );
 
-  sellPriceInput.addEventListener('input', () => {
-    state.sellPrice = sellPriceInput.value;
-    state.sellSyncSource = 'price';
-    scheduleRecalculate(container);
-    scheduleSave();
-  }, { signal });
+  sellPriceInput.addEventListener(
+    'input',
+    () => {
+      state.sellPrice = sellPriceInput.value;
+      state.sellSyncSource = 'price';
+      scheduleRecalculate(container);
+      scheduleSave();
+    },
+    { signal },
+  );
 
-  sellPctInput.addEventListener('input', () => {
-    state.sellPct = sellPctInput.value;
-    state.sellSyncSource = 'percent';
-    scheduleRecalculate(container);
-    scheduleSave();
-  }, { signal });
+  sellPctInput.addEventListener(
+    'input',
+    () => {
+      state.sellPct = sellPctInput.value;
+      state.sellSyncSource = 'percent';
+      scheduleRecalculate(container);
+      scheduleSave();
+    },
+    { signal },
+  );
 
   // Fee preset buttons
-  container.querySelector('#calc-fee-spot')?.addEventListener('click', () => {
-    state.feePreset = 'spot';
-    state.fdusdEnabled = false;
-    updateFeeUI(container);
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: true });
-    save();
-  }, { signal });
+  container.querySelector('#calc-fee-spot')?.addEventListener(
+    'click',
+    () => {
+      state.feePreset = 'spot';
+      state.fdusdEnabled = false;
+      updateFeeUI(container);
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: true });
+      save();
+    },
+    { signal },
+  );
 
-  container.querySelector('#calc-fee-futures')?.addEventListener('click', () => {
-    state.feePreset = 'futures';
-    state.fdusdEnabled = false;
-    updateFeeUI(container);
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: true });
-    save();
-  }, { signal });
+  container.querySelector('#calc-fee-futures')?.addEventListener(
+    'click',
+    () => {
+      state.feePreset = 'futures';
+      state.fdusdEnabled = false;
+      updateFeeUI(container);
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: true });
+      save();
+    },
+    { signal },
+  );
 
-  container.querySelector('#calc-fee-fdusd')?.addEventListener('click', () => {
-    if (state.feePreset !== 'spot') return;
-    state.fdusdEnabled = !state.fdusdEnabled;
-    updateFeeUI(container);
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: true });
-    save();
-  }, { signal });
+  container.querySelector('#calc-fee-fdusd')?.addEventListener(
+    'click',
+    () => {
+      if (state.feePreset !== 'spot') return;
+      state.fdusdEnabled = !state.fdusdEnabled;
+      updateFeeUI(container);
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: true });
+      save();
+    },
+    { signal },
+  );
 
   // Reset execution
-  container.querySelector('#calc-reset-exec')?.addEventListener('click', () => {
-    state.sellPrice = '';
-    state.sellPct = DEFAULT_CALC_SELL_PCT;
-    state.rebuyPct = DEFAULT_CALC_REBUY_PCT;
-    state.sellSyncSource = 'percent';
-    sellPriceInput.value = '';
-    sellPctInput.value = DEFAULT_CALC_SELL_PCT;
-    rebuyPctInput.value = DEFAULT_CALC_REBUY_PCT;
-    sellPriceInput.readOnly = true;
-    sellPriceInput.classList.add('calc-locked');
-    sellPctInput.readOnly = false;
-    sellPctInput.classList.remove('calc-locked');
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: true });
-    save();
-  }, { signal });
+  container.querySelector('#calc-reset-exec')?.addEventListener(
+    'click',
+    () => {
+      state.sellPrice = '';
+      state.sellPct = DEFAULT_CALC_SELL_PCT;
+      state.rebuyPct = DEFAULT_CALC_REBUY_PCT;
+      state.sellSyncSource = 'percent';
+      sellPriceInput.value = '';
+      sellPctInput.value = DEFAULT_CALC_SELL_PCT;
+      rebuyPctInput.value = DEFAULT_CALC_REBUY_PCT;
+      sellPriceInput.readOnly = true;
+      sellPriceInput.classList.add('calc-locked');
+      sellPctInput.readOnly = false;
+      sellPctInput.classList.remove('calc-locked');
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: true });
+      save();
+    },
+    { signal },
+  );
 
   // Add purchase
-  container.querySelector('#calc-add-purchase')?.addEventListener('click', () => {
-    state.purchases.push({ id: purchaseIdCounter++, qty: '', price: '' });
-    renderPurchaseRows(container);
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: true });
-    save();
-  }, { signal });
+  container.querySelector('#calc-add-purchase')?.addEventListener(
+    'click',
+    () => {
+      state.purchases.push({ id: purchaseIdCounter++, qty: '', price: '' });
+      renderPurchaseRows(container);
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: true });
+      save();
+    },
+    { signal },
+  );
 
   // Clear purchases
-  container.querySelector('#calc-clear-purchases')?.addEventListener('click', async () => {
-    if (state.purchases.length === 0) return;
-    const shouldClear = await showConfirmDialog('Borrar todas las posiciones?', {
-      title: 'Confirmar borrado',
-      confirmLabel: 'Borrar',
-      destructive: true,
-    });
-    if (!shouldClear) return;
+  container.querySelector('#calc-clear-purchases')?.addEventListener(
+    'click',
+    async () => {
+      if (state.purchases.length === 0) return;
+      const shouldClear = await showConfirmDialog('Borrar todas las posiciones?', {
+        title: 'Confirmar borrado',
+        confirmLabel: 'Borrar',
+        destructive: true,
+      });
+      if (!shouldClear) return;
 
-    state.purchases = [];
-    renderPurchaseRows(container);
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: true });
-    save();
-    const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
-    if (clearBtn) clearBtn.disabled = true;
-  }, { signal });
+      state.purchases = [];
+      renderPurchaseRows(container);
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: true });
+      save();
+      const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
+      if (clearBtn) clearBtn.disabled = true;
+    },
+    { signal },
+  );
 
   bindPurchaseListEvents(container, signal);
 }
@@ -286,44 +322,52 @@ function bindPurchaseListEvents(container: HTMLElement, signal: AbortSignal): vo
   const list = container.querySelector('#calc-purchases-list') as HTMLElement;
   if (!list) return;
 
-  list.addEventListener('input', (e) => {
-    const el = e.target as HTMLInputElement;
-    if (!el.dataset.purchaseId || !el.dataset.field) return;
-    const id = parseInt(el.dataset.purchaseId, 10);
-    const field = el.dataset.field as 'qty' | 'price';
-    const purchase = state.purchases.find((p) => p.id === id);
-    if (purchase && field) {
-      purchase[field] = el.value;
-      const row = el.closest('.calc-purchase-row') as HTMLElement;
-      if (row) {
-        const totalInput = row.querySelector('.calc-locked') as HTMLInputElement;
-        if (totalInput) {
-          const qty = parseNum(purchase.qty);
-          const price = roundTo(parseNum(purchase.price), 2);
-          const total =
-            Number.isFinite(qty) && qty > 0 && Number.isFinite(price) && price > 0
-              ? roundTo(qty * price, 2)
-              : NaN;
-          totalInput.value = Number.isFinite(total) ? fmtNum(total, 2) : '-';
+  list.addEventListener(
+    'input',
+    (e) => {
+      const el = e.target as HTMLInputElement;
+      if (!el.dataset.purchaseId || !el.dataset.field) return;
+      const id = parseInt(el.dataset.purchaseId, 10);
+      const field = el.dataset.field as 'qty' | 'price';
+      const purchase = state.purchases.find((p) => p.id === id);
+      if (purchase && field) {
+        purchase[field] = el.value;
+        const row = el.closest('.calc-purchase-row') as HTMLElement;
+        if (row) {
+          const totalInput = row.querySelector('.calc-locked') as HTMLInputElement;
+          if (totalInput) {
+            const qty = parseNum(purchase.qty);
+            const price = roundTo(parseNum(purchase.price), 2);
+            const total =
+              Number.isFinite(qty) && qty > 0 && Number.isFinite(price) && price > 0
+                ? roundTo(qty * price, 2)
+                : NaN;
+            totalInput.value = Number.isFinite(total) ? fmtNum(total, 2) : '-';
+          }
         }
+        scheduleRecalculate(container);
+        scheduleSave();
       }
-      scheduleRecalculate(container);
-      scheduleSave();
-    }
-  }, { signal });
+    },
+    { signal },
+  );
 
-  list.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-remove-id]') as HTMLElement | null;
-    if (!btn) return;
-    const id = parseInt(btn.dataset.removeId || '0', 10);
-    state.purchases = state.purchases.filter((p) => p.id !== id);
-    renderPurchaseRows(container);
-    cancelScheduledRecalculate();
-    recalculate(container, { animate: true });
-    save();
-    const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
-    if (clearBtn) clearBtn.disabled = state.purchases.length === 0;
-  }, { signal });
+  list.addEventListener(
+    'click',
+    (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-remove-id]') as HTMLElement | null;
+      if (!btn) return;
+      const id = parseInt(btn.dataset.removeId || '0', 10);
+      state.purchases = state.purchases.filter((p) => p.id !== id);
+      renderPurchaseRows(container);
+      cancelScheduledRecalculate();
+      recalculate(container, { animate: true });
+      save();
+      const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
+      if (clearBtn) clearBtn.disabled = state.purchases.length === 0;
+    },
+    { signal },
+  );
 }
 
 // ── Fee UI update ──
