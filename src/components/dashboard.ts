@@ -2,11 +2,17 @@ import { loadState, updateBalance, SIMULATOR_VIEW_KEY } from '../utils/storage';
 import { formatUSD, formatPct, formatDateLatin } from '../utils/calculator';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
-import { isAutoMode, hasApiCredentials } from '../utils/binance-auth';
-import { fetchBalanceSummary } from '../utils/binance-sync';
+import { isAutoMode } from '../utils/binance-auth';
 import {
+  fetchBalanceSummary,
+  hasAnyExchangeApiCredentials,
+  syncPositionsFromBinance,
+} from '../utils/binance-sync';
+import {
+  getCachedAutoPortfolioSnapshot,
   getCachedBalanceSummary,
   getSharedMarketData,
+  rememberAutoPortfolioSnapshot,
   rememberBalanceSummary,
 } from '../utils/api-runtime-cache';
 import { onApiConfigChange } from './positions/api-config-modal';
@@ -47,6 +53,10 @@ import type {
 
 let lastAutoBalanceSyncAt = 0;
 let dashboardLegendState: DashboardLegendState = sanitizeDashboardLegendState(undefined);
+
+interface DashboardRenderOptions {
+  forceRefreshOnMount?: boolean;
+}
 
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const daysAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -92,7 +102,7 @@ function setCurrencyOutput(
   el: HTMLElement | null,
   value: number,
   animate: boolean,
-  durationMs = 800,
+  durationMs = 180,
 ): void {
   if (!el) return;
   stopValueAnimation(textAnimationByElement, el);
@@ -108,7 +118,7 @@ function setPercentOutput(
   value: number,
   animate: boolean,
   signed = false,
-  durationMs = 800,
+  durationMs = 180,
 ): void {
   if (!el) return;
   stopValueAnimation(textAnimationByElement, el);
@@ -136,7 +146,7 @@ function animateTextScramble(el: HTMLElement | null, text: string, enabled: bool
     enabled,
     mode: 'scramble',
     className: 'text-swap',
-    durationMs: 260,
+    durationMs: 180,
   });
 }
 
@@ -508,7 +518,7 @@ function renderInitialDashboard(container: HTMLElement, state: AppState): Dashbo
     lastUpdatedIso: state.portfolio.lastUpdated,
     positionsCount: state.positions.length,
     autoModeEnabled,
-    hasApiCredentials: hasApiCredentials(),
+    hasApiCredentials: hasAnyExchangeApiCredentials(),
     firstMilestonePct,
     secondMilestonePct,
     progressFill,
@@ -517,11 +527,18 @@ function renderInitialDashboard(container: HTMLElement, state: AppState): Dashbo
   return uiState;
 }
 
-export function renderDashboard(container: HTMLElement): () => void {
+export function renderDashboard(
+  container: HTMLElement,
+  options: DashboardRenderOptions = {},
+): () => void {
   const state = loadState();
   dashboardLegendState = loadDashboardLegendState(sanitizeDashboardLegendState(undefined));
+  const forceRefreshOnMount = options.forceRefreshOnMount === true;
 
   const uiState = renderInitialDashboard(container, state);
+  let disposed = false;
+  let hasFirstMarketHydrationCompleted = false;
+
   const unsubConfig = onApiConfigChange(() => {
     const updatedState = loadState();
     uiState.balance = updatedState.portfolio.currentBalance;
@@ -530,6 +547,15 @@ export function renderDashboard(container: HTMLElement): () => void {
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
     updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
     updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+    void hydrateDashboardMarketStats(
+      container,
+      updatedState.positions,
+      uiState,
+      true,
+      true,
+    ).finally(() => {
+      hasFirstMarketHydrationCompleted = true;
+    });
   });
 
   bindGoalLegendEvents(container, uiState);
@@ -539,14 +565,15 @@ export function renderDashboard(container: HTMLElement): () => void {
     updateDashboardSummaryVisual(container, uiState, state.portfolio.lastUpdated, true);
   });
 
-  let disposed = false;
-  let hasFirstMarketHydrationCompleted = false;
-
-  void hydrateDashboardMarketStats(container, loadState().positions, uiState, false, false).finally(
-    () => {
-      hasFirstMarketHydrationCompleted = true;
-    },
-  );
+  void hydrateDashboardMarketStats(
+    container,
+    loadState().positions,
+    uiState,
+    forceRefreshOnMount,
+    false,
+  ).finally(() => {
+    hasFirstMarketHydrationCompleted = true;
+  });
 
   const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
     if (disposed || !container.isConnected) return;
@@ -582,6 +609,16 @@ function updateBalanceInPlace(
   updateDashboardSummaryVisual(container, uiState, portfolio.lastUpdated, animateGoalSection);
 }
 
+function sumBalanceContributingPositionUsd(
+  positions: AppState['positions'],
+  usdByPositionId: Record<string, number>,
+): number {
+  return positions.reduce((total, position) => {
+    if (position.positionKind === 'derivative') return total;
+    return total + (usdByPositionId[position.id] ?? 0);
+  }, 0);
+}
+
 async function hydrateDashboardMarketStats(
   container: HTMLElement,
   positions: AppState['positions'],
@@ -592,23 +629,47 @@ async function hydrateDashboardMarketStats(
   const { apr, capital, daily } = getDashboardElements(container);
   if (!apr || !capital || !daily) return;
 
-  const currentState = loadState();
+  let currentState = loadState();
   uiState.balance = currentState.portfolio.currentBalance;
   uiState.invested = currentState.portfolio.totalInvested;
   uiState.goal = currentState.portfolio.goalAmount;
   uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
-  const shouldHydrateBinanceBalance = isAutoMode() && hasApiCredentials();
+  const shouldHydrateBinanceBalance = isAutoMode() && hasAnyExchangeApiCredentials();
   let autoBalanceSummary: Awaited<ReturnType<typeof fetchBalanceSummary>> | null = null;
+  let effectivePositions = positions;
 
   if (shouldHydrateBinanceBalance) {
     try {
-      autoBalanceSummary = !forceRefresh ? getCachedBalanceSummary() : null;
+      const cachedAutoSnapshot = !forceRefresh ? getCachedAutoPortfolioSnapshot() : null;
+
+      if (cachedAutoSnapshot) {
+        effectivePositions = cachedAutoSnapshot.positions;
+        autoBalanceSummary = {
+          balances: cachedAutoSnapshot.balances,
+          totalUsdEstimate: cachedAutoSnapshot.totalUsdEstimate,
+        };
+      } else {
+        const syncedSnapshot = await syncPositionsFromBinance(forceRefresh);
+        rememberAutoPortfolioSnapshot(syncedSnapshot);
+        effectivePositions = syncedSnapshot.positions;
+        autoBalanceSummary = {
+          balances: syncedSnapshot.balances,
+          totalUsdEstimate: syncedSnapshot.totalUsdEstimate,
+        };
+        rememberBalanceSummary(autoBalanceSummary);
+      }
+      currentState = loadState();
+
+      const cachedBalanceSummary = !forceRefresh ? getCachedBalanceSummary() : null;
+      if (!autoBalanceSummary && cachedBalanceSummary) {
+        autoBalanceSummary = cachedBalanceSummary;
+      }
       if (!autoBalanceSummary) {
         autoBalanceSummary = await fetchBalanceSummary(forceRefresh);
         rememberBalanceSummary(autoBalanceSummary);
       }
-      renderBalanceDetail(container, autoBalanceSummary.balances, currentState.positions);
+      renderBalanceDetail(container, autoBalanceSummary.balances, effectivePositions);
     } catch {
       renderBalanceDetail(container, null);
     }
@@ -616,7 +677,7 @@ async function hydrateDashboardMarketStats(
     renderBalanceDetail(container, null);
   }
 
-  if (positions.length === 0) {
+  if (effectivePositions.length === 0) {
     const savingsOnlyBalance =
       Math.round((autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.savings) * 100) /
       100;
@@ -639,18 +700,22 @@ async function hydrateDashboardMarketStats(
   }
 
   try {
-    const { snapshot, metrics } = await getSharedMarketData(positions, forceRefresh);
+    const { snapshot, metrics } = await getSharedMarketData(effectivePositions, forceRefresh);
     registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
 
     const savings = autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.savings;
-    const totalBalance = Math.round((metrics.totalUsd + savings) * 100) / 100;
+    const balancePositionUsd = sumBalanceContributingPositionUsd(
+      effectivePositions,
+      metrics.usdByPositionId,
+    );
+    const totalBalance = Math.round((balancePositionUsd + savings) * 100) / 100;
     const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
     const now = Date.now();
 
     const shouldSyncBalance =
       metrics.totalUsd > 0 &&
       Math.abs(totalBalance - storedBalance) >= 0.01 &&
-      now - lastAutoBalanceSyncAt > AUTO_BALANCE_SYNC_COOLDOWN_MS;
+      (forceRefresh || now - lastAutoBalanceSyncAt > AUTO_BALANCE_SYNC_COOLDOWN_MS);
 
     if (shouldSyncBalance) {
       lastAutoBalanceSyncAt = now;

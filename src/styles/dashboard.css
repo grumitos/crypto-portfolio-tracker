@@ -34,7 +34,7 @@
 }
 
 .dashboard-summary-grid .dashboard-card {
-  min-height: 156px;
+  min-height: 132px;
 }
 
 .dashboard-summary-grid .dashboard-card .card-title {
@@ -44,15 +44,9 @@
 .dashboard-goal-card {
   display: grid;
   gap: var(--space-md);
-  padding: clamp(18px, 2.2vw, 28px);
+  padding: 18px;
   border-color: color-mix(in srgb, var(--accent-warm) 22%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0,
-      var(--bg-card) 52%
-    ),
-    var(--bg-card);
+  background: color-mix(in srgb, var(--accent-warm-muted) 10%, var(--bg-card));
   box-shadow:
     var(--shadow-card),
     inset 0 1px 0 color-mix(in srgb, var(--bg-card) 22%, transparent);
@@ -69,7 +63,7 @@
 }
 
 .dashboard-goal-card .goal-progress-value:first-child {
-  font-size: clamp(1.2rem, 1.6vw, 1.5rem);
+  font-size: 1.32rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -103,8 +97,8 @@
 .progress-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.6s var(--ease-out);
-  background: var(--accent-warm);
+  transition: width var(--duration-panel) var(--ease-out);
+  background: var(--color-gain);
 }
 
 .progress-fill.loss {
@@ -146,7 +140,7 @@
   height: 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-secondary) 78%, var(--border));
-  transition: background-color 0.3s var(--ease-out);
+  transition: background-color var(--duration-panel) var(--ease-out);
 }
 
 .goal-progress-zone {
@@ -155,10 +149,10 @@
   bottom: 0;
   z-index: 2;
   transition:
-    width 0.5s var(--ease-out-quint),
-    left 0.5s var(--ease-out-quint),
-    opacity 0.28s var(--ease-out),
-    background-color 0.28s var(--ease-out);
+    width var(--duration-panel) var(--ease-out-quint),
+    left var(--duration-panel) var(--ease-out-quint),
+    opacity var(--duration-ui) var(--ease-out),
+    background-color var(--duration-ui) var(--ease-out);
 }
 
 .goal-progress-zone-muted {
@@ -167,14 +161,14 @@
   bottom: 0;
   z-index: 1;
   transition:
-    width 0.5s var(--ease-out-quint),
-    left 0.5s var(--ease-out-quint),
-    opacity 0.28s var(--ease-out),
-    background-color 0.28s var(--ease-out);
+    width var(--duration-panel) var(--ease-out-quint),
+    left var(--duration-panel) var(--ease-out-quint),
+    opacity var(--duration-ui) var(--ease-out),
+    background-color var(--duration-ui) var(--ease-out);
 }
 
 .goal-progress-zone.breakeven {
-  background: var(--accent-warm);
+  background: var(--color-breakeven);
 }
 
 .goal-progress-zone.goal {
@@ -182,11 +176,11 @@
 }
 
 .goal-progress-zone-muted.breakeven {
-  background: var(--goal-progress-be-muted);
+  background: transparent;
 }
 
 .goal-progress-zone-muted.goal {
-  background: var(--goal-progress-meta-muted);
+  background: transparent;
 }
 
 .goal-progress-bar.mode-goal .zone-first.goal-progress-zone {
@@ -194,7 +188,7 @@
 }
 
 .goal-progress-bar.mode-goal .zone-first.goal-progress-zone-muted {
-  background: var(--goal-progress-meta-muted);
+  background: transparent;
 }
 
 .goal-progress-foot {
@@ -241,10 +235,10 @@
   background: color-mix(in srgb, var(--bg-card) 84%, transparent);
   cursor: pointer;
   transition:
-    border-color 0.2s var(--ease-out),
-    background 0.2s var(--ease-out),
-    color 0.2s var(--ease-out),
-    transform 0.15s var(--ease-out);
+    border-color var(--duration-ui) var(--ease-out),
+    background-color var(--duration-ui) var(--ease-out),
+    color var(--duration-ui) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .goal-progress-legend:hover {
@@ -263,8 +257,8 @@
 
 .goal-progress-legend.is-active {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-warm) 42%, var(--border));
-  background: color-mix(in srgb, var(--bg-card) 72%, var(--accent-warm-muted));
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
 }
 
 .goal-progress-legend.is-inactive {
@@ -287,7 +281,7 @@
 }
 
 .goal-progress-dot.breakeven {
-  background: var(--accent-warm);
+  background: var(--color-breakeven);
 }
 
 .goal-progress-dot.goal {
@@ -319,7 +313,7 @@
 }
 
 .text-swap {
-  animation: fadeInUp 0.2s var(--ease-out);
+  animation: fadeInUp var(--duration-ui) var(--ease-out);
 }
 
 @keyframes legendShake {
@@ -469,6 +463,14 @@
   color: var(--text-primary);
 }
 
+.dashboard-balance-source {
+  font-size: var(--font-size-overline);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .dashboard-balance-total {
   display: grid;
   gap: 3px;
@@ -484,7 +486,7 @@
 }
 
 .dashboard-balance-total-value {
-  font-size: clamp(1.02rem, 1.18vw, 1.14rem);
+  font-size: 1.08rem;
   line-height: 1.1;
   color: var(--text-primary);
 }

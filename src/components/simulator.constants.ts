@@ -1,7 +1,7 @@
 import type { CompoundFrequency } from '../types';
 
 export const PROJECTION_MAX_MONTH = 12;
-export const RESULT_NUMBER_ANIM_MS = 400;
+export const RESULT_NUMBER_ANIM_MS = 180;
 
 export const SIMULATOR_COPY = {
   title: 'Simulador de recuperación',
@@ -30,7 +30,15 @@ export const SIMULATOR_COPY = {
   finalBalanceLabel: 'Balance final (ultimo mes proyectado)',
   reachedBreakEven: 'BE alcanzado',
   reachedGoal: 'Meta alcanzada',
-  projectionHeaders: ['Mes', 'Fecha', 'Balance', 'Ganancia acumulada'] as const,
+  projectionContext: '12 meses visibles, con hitos marcados en la última columna',
+  projectionCaption: 'Proyección mensual de balance, ganancia acumulada e hitos de BE y Meta',
+  projectionHeaders: [
+    'Mes',
+    'Fecha estimada',
+    'Balance proyectado',
+    'Ganancia acum.',
+    'Hito',
+  ] as const,
 };
 
 export const SIMULATOR_FREQUENCY_OPTIONS: Array<{

@@ -50,6 +50,15 @@ export interface DualPosition {
   settlementTimeSource?: PositionSettlementTimeSource;
   apr: number; // annual percentage rate
   components?: DualPositionComponent[]; // grouped source entries used for weighted aggregate rows
+  source?: 'Binance' | 'Bybit';
+  positionKind?: 'dual' | 'derivative';
+  displaySymbol?: string;
+  notionalUsd?: number;
+  unrealizedPnlUsd?: number;
+  projectedProfit?: number;
+  expectedSettlementAsset?: string;
+  expectedSettlementAmount?: number;
+  side?: 'long' | 'short';
 }
 
 // ── Simulator ──
@@ -161,12 +170,18 @@ export interface BinanceApiCredentials {
   apiSecret: string;
 }
 
+export interface BybitApiCredentials {
+  apiKey: string;
+  apiSecret: string;
+}
+
 export type DualOptionType = 'CALL' | 'PUT';
 
 export interface BinanceAccountBalance {
   asset: string;
   free: number;
   locked: number;
+  source?: 'Binance' | 'Bybit';
 }
 
 export interface BinanceDualPosition {
@@ -184,4 +199,47 @@ export interface BinanceDualPosition {
   optionType: DualOptionType;
   purchaseTime?: number; // timestamp ms
   status: string;
+}
+
+export interface BybitAccountBalance {
+  asset: string;
+  walletBalance: number;
+  locked: number;
+  usdValue: number;
+}
+
+export interface BybitPosition {
+  id: string;
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+  side: 'Buy' | 'Sell';
+  size: number;
+  avgPrice: number;
+  markPrice: number;
+  positionValue: number;
+  unrealizedPnl: number;
+  updatedTime?: number;
+  createdTime?: number;
+}
+
+export interface BybitDualAssetPosition {
+  id: string;
+  productId: string;
+  baseCoin: string;
+  quoteCoin: string;
+  investCoin: string;
+  amount: number;
+  apr: number;
+  direction: 'BuyLow' | 'SellHigh';
+  targetPrice: number;
+  settlementTime: number;
+  status: 'Active' | 'Redeeming' | string;
+  orderId?: string;
+  duration?: string;
+  yieldStartAt?: number;
+  yieldEndAt?: number;
+  expectedSettlementAsset?: string;
+  expectedSettlementAmount?: number;
+  projectedProfit?: number;
 }

@@ -5,6 +5,10 @@ const STORAGE_KEY = 'crypto-binance-api';
 const LEGACY_MODE_KEY = 'crypto-positions-mode';
 let apiSecretSessionValue: string | null = null;
 
+interface StoredApiCredentials {
+  apiKey: string;
+}
+
 // ── Positions mode (single source of truth: main app state) ──
 
 export function loadPositionsMode(): PositionsMode {
@@ -88,21 +92,12 @@ export function loadApiCredentials(): BinanceApiCredentials | null {
       typeof parsed === 'object' &&
       parsed !== null &&
       'apiKey' in parsed &&
-      typeof (parsed as BinanceApiCredentials).apiKey === 'string'
+      typeof (parsed as StoredApiCredentials).apiKey === 'string'
     ) {
-      if (
-        'apiSecret' in parsed &&
-        typeof (parsed as BinanceApiCredentials).apiSecret === 'string'
-      ) {
-        apiSecretSessionValue = (parsed as BinanceApiCredentials).apiSecret;
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ apiKey: (parsed as BinanceApiCredentials).apiKey }),
-        );
-      }
+      const stored = parsed as StoredApiCredentials;
       if (!apiSecretSessionValue) return null;
       return {
-        apiKey: (parsed as BinanceApiCredentials).apiKey,
+        apiKey: stored.apiKey,
         apiSecret: apiSecretSessionValue,
       };
     }

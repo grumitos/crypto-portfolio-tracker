@@ -1,7 +1,7 @@
 import type { FeePreset } from '../types';
 
 export const CALC_INPUT_DEBOUNCE_MS = 120;
-export const CALC_RESULT_ANIM_MS = 400;
+export const CALC_RESULT_ANIM_MS = 180;
 
 export const FEE_PRESETS: Record<FeePreset, { maker: number; label: string }> = {
   spot: { maker: 0.075, label: 'Spot' },

@@ -45,6 +45,7 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
   const safeAsset = escapeHtml(balance.asset);
+  const safeSource = balance.source ? escapeHtml(balance.source) : '';
 
   return `
     <article class="dashboard-balance-entry">
@@ -56,6 +57,7 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
           </span>
           <span class="dashboard-balance-card-meta">
             <span class="dashboard-balance-asset">${safeAsset}</span>
+            ${safeSource ? `<span class="dashboard-balance-source">${safeSource}</span>` : ''}
           </span>
         </div>
         <div class="dashboard-balance-total">

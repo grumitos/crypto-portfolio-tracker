@@ -17,7 +17,7 @@ describe('binance auth', () => {
     clearApiCredentials();
   });
 
-  it('persists only the API key and keeps the secret in session memory', () => {
+  it('keeps API secret in memory and persists only the API key by default', () => {
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
 
     expect(localStorage.getItem('crypto-binance-api')).toBe(JSON.stringify({ apiKey: 'key' }));
@@ -25,18 +25,13 @@ describe('binance auth', () => {
     expect(loadApiCredentials()).toEqual({ apiKey: 'key', apiSecret: 'secret' });
   });
 
-  it('migrates legacy stored secrets out of localStorage when loaded', () => {
+  it('ignores legacy persisted secrets instead of loading them', () => {
     localStorage.setItem(
       'crypto-binance-api',
-      JSON.stringify({ apiKey: 'legacy-key', apiSecret: 'legacy-secret' }),
+      JSON.stringify({ apiKey: 'persisted-key', apiSecret: 'persisted-secret' }),
     );
 
-    expect(loadApiCredentials()).toEqual({
-      apiKey: 'legacy-key',
-      apiSecret: 'legacy-secret',
-    });
-    expect(localStorage.getItem('crypto-binance-api')).toBe(
-      JSON.stringify({ apiKey: 'legacy-key' }),
-    );
+    expect(loadStoredApiKey()).toBe('persisted-key');
+    expect(loadApiCredentials()).toBeNull();
   });
 });

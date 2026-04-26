@@ -1,5 +1,5 @@
 export const AUTO_BALANCE_SYNC_COOLDOWN_MS = 5000;
-export const GOAL_NUMBER_ANIM_MS = 400;
+export const GOAL_NUMBER_ANIM_MS = 180;
 export const DASHBOARD_BALANCE_LOADING_CARD_COUNT = 3;
 export const DASHBOARD_BALANCE_VISIBLE_ITEMS = 12;
 export const DASHBOARD_BALANCE_DECIMALS_SMALL = 6;
@@ -26,9 +26,9 @@ export const DASHBOARD_COPY = {
   activePositionsTitle: 'Posiciones activas',
   accountBalanceTitle: 'Saldo en cuenta',
   accountBalanceCopy: 'Disponible y comprometido por activo.',
-  accountBalanceBadge: 'Binance',
+  accountBalanceBadge: 'Auto',
   emptyBalancesTitle: 'Sin activos disponibles',
-  emptyBalancesCopy: 'No hay saldos reportados por Binance en este momento.',
+  emptyBalancesCopy: 'No hay saldos reportados por los exchanges configurados.',
   freeLabel: 'Libre',
   lockedLabel: 'Bloq.',
   breakEvenLegend: 'BE',

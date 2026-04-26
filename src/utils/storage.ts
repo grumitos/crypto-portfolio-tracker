@@ -142,6 +142,18 @@ function sanitizeSettlementTimeSource(value: unknown): PositionSettlementTimeSou
   return value === 'binance_settle_date_rule' ? value : undefined;
 }
 
+function sanitizePositionSource(value: unknown): DualPosition['source'] | undefined {
+  return value === 'Binance' || value === 'Bybit' ? value : undefined;
+}
+
+function sanitizePositionKind(value: unknown): DualPosition['positionKind'] | undefined {
+  return value === 'dual' || value === 'derivative' ? value : undefined;
+}
+
+function sanitizePositionSide(value: unknown): DualPosition['side'] | undefined {
+  return value === 'long' || value === 'short' ? value : undefined;
+}
+
 function sanitizeBalanceHistory(
   rawHistory: unknown,
   fallbackDate: string,
@@ -205,7 +217,7 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
   const { entryDate, settlementDate } = sanitizeDateRange(record.entryDate, record.settlementDate);
   const components = sanitizePositionComponents(record.components, id);
 
-  return {
+  const position: DualPosition = {
     id,
     asset: sanitizeSymbol(record.asset, defaults.asset),
     direction: sanitizeDirection(record.direction),
@@ -221,6 +233,30 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
     apr: sanitizeNonNegative(record.apr, defaults.apr),
     ...(components.length > 1 ? { components } : {}),
   };
+
+  const source = sanitizePositionSource(record.source);
+  if (source) position.source = source;
+
+  const positionKind = sanitizePositionKind(record.positionKind);
+  if (positionKind) position.positionKind = positionKind;
+
+  if (typeof record.displaySymbol === 'string') {
+    position.displaySymbol = sanitizeSymbol(record.displaySymbol, '');
+  }
+
+  const notionalUsd = sanitizeNonNegative(record.notionalUsd, NaN);
+  if (Number.isFinite(notionalUsd)) position.notionalUsd = notionalUsd;
+
+  const unrealizedPnlUsd = sanitizeNumber(record.unrealizedPnlUsd, NaN);
+  if (Number.isFinite(unrealizedPnlUsd)) position.unrealizedPnlUsd = unrealizedPnlUsd;
+
+  const projectedProfit = sanitizeNumber(record.projectedProfit, NaN);
+  if (Number.isFinite(projectedProfit)) position.projectedProfit = projectedProfit;
+
+  const side = sanitizePositionSide(record.side);
+  if (side) position.side = side;
+
+  return position;
 }
 
 function sanitizePositionComponents(

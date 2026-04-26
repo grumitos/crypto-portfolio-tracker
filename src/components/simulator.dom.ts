@@ -19,8 +19,6 @@ export interface SimulatorElements {
   final: HTMLElement | null;
   tableContainer: HTMLElement | null;
   table: HTMLElement | null;
-  chartCanvas: HTMLCanvasElement | null;
-  chartSkeleton: HTMLElement | null;
 }
 
 export function getSimulatorElements(container: HTMLElement): SimulatorElements {
@@ -45,7 +43,5 @@ export function getSimulatorElements(container: HTMLElement): SimulatorElements 
     final: container.querySelector('#sim-out-final'),
     tableContainer: container.querySelector('#sim-table-container'),
     table: container.querySelector('#sim-table'),
-    chartCanvas: container.querySelector('#projection-chart'),
-    chartSkeleton: container.querySelector('#sim-projection-chart-skeleton'),
   };
 }

@@ -1,10 +1,26 @@
-import type { BinanceDualPosition, BinanceAccountBalance, DualPosition, Direction } from '../types';
+import type {
+  BinanceDualPosition,
+  BinanceAccountBalance,
+  BybitDualAssetPosition,
+  BybitPosition,
+  DualPosition,
+  Direction,
+} from '../types';
+import { hasApiCredentials } from './binance-auth';
 import { fetchDualPositions, fetchAccountBalances } from './binance-client';
+import { hasBybitApiCredentials } from './bybit-auth';
+import {
+  fetchBybitAssetBalances,
+  fetchBybitDualAssetPositions,
+  fetchBybitOpenPositions,
+  fetchBybitWalletBalances,
+} from './bybit-client';
 import { replaceAutoPositions } from './storage';
 import { getAssetPriceSnapshot } from './market';
 import {
   parseBinanceDualSettlementUTC,
   resolveBinanceDualSettlementLocal,
+  todayISODateLocal,
   toLocalDateTimeParts,
 } from './date';
 
@@ -75,6 +91,57 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
     settlementTime: settlement?.time,
     settlementTimeSource: settlement?.time ? 'binance_settle_date_rule' : undefined,
     apr: bp.apr,
+    source: 'Binance',
+    positionKind: 'dual',
+  };
+}
+
+function mapBybitPosition(position: BybitPosition): DualPosition {
+  const timestamp = position.updatedTime ?? position.createdTime;
+  const entry = timestamp ? toLocalDateTimeParts(new Date(timestamp)) : null;
+  const today = todayISODateLocal();
+  return {
+    id: position.id,
+    asset: position.baseAsset,
+    direction: position.side === 'Sell' ? 'sell-high' : 'buy-low',
+    subscriptionAsset: position.baseAsset,
+    amount: position.size,
+    targetPrice: position.markPrice || position.avgPrice,
+    entryDate: entry?.date ?? today,
+    entryTime: entry?.time,
+    settlementDate: today,
+    apr: 0,
+    source: 'Bybit',
+    positionKind: 'derivative',
+    displaySymbol: position.symbol,
+    notionalUsd: position.positionValue,
+    unrealizedPnlUsd: position.unrealizedPnl,
+    side: position.side === 'Sell' ? 'short' : 'long',
+  };
+}
+
+function mapBybitDualAssetPosition(position: BybitDualAssetPosition): DualPosition {
+  const entryTimestamp = position.yieldStartAt ?? Date.now();
+  const entry = toLocalDateTimeParts(new Date(entryTimestamp));
+  const settlement = toLocalDateTimeParts(new Date(position.settlementTime));
+  return {
+    id: position.id,
+    asset: position.baseCoin,
+    direction: position.direction === 'SellHigh' ? 'sell-high' : 'buy-low',
+    subscriptionAsset: position.investCoin,
+    amount: position.amount,
+    targetPrice: position.targetPrice,
+    entryDate: entry.date,
+    entryTime: entry.time,
+    settlementDate: settlement.date,
+    settlementTime: settlement.time,
+    apr: position.apr,
+    source: 'Bybit',
+    positionKind: 'dual',
+    displaySymbol: `${position.baseCoin}${position.quoteCoin}`,
+    projectedProfit: position.projectedProfit,
+    expectedSettlementAsset: position.expectedSettlementAsset,
+    expectedSettlementAmount: position.expectedSettlementAmount,
   };
 }
 
@@ -102,6 +169,7 @@ export interface BinancePortfolioSnapshot extends BalanceSummary {
 
 const STABLECOINS = new Set(['USDT', 'USDC', 'BUSD', 'DAI', 'FDUSD']);
 const AUTO_BINANCE_CACHE_TTL_MS = 60_000;
+const AUTO_EXCHANGE_REQUEST_TIMEOUT_MS = 12_000;
 
 interface CacheEntry<T> {
   value: T;
@@ -112,6 +180,89 @@ let balanceSummaryCache: CacheEntry<BalanceSummary> | null = null;
 let portfolioSnapshotCache: CacheEntry<BinancePortfolioSnapshot> | null = null;
 let balanceSummaryInFlight: Promise<BalanceSummary> | null = null;
 let portfolioSnapshotInFlight: Promise<BinancePortfolioSnapshot> | null = null;
+
+function withExchangeTimeout<T>(request: Promise<T>, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out`));
+    }, AUTO_EXCHANGE_REQUEST_TIMEOUT_MS);
+  });
+
+  return Promise.race([request, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+export function hasAnyExchangeApiCredentials(): boolean {
+  return hasApiCredentials() || hasBybitApiCredentials();
+}
+
+function mapBybitBalance(
+  row: Awaited<ReturnType<typeof fetchBybitWalletBalances>>[number],
+): BinanceAccountBalance {
+  const locked = Number.isFinite(row.locked) ? row.locked : 0;
+  return {
+    asset: row.asset,
+    free: Math.max(row.walletBalance - locked, 0),
+    locked,
+    source: 'Bybit',
+  };
+}
+
+async function fetchExchangeBalances(forceRefresh: boolean): Promise<{
+  balances: BinanceAccountBalance[];
+  knownUsdByAsset: Record<string, number>;
+}> {
+  const requests: Promise<{
+    balances: BinanceAccountBalance[];
+    knownUsdByAsset: Record<string, number>;
+  }>[] = [];
+
+  if (hasApiCredentials()) {
+    requests.push(
+      withExchangeTimeout(fetchAccountBalances(forceRefresh), 'Binance balances').then(
+        (balances) => ({
+          balances: balances.map((balance) => ({ ...balance, source: 'Binance' as const })),
+          knownUsdByAsset: {},
+        }),
+      ),
+    );
+  }
+
+  if (hasBybitApiCredentials()) {
+    requests.push(
+      withExchangeTimeout(
+        fetchBybitWalletBalances().catch(() => fetchBybitAssetBalances()),
+        'Bybit balances',
+      )
+        .then((balances) => ({
+          balances: balances.map(mapBybitBalance),
+          knownUsdByAsset: Object.fromEntries(
+            balances
+              .filter((balance) => Number.isFinite(balance.usdValue) && balance.usdValue > 0)
+              .map((balance) => [`Bybit:${balance.asset}`, balance.usdValue]),
+          ),
+        })),
+    );
+  }
+
+  const settled = await Promise.allSettled(requests);
+  const balances: BinanceAccountBalance[] = [];
+  const knownUsdByAsset: Record<string, number> = {};
+
+  for (const result of settled) {
+    if (result.status !== 'fulfilled') continue;
+    balances.push(...result.value.balances);
+    Object.assign(knownUsdByAsset, result.value.knownUsdByAsset);
+  }
+
+  if (balances.length === 0 && settled.some((result) => result.status === 'rejected')) {
+    throw new Error('No se pudieron leer saldos de exchanges configurados.');
+  }
+
+  return { balances, knownUsdByAsset };
+}
 
 export async function fetchBalanceSummary(forceRefresh = false): Promise<BalanceSummary> {
   if (
@@ -127,10 +278,16 @@ export async function fetchBalanceSummary(forceRefresh = false): Promise<Balance
   }
 
   const request = (async (): Promise<BalanceSummary> => {
-    const balances = await fetchAccountBalances(forceRefresh);
+    const { balances, knownUsdByAsset } = await fetchExchangeBalances(forceRefresh);
 
     // Price all assets: stablecoins at face value, others via market prices
-    const nonStableAssets = balances.filter((b) => !STABLECOINS.has(b.asset)).map((b) => b.asset);
+    const nonStableAssets = balances
+      .filter(
+        (b) =>
+          !STABLECOINS.has(b.asset) &&
+          knownUsdByAsset[`${b.source ?? 'Binance'}:${b.asset}`] === undefined,
+      )
+      .map((b) => b.asset);
 
     let priceByAsset: Record<string, number> = {};
     if (nonStableAssets.length > 0) {
@@ -144,6 +301,11 @@ export async function fetchBalanceSummary(forceRefresh = false): Promise<Balance
 
     let totalUsdEstimate = 0;
     for (const b of balances) {
+      const knownUsd = knownUsdByAsset[`${b.source ?? 'Binance'}:${b.asset}`];
+      if (knownUsd !== undefined) {
+        totalUsdEstimate += knownUsd;
+        continue;
+      }
       const amount = b.free + b.locked;
       if (STABLECOINS.has(b.asset)) {
         totalUsdEstimate += amount;
@@ -184,11 +346,32 @@ export async function fetchBinancePortfolioSnapshot(
   }
 
   const request = (async (): Promise<BinancePortfolioSnapshot> => {
-    const [binancePositions, { balances, totalUsdEstimate }] = await Promise.all([
-      fetchDualPositions(forceRefresh),
+    const positionRequests: Promise<DualPosition[]>[] = [];
+    if (hasApiCredentials()) {
+      positionRequests.push(
+        withExchangeTimeout(fetchDualPositions(forceRefresh), 'Binance positions').then(
+          (positions) => positions.map(mapBinancePosition),
+        ),
+      );
+    }
+    if (hasBybitApiCredentials()) {
+      positionRequests.push(
+        withExchangeTimeout(fetchBybitOpenPositions(), 'Bybit derivative positions').then(
+          (positions) => positions.map(mapBybitPosition),
+        ),
+        withExchangeTimeout(fetchBybitDualAssetPositions(), 'Bybit Dual Asset positions').then(
+          (positions) => positions.map(mapBybitDualAssetPosition),
+        ),
+      );
+    }
+
+    const [positionSettled, { balances, totalUsdEstimate }] = await Promise.all([
+      Promise.allSettled(positionRequests),
       fetchBalanceSummary(forceRefresh),
     ]);
-    const positions = binancePositions.map(mapBinancePosition);
+    const positions = positionSettled.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value : [],
+    );
 
     const snapshot = {
       positions,

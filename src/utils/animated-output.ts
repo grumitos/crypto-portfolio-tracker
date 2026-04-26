@@ -4,7 +4,7 @@
 import { formatUSD, formatPct } from './calculator';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from './animation';
 
-const DEFAULT_NUMBER_ANIM_MS = 400;
+const DEFAULT_NUMBER_ANIM_MS = 180;
 
 const valueAnimMap = new WeakMap<HTMLElement, number>();
 const textAnimMap = new WeakMap<HTMLElement, number>();
@@ -92,7 +92,7 @@ export function animateTextScramble(
   el: HTMLElement | null,
   text: string,
   animate: boolean,
-  durationMs = 260,
+  durationMs = 180,
 ): void {
   if (!el) return;
   stopValueAnimation(valueAnimMap, el);

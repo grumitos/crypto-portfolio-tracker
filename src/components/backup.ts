@@ -8,6 +8,8 @@ interface BackupSectionOptions {
   embedded?: boolean;
 }
 
+const MAX_BACKUP_FILE_BYTES = 2 * 1024 * 1024;
+
 function renderBackupControls(embedded = false): string {
   return `
     <div class="${embedded ? 'backup-inline-body' : 'backup-body'}">
@@ -98,6 +100,20 @@ export function bindBackupControls(root: ParentNode, onImportSuccess: () => void
     }
 
     if (fileName) fileName.textContent = file.name;
+
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      fileInput.value = '';
+      resetSelectedFile();
+      void showAlertDialog('Selecciona un archivo JSON de backup.');
+      return;
+    }
+
+    if (file.size > MAX_BACKUP_FILE_BYTES) {
+      fileInput.value = '';
+      resetSelectedFile();
+      void showAlertDialog('El backup supera el límite de 2 MB.');
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (e) => {

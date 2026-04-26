@@ -24,6 +24,7 @@ vi.mock('../utils/notifications', () => ({
 }));
 
 interface SeedSimulatorOptions {
+  totalInvested?: number;
   goalAmount?: number;
   positions?: AppState['positions'];
 }
@@ -81,7 +82,7 @@ function mockAutoMetrics({
 function seedState(options: SeedSimulatorOptions = {}): void {
   const state: AppState = {
     portfolio: {
-      totalInvested: 1200,
+      totalInvested: options.totalInvested ?? 1200,
       currentBalance: 1000,
       savings: 1000,
       goalAmount: options.goalAmount ?? 1500,
@@ -131,7 +132,7 @@ describe('simulator dual milestones', () => {
     container.remove();
   });
 
-  it('shows projection skeleton on initial load', () => {
+  it('shows projection table skeleton on initial load without a chart', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const dispose = renderSimulator(container);
@@ -139,8 +140,30 @@ describe('simulator dual milestones', () => {
     expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe(
       'block',
     );
-    expect(container.querySelector('#sim-projection-chart-skeleton .skeleton')).not.toBeNull();
+    expect(container.querySelector('#projection-chart')).toBeNull();
+    expect(container.querySelector('#sim-projection-chart-skeleton')).toBeNull();
     expect(container.querySelector('#sim-table .sim-projection-table-skeleton')).not.toBeNull();
+
+    dispose();
+    container.remove();
+  });
+
+  it('marks milestone rows in the projection table', async () => {
+    seedState({ totalInvested: 410, goalAmount: 430 });
+    mockAutoMetrics({ totalUsd: 400, weightedApr: 35 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+
+    const headers = Array.from(container.querySelectorAll('#sim-table th')).map((th) =>
+      th.textContent?.trim(),
+    );
+
+    expect(headers).toContain('Hito');
+    expect(container.querySelector('.sim-projection-badge-be')).not.toBeNull();
+    expect(container.querySelector('.sim-projection-badge-goal')).not.toBeNull();
 
     dispose();
     container.remove();

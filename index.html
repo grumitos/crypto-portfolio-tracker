@@ -4,24 +4,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#f9f9f7">
+  <meta name="theme-color" content="#f8f8f6">
   <meta name="description"
     content="Monitorea tu portafolio crypto: posiciones Dual Investment, simulador de recuperación y calculadora de swing trade.">
   <title>Crypto Portfolio Tracker</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.svg">
   <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%232d2d2b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 7 13.5 15.5 8.5 10.5 2 17'/%3E%3Cpolyline points='16 7 22 7 22 13'/%3E%3C/svg%3E">
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23121212' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 7 13.5 15.5 8.5 10.5 2 17'/%3E%3Cpolyline points='16 7 22 7 22 13'/%3E%3C/svg%3E">
   <style>
     html {
-      background: #faf9f5;
-      color: #141413;
+      background: #f8f8f6;
+      color: #121212;
       color-scheme: light;
     }
 
     html[data-theme='dark'] {
-      background: #262624;
-      color: #ece8de;
+      background: #1f1f1e;
+      color: #f8f8f6;
       color-scheme: dark;
     }
 
@@ -47,12 +47,12 @@
       var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme:dark)').matches);
       if (dark) {
         document.documentElement.dataset.theme = 'dark';
-        document.documentElement.style.backgroundColor = '#262624';
+        document.documentElement.style.backgroundColor = '#1f1f1e';
         document.documentElement.style.colorScheme = 'dark';
         var m = document.querySelector('meta[name="theme-color"]');
-        if (m) m.content = '#2d2d2b';
+        if (m) m.content = '#1f1f1e';
       } else {
-        document.documentElement.style.backgroundColor = '#faf9f5';
+        document.documentElement.style.backgroundColor = '#f8f8f6';
         document.documentElement.style.colorScheme = 'light';
       }
     })();

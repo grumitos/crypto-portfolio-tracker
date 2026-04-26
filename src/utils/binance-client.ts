@@ -10,6 +10,12 @@ const API_PROXY_BASE = '/binance-api/v3';
 const SAPI_PROXY_BASE = '/binance-sapi/v1';
 const FETCH_TIMEOUT_MS = 10_000;
 const RECV_WINDOW = 5000;
+const READ_ONLY_CACHE_TTL_MS = 5 * 60 * 1000;
+const ALLOWED_SIGNED_GET_ENDPOINTS = new Set([
+  `${API_PROXY_BASE}/account`,
+  `${SAPI_PROXY_BASE}/account/apiRestrictions`,
+  `${SAPI_PROXY_BASE}/dci/product/positions`,
+]);
 
 // ── Cache ──
 
@@ -24,6 +30,8 @@ const CLOSED_DUAL_POSITION_STATUSES = new Set(['SETTLED', 'PURCHASE_FAIL', 'REFU
 
 let positionsCache: CacheEntry<BinanceDualPosition[]> | null = null;
 let balanceCache: CacheEntry<BinanceAccountBalance[]> | null = null;
+let readOnlyCheckCache: { apiKey: string; ts: number } | null = null;
+let readOnlyCheckInFlight: { apiKey: string; request: Promise<void> } | null = null;
 
 function normalizeBinanceAssetCode(asset: string): string {
   const normalized = asset.toUpperCase().trim();
@@ -95,9 +103,17 @@ async function fetchSigned<T>(
   path: string,
   params: Record<string, string | number> = {},
   credentials?: BinanceApiCredentials,
+  options: { skipReadOnlyCheck?: boolean } = {},
 ): Promise<T> {
+  if (!ALLOWED_SIGNED_GET_ENDPOINTS.has(`${baseUrl}${path}`)) {
+    throw new Error(`Blocked unsupported Binance signed endpoint: ${path}`);
+  }
+
   const creds = credentials ?? loadApiCredentials();
   if (!creds) throw new Error('API credentials not configured');
+  if (!options.skipReadOnlyCheck) {
+    await assertBinanceCredentialsReadOnly(creds);
+  }
 
   const qs = await signedParams(params, creds.apiSecret);
   const url = `${baseUrl}${path}?${qs}`;
@@ -111,6 +127,7 @@ async function fetchSigned<T>(
       headers: {
         'X-MBX-APIKEY': creds.apiKey,
       },
+      cache: 'no-store',
       signal: controller.signal,
     });
 
@@ -122,6 +139,44 @@ async function fetchSigned<T>(
     return (await response.json()) as T;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function assertBinanceCredentialsReadOnly(creds: BinanceApiCredentials): Promise<void> {
+  if (
+    readOnlyCheckCache?.apiKey === creds.apiKey &&
+    Date.now() - readOnlyCheckCache.ts < READ_ONLY_CACHE_TTL_MS
+  ) {
+    return;
+  }
+
+  if (readOnlyCheckInFlight?.apiKey === creds.apiKey) {
+    return readOnlyCheckInFlight.request;
+  }
+
+  const request = (async () => {
+    const restrictions = await fetchSigned<BinanceApiRestrictions>(
+      SAPI_PROXY_BASE,
+      '/account/apiRestrictions',
+      {},
+      creds,
+      { skipReadOnlyCheck: true },
+    );
+    const warnings = getBinanceWritePermissionWarnings(restrictions);
+    if (warnings.length > 0) {
+      throw new Error(`Binance API key is not read-only. ${warnings.join('; ')}`);
+    }
+
+    readOnlyCheckCache = { apiKey: creds.apiKey, ts: Date.now() };
+  })();
+
+  readOnlyCheckInFlight = { apiKey: creds.apiKey, request };
+  try {
+    await request;
+  } finally {
+    if (readOnlyCheckInFlight?.request === request) {
+      readOnlyCheckInFlight = null;
+    }
   }
 }
 
@@ -210,21 +265,76 @@ export async function fetchDualPositions(forceRefresh = false): Promise<BinanceD
 export async function testApiConnection(credentials?: BinanceApiCredentials): Promise<{
   success: boolean;
   permissions: string[];
+  readOnly: boolean;
+  permissionWarnings: string[];
   error?: string;
 }> {
   try {
     const creds = credentials ?? loadApiCredentials();
-    if (!creds) return { success: false, permissions: [], error: 'No API credentials' };
+    if (!creds) {
+      return {
+        success: false,
+        permissions: [],
+        readOnly: false,
+        permissionWarnings: [],
+        error: 'No API credentials',
+      };
+    }
 
-    const raw = await fetchSigned<{ permissions: string[] }>(API_PROXY_BASE, '/account', {}, creds);
-    return { success: true, permissions: raw.permissions ?? [] };
+    const [account, restrictions] = await Promise.all([
+      fetchSigned<{ permissions: string[] }>(API_PROXY_BASE, '/account', {}, creds, {
+        skipReadOnlyCheck: true,
+      }),
+      fetchSigned<BinanceApiRestrictions>(SAPI_PROXY_BASE, '/account/apiRestrictions', {}, creds, {
+        skipReadOnlyCheck: true,
+      }),
+    ]);
+    const permissionWarnings = getBinanceWritePermissionWarnings(restrictions);
+    return {
+      success: true,
+      permissions: account.permissions ?? [],
+      readOnly: permissionWarnings.length === 0,
+      permissionWarnings,
+    };
   } catch (err) {
     return {
       success: false,
       permissions: [],
+      readOnly: false,
+      permissionWarnings: [],
       error: err instanceof Error ? err.message : 'Unknown error',
     };
   }
+}
+
+interface BinanceApiRestrictions {
+  enableWithdrawals?: boolean;
+  enableInternalTransfer?: boolean;
+  enableMargin?: boolean;
+  enableFutures?: boolean;
+  permitsUniversalTransfer?: boolean;
+  enableVanillaOptions?: boolean;
+  enableFixApiTrade?: boolean;
+  enableSpotAndMarginTrading?: boolean;
+  enablePortfolioMarginTrading?: boolean;
+}
+
+function getBinanceWritePermissionWarnings(restrictions: BinanceApiRestrictions): string[] {
+  const enabledWritePermissions = [
+    ['WITHDRAW', restrictions.enableWithdrawals],
+    ['INTERNAL_TRANSFER', restrictions.enableInternalTransfer],
+    ['MARGIN', restrictions.enableMargin],
+    ['FUTURES', restrictions.enableFutures],
+    ['UNIVERSAL_TRANSFER', restrictions.permitsUniversalTransfer],
+    ['VANILLA_OPTIONS', restrictions.enableVanillaOptions],
+    ['FIX_TRADE', restrictions.enableFixApiTrade],
+    ['SPOT_MARGIN_TRADING', restrictions.enableSpotAndMarginTrading],
+    ['PORTFOLIO_MARGIN_TRADING', restrictions.enablePortfolioMarginTrading],
+  ]
+    .filter(([, enabled]) => enabled === true)
+    .map(([name]) => name);
+
+  return enabledWritePermissions.map((permission) => `Permiso de escritura activo: ${permission}`);
 }
 
 // ── Cache management ──
@@ -232,4 +342,6 @@ export async function testApiConnection(credentials?: BinanceApiCredentials): Pr
 export function clearAllCaches(): void {
   positionsCache = null;
   balanceCache = null;
+  readOnlyCheckCache = null;
+  readOnlyCheckInFlight = null;
 }

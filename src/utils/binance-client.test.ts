@@ -181,7 +181,25 @@ describe('binance client', () => {
 
   it('tests explicit credentials without reading persisted credentials', async () => {
     localStorage.clear();
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ permissions: ['SPOT'] }));
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/account/apiRestrictions')) {
+        return Promise.resolve(
+          jsonResponse({
+            enableReading: true,
+            enableWithdrawals: false,
+            enableInternalTransfer: false,
+            enableMargin: false,
+            enableFutures: false,
+            permitsUniversalTransfer: false,
+            enableVanillaOptions: false,
+            enableFixApiTrade: false,
+            enableSpotAndMarginTrading: false,
+            enablePortfolioMarginTrading: false,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ permissions: ['SPOT'] }));
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     const client = await import('./binance-client');
@@ -190,10 +208,65 @@ describe('binance client', () => {
       apiSecret: 'direct-secret',
     });
 
-    expect(result).toEqual({ success: true, permissions: ['SPOT'] });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      success: true,
+      permissions: ['SPOT'],
+      readOnly: true,
+      permissionWarnings: [],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(localStorage.getItem('crypto-binance-api')).toBeNull();
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>)['X-MBX-APIKEY']).toBe('direct-key');
+    expect(init.cache).toBe('no-store');
+  });
+
+  it('flags Binance keys with execution or movement permissions as not read-only', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/account/apiRestrictions')) {
+        return Promise.resolve(
+          jsonResponse({
+            enableReading: true,
+            enableWithdrawals: true,
+            enableSpotAndMarginTrading: true,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ permissions: ['SPOT'] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    const result = await client.testApiConnection({
+      apiKey: 'direct-key',
+      apiSecret: 'direct-secret',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.readOnly).toBe(false);
+    expect(result.permissionWarnings).toEqual([
+      'Permiso de escritura activo: WITHDRAW',
+      'Permiso de escritura activo: SPOT_MARGIN_TRADING',
+    ]);
+  });
+
+  it('blocks private reads when stored Binance credentials are not read-only', async () => {
+    await seedCredentials();
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/account/apiRestrictions')) {
+        return Promise.resolve(
+          jsonResponse({
+            enableWithdrawals: true,
+            enableSpotAndMarginTrading: true,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ balances: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    await expect(client.fetchAccountBalances(true)).rejects.toThrow('not read-only');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

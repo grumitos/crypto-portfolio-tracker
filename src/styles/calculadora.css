@@ -79,13 +79,7 @@
 
 .calc-signal-card {
   border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-warm-muted) 14%, var(--bg-card)) 0,
-      var(--bg-card) 100%
-    ),
-    var(--bg-card);
+  background: color-mix(in srgb, var(--accent-warm-muted) 10%, var(--bg-card));
 }
 
 .calc-metric-card {
@@ -128,7 +122,7 @@
   font-size: var(--font-size-number-md);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .calc-metric-card.calc-hero .calc-metric-value {

@@ -4,8 +4,8 @@
   "description": "Monitorea tu portafolio crypto: posiciones Dual Investment, simulador y calculadora.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAF9F5",
-  "theme_color": "#FAF9F5",
+  "background_color": "#F8F8F6",
+  "theme_color": "#F8F8F6",
   "icons": [
     {
       "src": "/icon-192.svg",

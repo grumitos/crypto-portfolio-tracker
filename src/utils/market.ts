@@ -248,7 +248,7 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
   const timeoutId = setTimeout(() => controller.abort(), BINANCE_FETCH_TIMEOUT_MS);
 
   try {
-    return await fetch(url, { signal: controller.signal });
+    return await fetch(url, { cache: 'no-store', signal: controller.signal });
   } catch (err) {
     if (import.meta.env.DEV) {
       console.warn('[market] fetch failed', { url, err });
@@ -455,6 +455,8 @@ function buildPositionMetricsCacheKey(positions: DualPosition[]): string {
         normalizeAsset(position.subscriptionAsset),
         position.amount.toFixed(8),
         position.apr.toFixed(8),
+        position.positionKind ?? 'dual',
+        Number.isFinite(position.notionalUsd) ? String(position.notionalUsd) : '',
       ].join(':'),
     )
     .sort()
@@ -656,15 +658,19 @@ export function calculatePositionMetricsFromSnapshot(
 
   for (const position of positions) {
     const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
-    subscriptionAssets.add(subscriptionAsset);
-
-    const unitPrice = snapshot.priceByAsset[subscriptionAsset] ?? 0;
-    const usdValue = position.amount * unitPrice;
+    const usdValue =
+      position.positionKind === 'derivative' && Number.isFinite(position.notionalUsd)
+        ? Math.max(0, position.notionalUsd ?? 0)
+        : position.amount * (snapshot.priceByAsset[subscriptionAsset] ?? 0);
     usdByPositionId[position.id] = usdValue;
 
     totalUsd += usdValue;
     weightedAprNumerator += position.apr * usdValue;
     dailyEarningsUsd += calculateDailyEarnings(usdValue, position.apr);
+
+    if (position.positionKind !== 'derivative') {
+      subscriptionAssets.add(subscriptionAsset);
+    }
   }
 
   const priceByAsset: Record<string, number> = {};
@@ -714,7 +720,9 @@ export async function calculatePositionMetrics(
 
   const request = (async (): Promise<PositionMetrics> => {
     const snapshot = await getAssetPriceSnapshot(
-      positions.map((position) => position.subscriptionAsset),
+      positions
+        .filter((position) => position.positionKind !== 'derivative')
+        .map((position) => position.subscriptionAsset),
       options,
     );
     const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);

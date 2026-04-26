@@ -8,6 +8,7 @@ coverage/
 
 # Local artifacts
 artifacts/
+.local/
 tmpclaude-*-cwd
 *.tmp
 *.temp
@@ -27,6 +28,7 @@ pnpm-debug.log*
 # Environment
 .env
 .env.*
+!.env.example
 
 # IDE / Editor tools
 .vscode/

@@ -171,6 +171,58 @@ describe('backup modal', () => {
     expect(backupMocks.closeModal).not.toHaveBeenCalled();
   });
 
+  it('rejects non-json backup files before reading', () => {
+    const app = setupAppShell();
+    bindBackupEvents(app, vi.fn());
+
+    const readAsText = vi.fn();
+    Object.defineProperty(globalThis, 'FileReader', {
+      value: class {
+        readAsText = readAsText;
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const input = app.querySelector('#backup-file-input') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [new File(['{}'], 'backup.txt', { type: 'text/plain' })],
+      configurable: true,
+    });
+
+    input.dispatchEvent(new Event('change'));
+
+    expect(readAsText).not.toHaveBeenCalled();
+    expect(backupMocks.importBackup).not.toHaveBeenCalled();
+    expect(backupMocks.showAlertDialog).toHaveBeenCalledWith('Selecciona un archivo JSON de backup.');
+  });
+
+  it('rejects oversized backup files before reading', () => {
+    const app = setupAppShell();
+    bindBackupEvents(app, vi.fn());
+
+    const readAsText = vi.fn();
+    Object.defineProperty(globalThis, 'FileReader', {
+      value: class {
+        readAsText = readAsText;
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const input = app.querySelector('#backup-file-input') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'backup.json')],
+      configurable: true,
+    });
+
+    input.dispatchEvent(new Event('change'));
+
+    expect(readAsText).not.toHaveBeenCalled();
+    expect(backupMocks.importBackup).not.toHaveBeenCalled();
+    expect(backupMocks.showAlertDialog).toHaveBeenCalledWith('El backup supera el límite de 2 MB.');
+  });
+
   it('does nothing when change event has no selected file', () => {
     const app = setupAppShell();
     bindBackupEvents(app, vi.fn());

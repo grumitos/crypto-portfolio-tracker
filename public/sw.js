@@ -1,6 +1,6 @@
 const CACHE_NAME = 'crypto-tracker-v2';
 const STATIC_ASSETS = ['/'];
-const API_PATH_PREFIXES = ['/api/', '/binance-api/', '/binance-sapi/'];
+const API_PATH_PREFIXES = ['/api/', '/binance-api/', '/binance-sapi/', '/bybit-api/'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

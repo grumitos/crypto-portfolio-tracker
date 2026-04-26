@@ -37,7 +37,6 @@ import {
   renderProjectionTable,
   renderSimulatorTemplate,
 } from './simulator.template';
-import { destroyProjectionChart, renderProjectionChart } from './simulator.chart';
 
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -57,14 +56,6 @@ function renderProjectionLoadingState(container: HTMLElement): void {
   if (elements.tableContainer) {
     elements.tableContainer.hidden = false;
     elements.tableContainer.style.display = 'block';
-  }
-  if (elements.chartCanvas) {
-    elements.chartCanvas.hidden = true;
-    elements.chartCanvas.style.display = 'none';
-  }
-  if (elements.chartSkeleton) {
-    elements.chartSkeleton.hidden = false;
-    elements.chartSkeleton.style.display = 'flex';
   }
   if (elements.table) elements.table.innerHTML = projectionTableSkeletonHtml();
 }
@@ -195,16 +186,13 @@ function setInvalidSimulationOutputs(container: HTMLElement): void {
 
 function resolveProjectionRowClasses(
   month: number,
-  primaryKey: MilestoneKey,
   beCrossMonth: number | null,
   goalCrossMonth: number | null,
 ): string {
   const classes: string[] = [];
-  const primaryCrossMonth = primaryKey === 'be' ? beCrossMonth : goalCrossMonth;
 
   if (month === beCrossMonth) classes.push('sim-row-cross-be');
   if (month === goalCrossMonth) classes.push('sim-row-cross-goal');
-  if (month === primaryCrossMonth) classes.push('sim-row-cross-active');
 
   return classes.join(' ');
 }
@@ -289,7 +277,6 @@ export function renderSimulator(container: HTMLElement): () => void {
   return () => {
     disposed = true;
     unsubscribeMarket();
-    void destroyProjectionChart(getSimulatorElements(container).chartCanvas, isJsdomEnv());
   };
 }
 
@@ -475,7 +462,6 @@ function runSimulation(
 
   if (hasInvalidCore || hasInvalidBreakevenTarget) {
     setInvalidSimulationOutputs(container);
-    void destroyProjectionChart(elements.chartCanvas, isJsdomEnv());
     return;
   }
 
@@ -526,15 +512,6 @@ function runSimulation(
       elements.tableContainer.hidden = true;
       elements.tableContainer.style.display = 'none';
     }
-    if (elements.chartCanvas) {
-      elements.chartCanvas.hidden = true;
-      elements.chartCanvas.style.display = 'none';
-    }
-    if (elements.chartSkeleton) {
-      elements.chartSkeleton.hidden = true;
-      elements.chartSkeleton.style.display = 'none';
-    }
-    void destroyProjectionChart(elements.chartCanvas, isJsdomEnv());
     return;
   }
 
@@ -543,20 +520,11 @@ function runSimulation(
 
   elements.tableContainer.hidden = false;
   elements.tableContainer.style.display = 'block';
-  if (elements.chartCanvas) {
-    elements.chartCanvas.hidden = false;
-    elements.chartCanvas.style.display = 'block';
-  }
-  if (elements.chartSkeleton) {
-    elements.chartSkeleton.hidden = true;
-    elements.chartSkeleton.style.display = 'none';
-  }
   elements.table.innerHTML = renderProjectionTable(
     projectedRows.map((row) => ({
       ...row,
       rowClass: resolveProjectionRowClasses(
         row.month,
-        milestones.primaryKey,
         beCrossMonth,
         goalCrossMonth,
       ),
@@ -564,15 +532,4 @@ function runSimulation(
     formatDateLatin,
     formatUSD,
   );
-
-  void renderProjectionChart(
-    elements.chartCanvas,
-    projectedRows,
-    snapshot.targetByMilestone,
-    isJsdomEnv(),
-  );
-}
-
-function isJsdomEnv(): boolean {
-  return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
 }

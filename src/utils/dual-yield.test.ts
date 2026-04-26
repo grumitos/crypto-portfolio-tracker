@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateDualBilledDays,
   calculateDualProjectedBilledDays,
+  calculateDualProjectedProfit,
   calculateDualProfitFromBilledDays,
   calculateDualYield,
   resolveDualSettlementAt,
@@ -63,5 +64,17 @@ describe('dual-yield utils', () => {
 
     expect(billed).toBe(1);
     expect(reward).toBeCloseTo(97.07648, 8);
+  });
+
+  it('uses exchange-provided projected profit when present', () => {
+    const reward = calculateDualProjectedProfit({
+      amount: 42508.8428,
+      apr: 144.2866666667,
+      entryDate: '2026-04-25',
+      settlementDate: '2026-04-26',
+      projectedProfit: 168.041680475,
+    });
+
+    expect(reward).toBeCloseTo(168.041680475, 8);
   });
 });

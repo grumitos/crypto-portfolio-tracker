@@ -147,7 +147,7 @@ export function setAnimatedNumber(
   if (!el) return;
 
   const enabled = options.enabled === true && !prefersReducedMotion();
-  const durationMs = options.durationMs ?? 560;
+  const durationMs = options.durationMs ?? 180;
   const epsilon = options.epsilon ?? 0.0001;
   const stabilityKey = resolveStabilityKey(el, options.stabilityKey);
   const allowRememberedStart = options.allowRememberedStart !== false;
@@ -257,7 +257,7 @@ export function setAnimatedText(
 
   const liveText = el.textContent ?? '';
   const startText = liveText.length > 0 ? liveText : (rememberedText ?? '');
-  const durationMs = options.durationMs ?? 260;
+  const durationMs = options.durationMs ?? 180;
   const finalText = text;
   const startLength = startText.length;
   const finalLength = finalText.length;

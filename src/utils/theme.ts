@@ -3,41 +3,14 @@ const THEME_COLOR_VAR = '--browser-theme-color';
 const FAVICON_STROKE_VAR = '--favicon-stroke-encoded';
 
 const CSS_FALLBACKS = {
-  browserThemeColorLight: '#FAF9F5',
-  browserThemeColorDark: '#262624',
-  faviconStrokeLight: '%23141413',
-  faviconStrokeDark: '%23FAF9F5',
-  chartLineLight: '#cc7d5e',
-  chartFillLight: 'rgba(204, 125, 94, 0.16)',
-  chartBeLight: 'rgba(204, 125, 94, 0.42)',
-  chartGoalLight: 'rgba(126, 164, 138, 0.36)',
-  chartGridLight: 'rgba(45, 45, 43, 0.12)',
-  chartTickLight: '#6b6860',
-  chartLegendLight: '#3d3b37',
-  chartPointLight: '#cc7d5e',
-  chartLineDark: '#d4896b',
-  chartFillDark: 'rgba(212, 137, 107, 0.22)',
-  chartBeDark: 'rgba(212, 137, 107, 0.46)',
-  chartGoalDark: 'rgba(159, 195, 171, 0.42)',
-  chartGridDark: 'rgba(222, 220, 209, 0.16)',
-  chartTickDark: '#b5b0a5',
-  chartLegendDark: '#e6e3db',
-  chartPointDark: '#d4896b',
+  browserThemeColorLight: '#F8F8F6',
+  browserThemeColorDark: '#1F1F1E',
+  faviconStrokeLight: '%23121212',
+  faviconStrokeDark: '%23F8F8F6',
 } as const;
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
-
-export interface ChartColors {
-  line: string;
-  fill: string;
-  beTarget: string;
-  goalTarget: string;
-  grid: string;
-  tick: string;
-  legend: string;
-  pointBg: string;
-}
 
 type ThemeChangeCallback = (theme: ResolvedTheme) => void;
 const listeners: ThemeChangeCallback[] = [];
@@ -66,44 +39,6 @@ export function setTheme(preference: ThemePreference): void {
 export function toggleTheme(): void {
   const current = getResolvedTheme();
   setTheme(current === 'dark' ? 'light' : 'dark');
-}
-
-export function getChartColors(): ChartColors {
-  const resolvedTheme = getResolvedTheme();
-  return {
-    line: readThemeVariable(
-      '--chart-line',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartLineDark : CSS_FALLBACKS.chartLineLight,
-    ),
-    fill: readThemeVariable(
-      '--chart-fill',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartFillDark : CSS_FALLBACKS.chartFillLight,
-    ),
-    beTarget: readThemeVariable(
-      '--chart-target-be',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartBeDark : CSS_FALLBACKS.chartBeLight,
-    ),
-    goalTarget: readThemeVariable(
-      '--chart-target-goal',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartGoalDark : CSS_FALLBACKS.chartGoalLight,
-    ),
-    grid: readThemeVariable(
-      '--chart-grid',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartGridDark : CSS_FALLBACKS.chartGridLight,
-    ),
-    tick: readThemeVariable(
-      '--chart-tick',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartTickDark : CSS_FALLBACKS.chartTickLight,
-    ),
-    legend: readThemeVariable(
-      '--chart-legend',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartLegendDark : CSS_FALLBACKS.chartLegendLight,
-    ),
-    pointBg: readThemeVariable(
-      '--chart-point',
-      resolvedTheme === 'dark' ? CSS_FALLBACKS.chartPointDark : CSS_FALLBACKS.chartPointLight,
-    ),
-  };
 }
 
 export function onThemeChange(callback: ThemeChangeCallback): void {

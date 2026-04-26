@@ -23,17 +23,48 @@ import { openApiConfigModal } from './components/positions/api-config-modal';
 import { renderAppShell } from './components/app-shell.template';
 import type { AppShellNavItem } from './components/app-shell.constants';
 import { applyTypographyConfig } from './utils/typography';
-import { hasApiCredentials, isAutoMode } from './utils/binance-auth';
-import { syncPositionsFromBinance } from './utils/binance-sync';
-import { rememberAutoPortfolioSnapshot, rememberBalanceSummary } from './utils/api-runtime-cache';
+import { isAutoMode, saveApiCredentials } from './utils/binance-auth';
+import { clearAllCaches as clearBinanceClientCaches } from './utils/binance-client';
+import {
+  clearBinanceSyncCaches,
+  hasAnyExchangeApiCredentials,
+  syncPositionsFromBinance,
+} from './utils/binance-sync';
+import { saveBybitApiCredentials } from './utils/bybit-auth';
+import { clearBybitClientCaches } from './utils/bybit-client';
+import { clearMarketCaches } from './utils/market';
+import { loadLocalVaultCredentials } from './utils/local-vault';
+import {
+  clearApiRuntimeCache,
+  rememberAutoPortfolioSnapshot,
+  rememberBalanceSummary,
+} from './utils/api-runtime-cache';
 
 let disposeActiveView: (() => void) | null = null;
+let forceRefreshNextDashboardRender = false;
 
 function themeIcon(): string {
-  return getResolvedTheme() === 'dark' ? iconSun(15) : iconMoon(15);
+  return getResolvedTheme() === 'dark' ? iconSun(16) : iconMoon(16);
 }
 
-function init(): void {
+function syncThemeButton(button: Element | null): void {
+  if (!(button instanceof HTMLButtonElement)) return;
+  const isDarkTheme = getResolvedTheme() === 'dark';
+  button.innerHTML = themeIcon();
+  button.setAttribute('aria-pressed', isDarkTheme ? 'true' : 'false');
+}
+
+async function hydrateLocalVaultSession(): Promise<void> {
+  const credentials = await loadLocalVaultCredentials();
+  if (credentials?.binance) {
+    saveApiCredentials(credentials.binance);
+  }
+  if (credentials?.bybit) {
+    saveBybitApiCredentials(credentials.bybit);
+  }
+}
+
+async function init(): Promise<void> {
   const app = document.getElementById('app');
   if (!app) return;
 
@@ -45,7 +76,13 @@ function init(): void {
     { view: 'simulator', label: 'Simulador', icon: iconTrendingUp(15), active: false },
     { view: 'calculadora', label: 'Calculadora', icon: iconCalculator(15), active: false },
   ];
-  app.innerHTML = renderAppShell(iconRefreshCw(14), iconSettings(15), themeIcon(), navItems);
+  app.innerHTML = renderAppShell(
+    iconRefreshCw(14),
+    iconSettings(15),
+    themeIcon(),
+    navItems,
+    getResolvedTheme() === 'dark',
+  );
 
   // Nav events (bound once)
   app.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
@@ -64,8 +101,7 @@ function init(): void {
   // Theme toggle (bound once)
   app.querySelector('#btn-theme')?.addEventListener('click', () => {
     toggleTheme();
-    const themeBtn = app.querySelector('#btn-theme');
-    if (themeBtn) themeBtn.innerHTML = themeIcon();
+    syncThemeButton(app.querySelector('#btn-theme'));
   });
 
   app.querySelector('#btn-config')?.addEventListener('click', () => {
@@ -74,22 +110,30 @@ function init(): void {
 
   app.querySelector('#btn-sync-positions')?.addEventListener('click', async () => {
     const syncBtn = app.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
-    if (!syncBtn || syncBtn.disabled || !isAutoMode() || !hasApiCredentials()) return;
+    if (!syncBtn || syncBtn.disabled || !isAutoMode() || !hasAnyExchangeApiCredentials()) return;
 
     syncBtn.disabled = true;
     syncBtn.classList.add('syncing');
+    syncBtn.setAttribute('aria-busy', 'true');
 
     try {
+      clearApiRuntimeCache();
+      clearBinanceSyncCaches();
+      clearBinanceClientCaches();
+      clearBybitClientCaches();
+      clearMarketCaches();
       const snapshot = await syncPositionsFromBinance(true);
       rememberAutoPortfolioSnapshot(snapshot);
       rememberBalanceSummary({
         balances: snapshot.balances,
         totalUsdEstimate: snapshot.totalUsdEstimate,
       });
+      forceRefreshNextDashboardRender = true;
       renderView(app, getCurrentView());
     } finally {
       syncBtn.disabled = false;
       syncBtn.classList.remove('syncing');
+      syncBtn.removeAttribute('aria-busy');
       updatePositionsSyncButton(app);
     }
   });
@@ -99,6 +143,12 @@ function init(): void {
 
   initRouter((view) => renderView(app, view));
   renderView(app, getCurrentView());
+
+  void hydrateLocalVaultSession().then(() => {
+    if (!app.isConnected) return;
+    updatePositionsSyncButton(app);
+    renderView(app, getCurrentView());
+  });
 
   requestAnimationFrame(() => {
     window.setTimeout(() => applyTypographyConfig(), 0);
@@ -164,7 +214,10 @@ function renderView(app: HTMLElement, view: View): void {
 
   switch (view) {
     case 'dashboard':
-      disposeActiveView = renderDashboard(viewContainer);
+      disposeActiveView = renderDashboard(viewContainer, {
+        forceRefreshOnMount: forceRefreshNextDashboardRender,
+      });
+      forceRefreshNextDashboardRender = false;
       break;
     case 'positions':
       disposeActiveView = renderPositions(viewContainer, onStateChange);
@@ -184,7 +237,7 @@ function updatePositionsSyncButton(app: HTMLElement): void {
   const syncBtn = app.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
   if (!syncBtn) return;
 
-  const isAvailable = isAutoMode() && hasApiCredentials();
+  const isAvailable = isAutoMode() && hasAnyExchangeApiCredentials();
   syncBtn.disabled = !isAvailable;
 
   if (!isAvailable) {

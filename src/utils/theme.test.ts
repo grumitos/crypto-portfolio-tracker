@@ -73,33 +73,20 @@ describe('theme utils', () => {
     theme.setTheme('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
-      '#262624',
+      '#1F1F1E',
     );
     expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain(
-      '%23FAF9F5',
+      '%23F8F8F6',
     );
 
     theme.toggleTheme();
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
-      '#FAF9F5',
+      '#F8F8F6',
     );
     expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain(
-      '%23141413',
+      '%23121212',
     );
-  });
-
-  it('returns chart colors according to resolved theme', async () => {
-    const media = installMatchMedia(false);
-    const theme = await import('./theme');
-    const light = theme.getChartColors();
-
-    theme.setTheme('system');
-    media.setMatches(true);
-    const dark = theme.getChartColors();
-
-    expect(light.line).not.toBe(dark.line);
-    expect(dark.grid).toContain('rgba');
   });
 
   it('notifies listeners on theme changes and reacts to system changes', async () => {

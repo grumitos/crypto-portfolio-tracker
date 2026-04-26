@@ -8,13 +8,19 @@ import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '
 
 vi.mock('../utils/api-runtime-cache', () => ({
   getSharedMarketData: vi.fn(),
+  getCachedAutoPortfolioSnapshot: vi.fn(() => null),
   getCachedBalanceSummary: vi.fn(() => null),
+  rememberAutoPortfolioSnapshot: vi.fn(),
   rememberBalanceSummary: vi.fn(),
   clearApiRuntimeCache: vi.fn(),
 }));
 
 vi.mock('../utils/binance-sync', () => ({
   fetchBalanceSummary: vi.fn(),
+  syncPositionsFromBinance: vi.fn(),
+  hasAnyExchangeApiCredentials: () =>
+    localStorage.getItem('crypto-binance-api') !== null ||
+    localStorage.getItem('crypto-bybit-api') !== null,
   clearBinanceSyncCaches: vi.fn(),
 }));
 
@@ -27,8 +33,8 @@ vi.mock('../utils/notifications', () => ({
   showApiErrorBanner: vi.fn(),
 }));
 
-import { getSharedMarketData } from '../utils/api-runtime-cache';
-import { fetchBalanceSummary } from '../utils/binance-sync';
+import { getSharedMarketData, rememberAutoPortfolioSnapshot } from '../utils/api-runtime-cache';
+import { fetchBalanceSummary, syncPositionsFromBinance } from '../utils/binance-sync';
 import { registerApiFailure } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
 import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
@@ -122,6 +128,12 @@ describe('dashboard legends', () => {
       },
     });
     vi.mocked(fetchBalanceSummary).mockResolvedValue({
+      balances: [],
+      totalUsdEstimate: 0,
+    });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: [],
+      count: 0,
       balances: [],
       totalUsdEstimate: 0,
     });
@@ -368,6 +380,81 @@ describe('dashboard legends', () => {
     expect(container.querySelector('#dash-balance')?.textContent).toContain('$1,000.00');
     expect(registerApiFailure).toHaveBeenCalled();
     expect(showApiErrorBanner).toHaveBeenCalled();
+
+    dispose();
+    container.remove();
+  });
+
+  it('force refreshes auto data on mount and updates goal progress from the new balance', async () => {
+    const autoPositions: AppState['positions'] = [
+      {
+        id: 'auto-1',
+        asset: 'ETH',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 1000,
+        targetPrice: 2200,
+        entryDate: '2026-02-20',
+        settlementDate: '2026-02-22',
+        apr: 40,
+      },
+    ];
+    seedState({
+      mode: 'auto',
+      positions: autoPositions,
+      currentBalance: 600,
+      savings: 200,
+      totalInvested: 1000,
+      goalAmount: 2000,
+    });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: autoPositions,
+      count: autoPositions.length,
+      totalUsdEstimate: 200,
+      balances: [{ asset: 'USDT', free: 200, locked: 0 }],
+    });
+    vi.mocked(getSharedMarketData).mockResolvedValue({
+      positionsKey: 'auto-1',
+      snapshot: {
+        priceByAsset: { USDT: 1 },
+        sourceByAsset: { USDT: 'stable' },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        changePercent24hByAsset: { USDT: 0 },
+      },
+      metrics: {
+        totalUsd: 1000,
+        weightedApr: 40,
+        dailyEarningsUsd: 1.1,
+        usdByPositionId: { 'auto-1': 1000 },
+        priceByAsset: { USDT: 1 },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        priceSourceByAsset: { USDT: 'stable' },
+      },
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container, { forceRefreshOnMount: true });
+    await flushMicrotasks();
+
+    expect(syncPositionsFromBinance).toHaveBeenCalledWith(true);
+    expect(getSharedMarketData).toHaveBeenCalledWith(autoPositions, true);
+    expect(loadState().portfolio.currentBalance).toBe(1200);
+    expect(container.querySelector('#dash-balance')?.textContent).toContain('$1,200.00');
+    expect(container.querySelector('#dash-goal-progress-bar')?.getAttribute('aria-valuenow')).toBe(
+      '60',
+    );
+    expect((container.querySelector('#dash-prog-solid-first') as HTMLElement).style.width).toBe(
+      '50%',
+    );
+    expect((container.querySelector('#dash-prog-solid-second') as HTMLElement).style.width).toBe(
+      '10%',
+    );
 
     dispose();
     container.remove();
@@ -624,7 +711,9 @@ describe('dashboard legends', () => {
   it('renders account balance detail in dashboard when Binance auto mode is active', async () => {
     seedState({ mode: 'auto', positions: [] });
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
-    vi.mocked(fetchBalanceSummary).mockResolvedValue({
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: [],
+      count: 0,
       totalUsdEstimate: 260,
       balances: [
         { asset: 'USDT', free: 250, locked: 10 },
@@ -637,7 +726,8 @@ describe('dashboard legends', () => {
     const dispose = renderDashboard(container);
     await flushMicrotasks();
 
-    expect(fetchBalanceSummary).toHaveBeenCalled();
+    expect(syncPositionsFromBinance).toHaveBeenCalled();
+    expect(rememberAutoPortfolioSnapshot).toHaveBeenCalled();
     expect(container.querySelector('#dashboard-balance-strip')).not.toBeNull();
     expect(container.querySelector('#dashboard-balance-strip')?.textContent).toContain(
       'Saldo en cuenta',
@@ -654,35 +744,38 @@ describe('dashboard legends', () => {
   });
 
   it('adds active auto positions to the locked amount in the account balance detail', async () => {
+    const autoPositions: AppState['positions'] = [
+      {
+        id: 'eth-1',
+        asset: 'ETH',
+        direction: 'sell-high',
+        subscriptionAsset: 'ETH',
+        amount: 9.93127984,
+        targetPrice: 2400,
+        entryDate: '2026-02-20',
+        settlementDate: '2026-02-22',
+        apr: 40,
+      },
+      {
+        id: 'sol-1',
+        asset: 'SOL',
+        direction: 'sell-high',
+        subscriptionAsset: 'SOL',
+        amount: 234.41857548,
+        targetPrice: 180,
+        entryDate: '2026-02-20',
+        settlementDate: '2026-02-22',
+        apr: 28,
+      },
+    ];
     seedState({
       mode: 'auto',
-      positions: [
-        {
-          id: 'eth-1',
-          asset: 'ETH',
-          direction: 'sell-high',
-          subscriptionAsset: 'ETH',
-          amount: 9.93127984,
-          targetPrice: 2400,
-          entryDate: '2026-02-20',
-          settlementDate: '2026-02-22',
-          apr: 40,
-        },
-        {
-          id: 'sol-1',
-          asset: 'SOL',
-          direction: 'sell-high',
-          subscriptionAsset: 'SOL',
-          amount: 234.41857548,
-          targetPrice: 180,
-          entryDate: '2026-02-20',
-          settlementDate: '2026-02-22',
-          apr: 28,
-        },
-      ],
+      positions: autoPositions,
     });
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
-    vi.mocked(fetchBalanceSummary).mockResolvedValue({
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: autoPositions,
+      count: autoPositions.length,
       totalUsdEstimate: 25,
       balances: [
         { asset: 'USDC', free: 22.80919709, locked: 0 },

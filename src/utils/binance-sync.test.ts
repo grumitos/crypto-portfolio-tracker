@@ -5,13 +5,29 @@ vi.mock('./binance-client', () => ({
   fetchAccountBalances: vi.fn(),
 }));
 
+vi.mock('./bybit-client', () => ({
+  fetchBybitAssetBalances: vi.fn(),
+  fetchBybitDualAssetPositions: vi.fn(),
+  fetchBybitOpenPositions: vi.fn(),
+  fetchBybitWalletBalances: vi.fn(),
+}));
+
 vi.mock('./market', () => ({
   getAssetPriceSnapshot: vi.fn(),
 }));
 
 import { fetchAccountBalances, fetchDualPositions } from './binance-client';
+import {
+  fetchBybitAssetBalances,
+  fetchBybitDualAssetPositions,
+  fetchBybitOpenPositions,
+  fetchBybitWalletBalances,
+} from './bybit-client';
+import { saveApiCredentials, clearApiCredentials } from './binance-auth';
+import { saveBybitApiCredentials, clearBybitApiCredentials } from './bybit-auth';
 import { formatISODateLocal, formatTimeHHMMLocal, resolveBinanceDualSettlementLocal } from './date';
 import { getAssetPriceSnapshot } from './market';
+import { createMemoryStorage } from '../test/test-utils';
 import {
   clearBinanceSyncCaches,
   fetchBalanceSummary,
@@ -20,9 +36,17 @@ import {
 
 describe('binance sync cache', () => {
   beforeEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: createMemoryStorage(),
+      configurable: true,
+      writable: true,
+    });
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-14T12:00:00.000Z'));
+    clearApiCredentials();
+    clearBybitApiCredentials();
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     clearBinanceSyncCaches();
 
     vi.mocked(fetchAccountBalances).mockResolvedValue([
@@ -52,6 +76,10 @@ describe('binance sync cache', () => {
         status: 'PURCHASE_SUCCESS',
       },
     ]);
+    vi.mocked(fetchBybitAssetBalances).mockResolvedValue([]);
+    vi.mocked(fetchBybitWalletBalances).mockResolvedValue([]);
+    vi.mocked(fetchBybitOpenPositions).mockResolvedValue([]);
+    vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([]);
   });
 
   it('reuses balance summary within 60 seconds', async () => {
@@ -62,6 +90,93 @@ describe('binance sync cache', () => {
     expect(second.totalUsdEstimate).toBe(2100);
     expect(fetchAccountBalances).toHaveBeenCalledTimes(1);
     expect(getAssetPriceSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('combines Binance and Bybit balances when both exchanges are configured', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitWalletBalances).mockResolvedValue([
+      { asset: 'BTC', walletBalance: 0.1, locked: 0.02, usdValue: 7000 },
+    ]);
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(summary.totalUsdEstimate).toBe(9100);
+    expect(summary.balances).toEqual([
+      { asset: 'USDT', free: 100, locked: 0, source: 'Binance' },
+      { asset: 'ETH', free: 1, locked: 0, source: 'Binance' },
+      { asset: 'BTC', free: 0.08, locked: 0.02, source: 'Bybit' },
+    ]);
+  });
+
+  it('returns available exchange balances when another configured exchange times out', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitWalletBalances).mockReturnValue(new Promise(() => {}));
+
+    const summaryPromise = fetchBalanceSummary(true);
+    await vi.advanceTimersByTimeAsync(12_000);
+    const summary = await summaryPromise;
+
+    expect(summary.totalUsdEstimate).toBe(2100);
+    expect(summary.balances).toEqual([
+      { asset: 'USDT', free: 100, locked: 0, source: 'Binance' },
+      { asset: 'ETH', free: 1, locked: 0, source: 'Binance' },
+    ]);
+  });
+
+  it('falls back to Bybit asset balances when account wallet balance is not allowed', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitWalletBalances).mockRejectedValue(new Error('permission denied'));
+    vi.mocked(fetchBybitAssetBalances).mockResolvedValue([
+      { asset: 'SOL', walletBalance: 2, locked: 0, usdValue: 0 },
+    ]);
+    vi.mocked(getAssetPriceSnapshot).mockResolvedValueOnce({
+      priceByAsset: { ETH: 2000, SOL: 150 },
+      sourceByAsset: { ETH: 'live', SOL: 'live' },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+    });
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(fetchBybitAssetBalances).toHaveBeenCalledTimes(1);
+    expect(summary.totalUsdEstimate).toBe(2400);
+    expect(summary.balances).toEqual(
+      expect.arrayContaining([{ asset: 'SOL', free: 2, locked: 0, source: 'Bybit' }]),
+    );
+  });
+
+  it('supports a Bybit-only balance summary', async () => {
+    clearApiCredentials();
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitWalletBalances).mockResolvedValue([
+      { asset: 'USDT', walletBalance: 50, locked: 0, usdValue: 50 },
+    ]);
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(fetchAccountBalances).not.toHaveBeenCalled();
+    expect(summary.totalUsdEstimate).toBe(50);
+    expect(summary.balances).toEqual([{ asset: 'USDT', free: 50, locked: 0, source: 'Bybit' }]);
+  });
+
+  it('returns an empty summary when no exchange credentials exist', async () => {
+    clearApiCredentials();
+    clearBybitApiCredentials();
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(summary).toEqual({ balances: [], totalUsdEstimate: 0 });
+    expect(fetchAccountBalances).not.toHaveBeenCalled();
+    expect(fetchBybitWalletBalances).not.toHaveBeenCalled();
+  });
+
+  it('throws when every configured exchange balance read fails', async () => {
+    vi.mocked(fetchAccountBalances).mockRejectedValue(new Error('binance down'));
+
+    await expect(fetchBalanceSummary(true)).rejects.toThrow(
+      'No se pudieron leer saldos de exchanges configurados.',
+    );
   });
 
   it('expires balance summary cache after 60 seconds', async () => {
@@ -79,6 +194,80 @@ describe('binance sync cache', () => {
 
     expect(fetchDualPositions).toHaveBeenCalledTimes(1);
     expect(fetchAccountBalances).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes Bybit derivative positions in the automatic snapshot', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitOpenPositions).mockResolvedValue([
+      {
+        id: 'bybit_BTCUSDT_Buy',
+        symbol: 'BTCUSDT',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        side: 'Buy',
+        size: 0.05,
+        avgPrice: 70000,
+        markPrice: 71000,
+        positionValue: 3550,
+        unrealizedPnl: 50,
+        updatedTime: Date.parse('2026-03-14T11:30:00.000Z'),
+      },
+    ]);
+
+    const snapshot = await fetchBinancePortfolioSnapshot(true);
+
+    expect(snapshot.positions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'bybit_BTCUSDT_Buy',
+          source: 'Bybit',
+          positionKind: 'derivative',
+          displaySymbol: 'BTCUSDT',
+          notionalUsd: 3550,
+          unrealizedPnlUsd: 50,
+        }),
+      ]),
+    );
+  });
+
+  it('includes Bybit Dual Asset positions in the automatic snapshot', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([
+      {
+        id: 'bybit_dual_19035',
+        productId: '36320',
+        baseCoin: 'ETH',
+        quoteCoin: 'USDT',
+        investCoin: 'USDT',
+        amount: 20,
+        apr: 902.7,
+        direction: 'BuyLow',
+        targetPrice: 2325,
+        settlementTime: Date.parse('2026-03-17T23:59:59.000Z'),
+        status: 'Active',
+        yieldStartAt: Date.parse('2026-03-14T00:00:00.000Z'),
+        projectedProfit: 1.25,
+      },
+    ]);
+
+    const snapshot = await fetchBinancePortfolioSnapshot(true);
+
+    expect(snapshot.positions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'bybit_dual_19035',
+          source: 'Bybit',
+          positionKind: 'dual',
+          displaySymbol: 'ETHUSDT',
+          direction: 'buy-low',
+          subscriptionAsset: 'USDT',
+          amount: 20,
+          targetPrice: 2325,
+          apr: 902.7,
+          projectedProfit: 1.25,
+        }),
+      ]),
+    );
   });
 
   it('prefers purchaseTime over purchaseEndTime when mapping the subscription date', async () => {

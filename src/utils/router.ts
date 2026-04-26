@@ -82,7 +82,7 @@ export function handleTransitionEntry(container: HTMLElement): void {
           { transform: 'translate(0, 0)', opacity: 1 },
         ],
         {
-          duration: 360,
+          duration: 180,
           easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
           fill: 'none',
         },
@@ -98,11 +98,11 @@ export function handleTransitionEntry(container: HTMLElement): void {
       if (key && movedKeys.has(key)) return;
 
       el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: 320,
+        duration: 160,
         delay,
         easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
         fill: 'backwards',
       });
-      delay += 40;
+      delay += 12;
     });
 }

@@ -20,8 +20,8 @@ import {
   resolveAssetLogoSources,
 } from '../utils/asset-logos';
 import { onApiConfigChange } from './positions/api-config-modal';
-import { isAutoMode, hasApiCredentials } from '../utils/binance-auth';
-import { syncPositionsFromBinance } from '../utils/binance-sync';
+import { isAutoMode } from '../utils/binance-auth';
+import { hasAnyExchangeApiCredentials, syncPositionsFromBinance } from '../utils/binance-sync';
 import {
   getCachedAutoPortfolioSnapshot,
   getPositionsCacheKey,
@@ -459,7 +459,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const buyLow = positions.filter((p) => p.direction === 'buy-low');
   const sellHigh = positions.filter((p) => p.direction === 'sell-high');
 
-  const hasApi = hasApiCredentials();
+  const hasApi = hasAnyExchangeApiCredentials();
 
   container.innerHTML = renderPositionsTemplate({
     autoMode,
@@ -507,7 +507,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const runInitialHydration = async (): Promise<void> => {
     if (disposed || !container.isConnected) return;
 
-    if (autoMode && hasApiCredentials() && !getCachedAutoPortfolioSnapshot()) {
+    if (autoMode && hasAnyExchangeApiCredentials() && !getCachedAutoPortfolioSnapshot()) {
       await performAutoSync(container, onStateChange, false);
       latestKnownPositions = loadState().positions;
       syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
@@ -523,7 +523,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
     if (disposed || !container.isConnected) return;
 
-    if (autoMode && hasApiCredentials()) {
+    if (autoMode && hasAnyExchangeApiCredentials()) {
       await performAutoSync(container, onStateChange, forceRefresh);
       const { positions: syncedPositions } = loadState();
       latestKnownPositions = syncedPositions;

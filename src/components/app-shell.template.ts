@@ -18,6 +18,7 @@ export function renderAppShell(
   configIcon: string,
   themeIcon: string,
   navItems: AppShellNavItem[],
+  isDarkTheme: boolean,
 ): string {
   return `
     <header class="app-header">
@@ -54,6 +55,7 @@ export function renderAppShell(
             id="btn-theme"
             title="${APP_SHELL_COPY.themeLabel}"
             aria-label="${APP_SHELL_COPY.themeLabel}"
+            aria-pressed="${isDarkTheme ? 'true' : 'false'}"
           >
             ${themeIcon}
           </button>

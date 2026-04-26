@@ -26,6 +26,9 @@ vi.mock('../utils/notifications', () => ({
 
 vi.mock('../utils/binance-sync', () => ({
   syncPositionsFromBinance: vi.fn(),
+  hasAnyExchangeApiCredentials: () =>
+    localStorage.getItem('crypto-binance-api') !== null ||
+    localStorage.getItem('crypto-bybit-api') !== null,
   clearBinanceSyncCaches: vi.fn(),
 }));
 
@@ -154,7 +157,7 @@ describe('positions integration', () => {
     container.remove();
   });
 
-  it('hydrates market metrics and position USD values for existing rows', async () => {
+  it('hydrates market metrics and keeps buy-low USD equivalent hidden', async () => {
     seedState([
       {
         id: 'p1',
@@ -179,7 +182,14 @@ describe('positions integration', () => {
     expect(container.querySelector('#positions-apr')?.textContent).toContain('35.00%');
     expect(container.querySelector('#positions-capital')?.textContent).toContain('$400.00');
     expect(container.querySelector('#positions-daily')?.textContent).toContain('$0.40');
-    expect(container.querySelector('#position-usd-p1')?.textContent).toContain('$400');
+    expect(container.querySelector('#position-usd-p1')).toBeNull();
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
+      'Ejecuta',
+    );
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
+      'No ejec.',
+    );
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('ETH');
     expect(container.querySelector('#positions-spot-ETH')?.textContent).toContain('ETH');
     expect(container.querySelector('#positions-spot-value-ETH')?.textContent).toContain(
       '$2,000.00',
@@ -194,6 +204,53 @@ describe('positions integration', () => {
     expect(container.querySelector('#positions-spot-USDC')).toBeNull();
     expect(container.querySelector('#position-spot-p1')).toBeNull();
     expect(registerApiLastUpdatedAt).toHaveBeenCalled();
+
+    dispose();
+    container.remove();
+  });
+
+  it('shows USD equivalent for sell-high crypto positions', async () => {
+    seedState([
+      {
+        id: 'p1',
+        asset: 'ETH',
+        direction: 'sell-high',
+        subscriptionAsset: 'ETH',
+        amount: 0.2,
+        targetPrice: 2400,
+        entryDate: '2026-02-20',
+        entryTime: '08:45',
+        settlementDate: '2026-02-23',
+        settlementTime: '03:00',
+        apr: 40,
+      },
+    ]);
+    vi.mocked(calculatePositionMetricsFromSnapshot).mockReturnValue({
+      totalUsd: 400,
+      weightedApr: 35,
+      dailyEarningsUsd: 0.4,
+      usdByPositionId: { p1: 400 },
+      priceByAsset: { ETH: 2000 },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+      priceSourceByAsset: { ETH: 'live' },
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, vi.fn());
+    await flushMicrotasks();
+
+    expect(container.querySelector('#position-usd-p1')?.textContent).toContain('$400');
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
+      'Ejecuta',
+    );
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
+      'No ejec.',
+    );
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('USDT');
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('ETH');
 
     dispose();
     container.remove();

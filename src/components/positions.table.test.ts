@@ -40,7 +40,13 @@ describe('positions table rendering', () => {
 
     expect(buyGroup).toContain('ETH/USDT');
     expect(sellGroup).toContain('SOL/USDT');
-    expect(buyGroup).toContain('Ganancia (Venc.)');
+    expect(buyGroup).toContain('Ganancia');
+    expect(buyGroup).not.toContain('Ganancia (Venc.)');
+    expect(buyGroup).not.toContain('Valor USD');
+    expect(sellGroup).toContain('Valor USD');
+    expect(buyGroup).toContain('Resultado');
+    expect(buyGroup).not.toContain('Ejecuta');
+    expect(buyGroup).not.toContain('No ejec.');
     expect(buyGroup).not.toContain('Spot (USD)');
     expect(buyGroup).not.toContain('position-spot-buy1');
     expect(buyGroup).not.toContain('btn-del-pos');

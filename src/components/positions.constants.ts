@@ -10,7 +10,7 @@ export const DURATION_PRESETS = [
 
 export const SPOT_STRIP_EXCLUDED_ASSETS = new Set<string>(['USDT', 'USDC']);
 export const SPOT_STRIP_ASSET_ORDER = ['BTC', 'ETH', 'BNB', 'SOL'];
-export const RESULT_NUMBER_ANIM_MS = 400;
+export const RESULT_NUMBER_ANIM_MS = 180;
 export const SPOT_VALUE_SKELETON_WIDTH = '72px';
 export const SPOT_CHANGE_SKELETON_WIDTH = '56px';
 
@@ -27,12 +27,13 @@ export const POSITIONS_COPY = {
   sellHighTitle: 'Sell High',
   noData: 'N/D',
   marketError: 'No se pudo actualizar precios de mercado.',
-  autoEmptyTitle: 'Sin posiciones activas en Binance',
-  autoEmptyBody: 'Esta vista refleja las posiciones pendientes reportadas por Binance.',
-  apiMissingTitle: 'Conecta Binance para habilitar la lectura automatica',
-  apiMissingBody: 'Usa Configuracion para conectar tu cuenta y sincronizar datos.',
+  autoEmptyTitle: 'Sin posiciones activas',
+  autoEmptyBody:
+    'Esta vista refleja posiciones abiertas reportadas por los exchanges configurados.',
+  apiMissingTitle: 'Conecta un exchange para habilitar la lectura automatica',
+  apiMissingBody: 'Usa Configuracion para conectar Binance o Bybit y sincronizar datos.',
   manualEmptyTitle: 'Sin posiciones activas',
   manualEmptyBody: 'No hay posiciones cargadas para mostrar en esta vista.',
   emptyHintAuto: 'Sincroniza para consultar posiciones activas.',
-  emptyHintManual: 'Consulta tu backup o cambia a Binance para ver posiciones sincronizadas.',
+  emptyHintManual: 'Consulta tu backup o cambia a Auto para ver posiciones sincronizadas.',
 };

@@ -92,6 +92,7 @@ describe('market utils', () => {
 
     expect(await readAssetPriceUSD(market, 'ETH')).toBe(2500.5);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.cache).toBe('no-store');
   });
 
   it('resolves asset price through BTC fallback when direct pair is unavailable', async () => {

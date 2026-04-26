@@ -7,19 +7,19 @@ Guía técnica del repositorio para agentes y colaboradores humanos.
 - Stack: `Vite + TypeScript` sin framework.
 - UI: SPA por hash con vistas `dashboard`, `positions`, `simulator` y `calculadora`.
 - Persistencia: `localStorage`.
-- Gráficas: `Chart.js` cargado de forma diferida en `simulator`.
+- Proyeccion: tabla mensual en `simulator`, sin dependencia de graficos.
 - Idioma del producto: español.
 
 ## Comandos
 
-| Tarea | Comando |
-|------|---------|
-| Desarrollo | `npm run dev` |
-| Typecheck | `npm run typecheck` |
-| Tests | `npm run test:run` |
-| Build | `npm run build` |
-| Verificación completa | `npm run check` |
-| Cobertura CI | `npm run check:ci` |
+| Tarea                 | Comando             |
+| --------------------- | ------------------- |
+| Desarrollo            | `npm run dev`       |
+| Typecheck             | `npm run typecheck` |
+| Tests                 | `npm run test:run`  |
+| Build                 | `npm run build`     |
+| Verificación completa | `npm run check`     |
+| Cobertura CI          | `npm run check:ci`  |
 
 ## Arquitectura actual
 
@@ -41,12 +41,12 @@ Patrón preferido para vistas medianas o grandes:
 - `*.template.ts`: markup puro.
 - `*.dom.ts`: cacheo/selectores.
 - `*.state.ts`: persistencia/sanitización.
-- `*.chart.ts` o helpers específicos cuando hay integración externa o submódulos costosos.
+- Helpers específicos cuando hay integración externa o submódulos costosos.
 
 Estado actual:
 
 - `dashboard` ya estaba parcialmente dividido.
-- `simulator` está dividido en `constants/template/dom/chart`.
+- `simulator` está dividido en `constants/template/dom`.
 - `calculadora` está dividido en `constants/template` más `calculadora.math.ts`.
 - `positions` ya extrae `constants/template`, pero sigue siendo la vista con más lógica por desacoplar.
 
@@ -68,7 +68,15 @@ Estado actual:
 
 - Mercado: `src/utils/market.ts`, `src/utils/market-poller.ts`.
 - Integración Binance: `src/utils/binance-auth.ts`, `src/utils/binance-client.ts`, `src/utils/binance-sync.ts`.
+- Integracion Bybit V5: `src/utils/bybit-auth.ts`, `src/utils/bybit-client.ts`.
 - La app debe seguir funcionando sin credenciales y degradar con mensajes claros.
+- Cualquier cliente de exchange debe mantenerse en modo lectura: endpoints firmados `GET`, whitelist explicita de paths y validacion de permisos antes de sincronizar datos privados.
+- Bybit Dual Asset vive en `GET /v5/earn/advance/position` y requiere permiso `Earn`; se mapea como posicion `dual`.
+- Las posiciones derivadas abiertas de Bybit requieren `ContractTrade: Position`; son opcionales y su nocional no debe sumarse al saldo del Dashboard encima del wallet.
+- Si `GET /v5/account/wallet-balance` no esta permitido, los saldos Bybit deben caer a `GET /v5/asset/transfer/query-account-coins-balance` con permisos de Activos.
+- Las credenciales pueden venir del modal o de `.env.local`; los archivos `.env*` reales deben permanecer fuera de Git.
+- Las credenciales de exchanges se configuran desde el modal, no desde `.env.local`, porque Vite expone las variables `VITE_*` en el bundle del navegador.
+- Los secrets deben guardarse cifrados con `src/utils/credential-vault.ts`; la contraseña maestra vive solo en memoria de sesion y no debe escribirse en `localStorage`.
 
 ## Criterios de calidad
 

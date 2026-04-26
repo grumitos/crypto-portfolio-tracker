@@ -94,9 +94,18 @@ export function calculateDualProfitFromBilledDays(
 export function calculateDualProjectedProfit(
   position: Pick<
     DualPosition,
-    'amount' | 'apr' | 'entryDate' | 'entryTime' | 'settlementDate' | 'settlementTime'
+    | 'amount'
+    | 'apr'
+    | 'entryDate'
+    | 'entryTime'
+    | 'settlementDate'
+    | 'settlementTime'
+    | 'projectedProfit'
   >,
 ): number {
+  if (Number.isFinite(position.projectedProfit)) {
+    return position.projectedProfit as number;
+  }
   const billedDays = calculateDualProjectedBilledDays(position);
   return calculateDualProfitFromBilledDays(position.amount, position.apr, billedDays);
 }
