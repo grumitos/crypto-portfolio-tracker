@@ -34,6 +34,9 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown): vo
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.end(JSON.stringify(payload));
 }
 
@@ -166,12 +169,59 @@ async function writePlainLocalVault(payload: LocalVaultPlainPayload): Promise<vo
   await writeFile(LOCAL_VAULT_PATH, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
 }
 
-function isLocalVaultCredentials(value: unknown): value is LocalVaultExchangeCredentials {
+function firstHeader(value: IncomingMessage['headers'][string]): string {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
+function normalizeHost(value: string): string {
+  try {
+    return new URL(`http://${value}`).host.toLowerCase();
+  } catch {
+    return value.toLowerCase();
+  }
+}
+
+function isLocalhostHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]'
+  );
+}
+
+export function isAllowedLocalVaultRequest(req: Pick<IncomingMessage, 'headers'>): boolean {
+  const fetchSite = firstHeader(req.headers['sec-fetch-site']).toLowerCase();
+  if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') return false;
+
+  const origin = firstHeader(req.headers.origin);
+  if (!origin) return true;
+
+  const host = firstHeader(req.headers.host);
+  if (!host) return false;
+
+  try {
+    const originUrl = new URL(origin);
+    return (
+      isLocalhostHostname(originUrl.hostname) &&
+      originUrl.host.toLowerCase() === normalizeHost(host)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function isLocalVaultCredentials(value: unknown): value is LocalVaultExchangeCredentials {
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as LocalVaultExchangeCredentials).apiKey === 'string' &&
-    typeof (value as LocalVaultExchangeCredentials).apiSecret === 'string'
+    hasNonEmptyString((value as LocalVaultExchangeCredentials).apiKey) &&
+    hasNonEmptyString((value as LocalVaultExchangeCredentials).apiSecret)
   );
 }
 
@@ -180,6 +230,11 @@ function localDpapiVaultPlugin(): Plugin {
     name: 'local-dpapi-vault',
     configureServer(server) {
       server.middlewares.use('/local-vault/credentials', async (req, res) => {
+        if (!isAllowedLocalVaultRequest(req)) {
+          sendJson(res, 403, { available: false, error: 'Origen no permitido.' });
+          return;
+        }
+
         if (process.platform !== 'win32') {
           sendJson(res, 503, { available: false, error: 'DPAPI solo esta disponible en Windows.' });
           return;

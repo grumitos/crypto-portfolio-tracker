@@ -74,9 +74,8 @@ Estado actual:
 - Bybit Dual Asset vive en `GET /v5/earn/advance/position` y requiere permiso `Earn`; se mapea como posicion `dual`.
 - Las posiciones derivadas abiertas de Bybit requieren `ContractTrade: Position`; son opcionales y su nocional no debe sumarse al saldo del Dashboard encima del wallet.
 - Si `GET /v5/account/wallet-balance` no esta permitido, los saldos Bybit deben caer a `GET /v5/asset/transfer/query-account-coins-balance` con permisos de Activos.
-- Las credenciales pueden venir del modal o de `.env.local`; los archivos `.env*` reales deben permanecer fuera de Git.
-- Las credenciales de exchanges se configuran desde el modal, no desde `.env.local`, porque Vite expone las variables `VITE_*` en el bundle del navegador.
-- Los secrets deben guardarse cifrados con `src/utils/credential-vault.ts`; la contraseña maestra vive solo en memoria de sesion y no debe escribirse en `localStorage`.
+- Las credenciales de exchanges se configuran desde el modal local, no desde `.env.local`, porque Vite expone las variables `VITE_*` en el bundle del navegador.
+- Los secrets se guardan en el vault DPAPI local expuesto por `vite.config.ts` y consumido desde `src/utils/local-vault.ts`; en `localStorage` solo deben persistir metadatos no secretos como la API key.
 
 ## Criterios de calidad
 

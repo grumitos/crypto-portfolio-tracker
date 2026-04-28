@@ -24,7 +24,13 @@ export function renderAppShell(
     <header class="app-header">
       <div class="app-brand">
         <h1 class="app-title">${APP_SHELL_COPY.titlePrefix} <span>${APP_SHELL_COPY.titleSuffix}</span></h1>
-        <div class="app-last-update" id="app-last-update">${APP_SHELL_COPY.lastUpdatePending}</div>
+        <div
+          class="app-last-update"
+          id="app-last-update"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >${APP_SHELL_COPY.lastUpdatePending}</div>
       </div>
       <div class="app-shell-actions">
         <nav class="nav" aria-label="${APP_SHELL_COPY.navLabel}">

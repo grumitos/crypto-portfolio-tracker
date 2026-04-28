@@ -281,12 +281,11 @@ body {
 }
 
 .theme-toggle {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  background: transparent;
-  border-color: transparent;
+  width: var(--touch-target-size);
+  height: var(--touch-target-size);
+  min-width: var(--touch-target-size);
+  min-height: var(--touch-target-size);
+  padding: 0;
   color: var(--text-primary);
 }
 
@@ -1818,7 +1817,7 @@ select:focus-visible {
   }
 
   .theme-toggle {
-    flex: 0 0 28px;
+    flex: 0 0 var(--touch-target-size);
   }
 
   .app-title {
