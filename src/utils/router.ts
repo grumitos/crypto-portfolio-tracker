@@ -8,6 +8,16 @@ export function getCurrentView(): View {
   return currentView;
 }
 
+function ignoreViewTransitionAbort(transition: {
+  finished: Promise<void>;
+  ready: Promise<void>;
+  updateCallbackDone: Promise<void>;
+}): void {
+  void transition.ready.catch(() => undefined);
+  void transition.updateCallbackDone.catch(() => undefined);
+  void transition.finished.catch(() => undefined);
+}
+
 export function initRouter(onNavigate: (view: View) => void): void {
   window.addEventListener('hashchange', () => {
     const hash = window.location.hash.slice(1) as View;
@@ -42,7 +52,19 @@ export function navigateTo(view: View, onNavigate: (view: View) => void): void {
   currentView = view;
 
   if (!prefersReduced && 'startViewTransition' in document) {
-    document.startViewTransition!(() => onNavigate(view));
+    let didNavigate = false;
+    try {
+      ignoreViewTransitionAbort(
+        document.startViewTransition!(() => {
+          didNavigate = true;
+          onNavigate(view);
+        }),
+      );
+    } catch {
+      if (!didNavigate) {
+        onNavigate(view);
+      }
+    }
   } else {
     onNavigate(view);
   }

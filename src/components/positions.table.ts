@@ -49,10 +49,10 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
               ${isBuyLow ? '' : '<th scope="col">Valor USD</th>'}
               <th scope="col">Target</th>
               <th scope="col">Resultado</th>
-              <th scope="col">Suscripcion</th>
-              <th scope="col">Liquidacion</th>
+              <th scope="col">Suscrip.</th>
+              <th scope="col">Liq.</th>
               <th scope="col">Ganancia</th>
-              <th scope="col">Restante</th>
+              <th scope="col">Rest.</th>
             </tr>
           </thead>
           <tbody>
@@ -72,9 +72,7 @@ function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean })
   const projectedEarned = isDerivative
     ? (p.unrealizedPnlUsd ?? 0)
     : calculateDualProjectedProfit(p);
-  const projectedEarnedStr = isDerivative
-    ? formatUSDCompact(projectedEarned)
-    : formatAmount(projectedEarned, p.subscriptionAsset);
+  const earningsCell = renderEarningsCell(p, projectedEarned);
   const hasComponents = p.components && p.components.length > 1;
 
   const entryHint = getDateTimeHint(p, 'entry');
@@ -86,7 +84,7 @@ function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean })
         <span class="pos-product-label">${productLabelHtml(p)}</span>
       </td>
       <td class="mono" data-label="Monto">${formatAmount(p.amount, p.subscriptionAsset)}</td>
-      <td class="mono pos-emphasis" data-label="APR">${isDerivative ? '---' : `${p.apr.toFixed(2)}%`}</td>
+      ${renderAprCell(p)}
       ${
         options.showUsdColumn
           ? `<td class="mono pos-usd-cell" id="position-usd-${p.id}" data-label="Valor USD">${initialUsdCellHtml(p)}</td>`
@@ -96,7 +94,7 @@ function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean })
       <td class="pos-outcome-cell" data-label="Resultado">${renderOutcomeCell(p)}</td>
       <td class="pos-datetime-cell" data-label="Suscripcion">${renderDateTimeCell(p.entryDate, entryHint)}</td>
       <td class="pos-datetime-cell" data-label="Liquidacion">${isDerivative ? '<span class="pos-date-value">---</span>' : renderDateTimeCell(p.settlementDate, settlementHint)}</td>
-      <td class="mono pos-earn-cell" data-label="Ganancia">${isDerivative && projectedEarned < 0 ? '' : '+'}${projectedEarnedStr}</td>
+      <td class="${earningsCell.className}" id="position-earn-${escapeHtml(p.id)}" data-label="Ganancia">${earningsCell.html}</td>
       <td class="pos-row-tail${hasComponents ? ' pos-row-tail-grouped' : ''}" data-label="Restante">
         <span class="pos-row-tail-content">
           <span id="position-remaining-${p.id}">${daysDisplay}</span>
@@ -119,6 +117,39 @@ function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean })
 
   const componentRows = renderComponentRows(p, options);
   return mainRow + componentRows;
+}
+
+function renderAprCell(position: DualPosition): string {
+  if (position.positionKind === 'derivative') {
+    return '<td class="mono pos-emphasis" data-label="APR">---</td>';
+  }
+
+  if (position.positionKind === 'discount-buy') {
+    return `<td class="mono pos-emphasis text-muted" id="position-apr-${escapeHtml(position.id)}" data-label="APR"><span class="skeleton skeleton-number" style="width:64px"></span></td>`;
+  }
+
+  return `<td class="mono pos-emphasis" data-label="APR">${position.apr.toFixed(2)}%</td>`;
+}
+
+function renderEarningsCell(
+  position: DualPosition,
+  projectedEarned: number,
+): { className: string; html: string } {
+  if (position.positionKind === 'discount-buy') {
+    return {
+      className: 'mono pos-earn-cell pos-earn-cell--market text-muted',
+      html: '<span class="skeleton skeleton-number" style="width:72px"></span>',
+    };
+  }
+
+  const isDerivative = position.positionKind === 'derivative';
+  const projectedEarnedStr = isDerivative
+    ? formatUSDCompact(projectedEarned)
+    : formatAmount(projectedEarned, position.subscriptionAsset);
+  return {
+    className: 'mono pos-earn-cell',
+    html: `${isDerivative && projectedEarned < 0 ? '' : '+'}${projectedEarnedStr}`,
+  };
 }
 
 function renderComponentRows(parent: DualPosition, options: { showUsdColumn: boolean }): string {
@@ -178,6 +209,10 @@ function renderOutcomeCell(position: DualPosition): string {
     return '<span class="pos-outcome-muted">Mercado abierto</span>';
   }
 
+  if (position.positionKind === 'discount-buy') {
+    return renderDiscountBuyOutcomeCell(position);
+  }
+
   const rows = resolveOutcomeRows(position);
   return `
     <span class="pos-outcome-stack">
@@ -194,6 +229,19 @@ function renderOutcomeCell(position: DualPosition): string {
   `;
 }
 
+function renderDiscountBuyOutcomeCell(position: DualPosition): string {
+  const purchaseAmount = position.targetPrice > 0 ? position.amount / position.targetPrice : 0;
+
+  return `
+    <span class="pos-outcome-stack">
+      <span class="pos-outcome-line pos-outcome-line--compact pos-outcome-line--change">
+        <span class="pos-outcome-label">Compra</span>
+        <span class="mono pos-outcome-value">${formatAmount(purchaseAmount, position.asset)}</span>
+      </span>
+    </span>
+  `;
+}
+
 function resolveOutcomeRows(
   position: DualPosition,
 ): Array<{ label: string; amount: number; asset: string; changed: boolean }> {
@@ -202,24 +250,9 @@ function resolveOutcomeRows(
       ? (position.projectedProfit as number)
       : calculateDualProjectedProfit(position);
 
-  if (
-    position.expectedSettlementAsset &&
-    Number.isFinite(position.expectedSettlementAmount) &&
-    (position.expectedSettlementAmount as number) > 0
-  ) {
-    return [
-      {
-        label: 'Reporta',
-        amount: position.expectedSettlementAmount as number,
-        asset: position.expectedSettlementAsset,
-        changed: position.expectedSettlementAsset !== position.subscriptionAsset,
-      },
-    ];
-  }
-
   if (position.direction === 'buy-low') {
     const executedAmount = position.targetPrice > 0 ? position.amount / position.targetPrice : 0;
-    return [
+    return applyExpectedSettlementRow(position, [
       { label: 'Ejecuta', amount: executedAmount, asset: position.asset, changed: true },
       {
         label: 'No ejec.',
@@ -227,10 +260,10 @@ function resolveOutcomeRows(
         asset: position.subscriptionAsset,
         changed: false,
       },
-    ];
+    ]);
   }
 
-  return [
+  return applyExpectedSettlementRow(position, [
     {
       label: 'Ejecuta',
       amount: position.amount * position.targetPrice + projectedProfit,
@@ -243,7 +276,31 @@ function resolveOutcomeRows(
       asset: position.subscriptionAsset,
       changed: false,
     },
-  ];
+  ]);
+}
+
+function applyExpectedSettlementRow(
+  position: DualPosition,
+  rows: Array<{ label: string; amount: number; asset: string; changed: boolean }>,
+): Array<{ label: string; amount: number; asset: string; changed: boolean }> {
+  if (
+    !position.expectedSettlementAsset ||
+    !Number.isFinite(position.expectedSettlementAmount) ||
+    (position.expectedSettlementAmount as number) <= 0
+  ) {
+    return rows;
+  }
+
+  let replaced = false;
+  return rows.map((row) => {
+    if (replaced || row.asset !== position.expectedSettlementAsset) return row;
+    replaced = true;
+    return {
+      ...row,
+      amount: position.expectedSettlementAmount as number,
+      changed: position.expectedSettlementAsset !== position.subscriptionAsset,
+    };
+  });
 }
 
 function formatRemainingTime(position: DualPosition): string {
@@ -344,6 +401,10 @@ function productLabel(position: DualPosition): string {
   if (position.positionKind === 'derivative' && position.displaySymbol) {
     const side = position.side === 'short' ? 'Short' : 'Long';
     return `${position.displaySymbol} ${side}`;
+  }
+
+  if (position.positionKind === 'discount-buy') {
+    return `${position.asset}/${position.subscriptionAsset}`;
   }
 
   if (position.direction === 'sell-high') {

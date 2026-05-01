@@ -174,6 +174,33 @@ describe('storage', () => {
     expect(next.autoPositions.map((position) => position.id)).toEqual(['binance_1']);
   });
 
+  it('preserves Bybit Discount Buy positions in auto mode data', () => {
+    saveStoredPositionsMode('auto');
+    replaceAutoPositions([
+      {
+        id: 'bybit_discount_buy_11959',
+        asset: 'BTC',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 200,
+        targetPrice: 74019,
+        entryDate: '2026-04-14',
+        settlementDate: '2026-04-15',
+        apr: 1,
+        source: 'Bybit',
+        positionKind: 'discount-buy',
+        displaySymbol: 'BTCUSDT',
+        projectedProfit: 0.005479452054794521,
+      },
+    ]);
+
+    const position = loadState().autoPositions[0];
+    expect(position.positionKind).toBe('discount-buy');
+    expect(position.source).toBe('Bybit');
+    expect(position.displaySymbol).toBe('BTCUSDT');
+    expect(position.projectedProfit).toBeCloseTo(0.005479452054794521, 12);
+  });
+
   it('preserves grouped components when importing aggregated positions', () => {
     replacePositions([
       {

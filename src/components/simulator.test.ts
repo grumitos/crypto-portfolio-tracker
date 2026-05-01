@@ -70,6 +70,7 @@ function mockAutoMetrics({
       weightedApr,
       dailyEarningsUsd: 0.4,
       usdByPositionId: { p1: totalUsd },
+      aprByPositionId: { p1: weightedApr },
       priceByAsset: { USDT: 1 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,

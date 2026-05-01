@@ -1,6 +1,7 @@
 import type {
   BinanceDualPosition,
   BinanceAccountBalance,
+  BybitDiscountBuyPosition,
   BybitDualAssetPosition,
   BybitPosition,
   DualPosition,
@@ -11,6 +12,7 @@ import { fetchDualPositions, fetchAccountBalances } from './binance-client';
 import { hasBybitApiCredentials } from './bybit-auth';
 import {
   fetchBybitAssetBalances,
+  fetchBybitDiscountBuyPositions,
   fetchBybitDualAssetPositions,
   fetchBybitOpenPositions,
   fetchBybitWalletBalances,
@@ -142,6 +144,29 @@ function mapBybitDualAssetPosition(position: BybitDualAssetPosition): DualPositi
     projectedProfit: position.projectedProfit,
     expectedSettlementAsset: position.expectedSettlementAsset,
     expectedSettlementAmount: position.expectedSettlementAmount,
+  };
+}
+
+function mapBybitDiscountBuyPosition(position: BybitDiscountBuyPosition): DualPosition {
+  const entryTimestamp = position.yieldStartAt ?? Date.now();
+  const entry = toLocalDateTimeParts(new Date(entryTimestamp));
+  const settlement = toLocalDateTimeParts(new Date(position.settlementTime));
+  return {
+    id: position.id,
+    asset: position.underlyingAsset,
+    direction: 'buy-low',
+    subscriptionAsset: position.coin,
+    amount: position.amount,
+    targetPrice: position.purchasePrice,
+    entryDate: entry.date,
+    entryTime: entry.time,
+    settlementDate: settlement.date,
+    settlementTime: settlement.time,
+    apr: position.apr,
+    source: 'Bybit',
+    positionKind: 'discount-buy',
+    displaySymbol: `${position.underlyingAsset}${position.coin}`,
+    projectedProfit: position.projectedProfit,
   };
 }
 
@@ -361,6 +386,9 @@ export async function fetchBinancePortfolioSnapshot(
         ),
         withExchangeTimeout(fetchBybitDualAssetPositions(), 'Bybit Dual Asset positions').then(
           (positions) => positions.map(mapBybitDualAssetPosition),
+        ),
+        withExchangeTimeout(fetchBybitDiscountBuyPositions(), 'Bybit Discount Buy positions').then(
+          (positions) => positions.map(mapBybitDiscountBuyPosition),
         ),
       );
     }

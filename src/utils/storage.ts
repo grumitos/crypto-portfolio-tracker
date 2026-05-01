@@ -147,7 +147,9 @@ function sanitizePositionSource(value: unknown): DualPosition['source'] | undefi
 }
 
 function sanitizePositionKind(value: unknown): DualPosition['positionKind'] | undefined {
-  return value === 'dual' || value === 'derivative' ? value : undefined;
+  return value === 'dual' || value === 'derivative' || value === 'discount-buy'
+    ? value
+    : undefined;
 }
 
 function sanitizePositionSide(value: unknown): DualPosition['side'] | undefined {

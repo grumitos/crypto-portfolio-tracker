@@ -7,6 +7,7 @@ vi.mock('./binance-client', () => ({
 
 vi.mock('./bybit-client', () => ({
   fetchBybitAssetBalances: vi.fn(),
+  fetchBybitDiscountBuyPositions: vi.fn(),
   fetchBybitDualAssetPositions: vi.fn(),
   fetchBybitOpenPositions: vi.fn(),
   fetchBybitWalletBalances: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('./market', () => ({
 import { fetchAccountBalances, fetchDualPositions } from './binance-client';
 import {
   fetchBybitAssetBalances,
+  fetchBybitDiscountBuyPositions,
   fetchBybitDualAssetPositions,
   fetchBybitOpenPositions,
   fetchBybitWalletBalances,
@@ -80,6 +82,7 @@ describe('binance sync cache', () => {
     vi.mocked(fetchBybitWalletBalances).mockResolvedValue([]);
     vi.mocked(fetchBybitOpenPositions).mockResolvedValue([]);
     vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([]);
+    vi.mocked(fetchBybitDiscountBuyPositions).mockResolvedValue([]);
   });
 
   it('reuses balance summary within 60 seconds', async () => {
@@ -265,6 +268,46 @@ describe('binance sync cache', () => {
           targetPrice: 2325,
           apr: 902.7,
           projectedProfit: 1.25,
+        }),
+      ]),
+    );
+  });
+
+  it('includes Bybit Discount Buy positions in the automatic snapshot', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitDiscountBuyPositions).mockResolvedValue([
+      {
+        id: 'bybit_discount_buy_11959',
+        productId: '7037',
+        coin: 'USDT',
+        underlyingAsset: 'BTC',
+        amount: 200,
+        apr: 1,
+        purchasePrice: 74019,
+        knockoutPrice: 76050,
+        settlementTime: Date.parse('2026-04-15T08:00:00.000Z'),
+        status: 'Active',
+        duration: '1d',
+        yieldStartAt: Date.parse('2026-04-14T08:00:00.000Z'),
+        projectedProfit: 0.005479452054794521,
+      },
+    ]);
+
+    const snapshot = await fetchBinancePortfolioSnapshot(true);
+
+    expect(snapshot.positions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'bybit_discount_buy_11959',
+          source: 'Bybit',
+          positionKind: 'discount-buy',
+          displaySymbol: 'BTCUSDT',
+          direction: 'buy-low',
+          subscriptionAsset: 'USDT',
+          amount: 200,
+          targetPrice: 74019,
+          apr: 1,
+          projectedProfit: 0.005479452054794521,
         }),
       ]),
     );

@@ -577,6 +577,96 @@ describe('bybit client', () => {
     expect(positions[0]?.projectedProfit).toBeCloseTo(168.041680475, 8);
   });
 
+  it('fetches active Discount Buy positions through the Earn read endpoint', async () => {
+    await seedCredentials();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          retCode: 0,
+          retMsg: 'OK',
+          result: {
+            readOnly: 1,
+            permissions: { Earn: ['Earn'] },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          retCode: 0,
+          retMsg: 'OK',
+          result: {
+            category: '',
+            nextPageCursor: '',
+            list: [
+              {
+                positionId: '11959',
+                productId: '7037',
+                category: 'DiscountBuy',
+                coin: 'USDT',
+                underlyingAsset: 'BTC',
+                amount: '200',
+                purchasePrice: '74019',
+                knockoutPrice: '76050',
+                knockoutCouponE8: '1000000',
+                status: 'Active',
+                orderId: '38f6f5ce-57e2-4d69-b4d3-c39464389ccb',
+                duration: '1d',
+                settlementTime: '1776240000000',
+                accountType: 'FUND',
+                toAccountType: 'FUND',
+                settleType: 'Base',
+                expectReceiveAt: '1776240900000',
+              },
+              {
+                positionId: '11960',
+                productId: '7038',
+                category: 'DiscountBuy',
+                coin: 'USDT',
+                underlyingAsset: 'ETH',
+                amount: '0',
+                purchasePrice: '2000',
+                knockoutPrice: '2100',
+                knockoutCouponE8: '1000000',
+                status: 'Active',
+                settlementTime: '1776240000000',
+              },
+            ],
+          },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./bybit-client');
+    const positions = await client.fetchBybitDiscountBuyPositions();
+
+    expect(positions).toEqual([
+      {
+        id: 'bybit_discount_buy_11959',
+        productId: '7037',
+        coin: 'USDT',
+        underlyingAsset: 'BTC',
+        amount: 200,
+        apr: 1,
+        purchasePrice: 74019,
+        knockoutPrice: 76050,
+        settlementTime: 1776240000000,
+        status: 'Active',
+        orderId: '38f6f5ce-57e2-4d69-b4d3-c39464389ccb',
+        duration: '1d',
+        accountType: 'FUND',
+        toAccountType: 'FUND',
+        settleType: 'Base',
+        expectReceiveAt: 1776240900000,
+        yieldStartAt: 1776153600000,
+        projectedProfit: 0.005479452054794521,
+      },
+    ]);
+    expect((fetchMock.mock.calls[1] as [string, RequestInit])[0]).toBe(
+      '/bybit-api/v5/earn/advance/position?category=DiscountBuy&limit=20',
+    );
+  });
+
   it('skips Dual Asset positions when the Bybit key lacks Earn permission', async () => {
     await seedCredentials();
     const fetchMock = vi.fn().mockResolvedValue(

@@ -176,11 +176,11 @@
 }
 
 .goal-progress-zone-muted.breakeven {
-  background: transparent;
+  background: var(--goal-progress-be-muted);
 }
 
 .goal-progress-zone-muted.goal {
-  background: transparent;
+  background: var(--goal-progress-meta-muted);
 }
 
 .goal-progress-bar.mode-goal .zone-first.goal-progress-zone {
@@ -188,7 +188,7 @@
 }
 
 .goal-progress-bar.mode-goal .zone-first.goal-progress-zone-muted {
-  background: transparent;
+  background: var(--goal-progress-meta-muted);
 }
 
 .goal-progress-foot {

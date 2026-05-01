@@ -5,6 +5,7 @@ import type { AppState } from '../types';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
 import { clearApiRuntimeCache } from '../utils/api-runtime-cache';
 import { resetMarketPollerForTests } from '../utils/market-poller';
+import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
 
 vi.mock('../utils/market', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/market')>();
@@ -96,6 +97,7 @@ describe('positions integration', () => {
       weightedApr: 35,
       dailyEarningsUsd: 0.4,
       usdByPositionId: { p1: 400 },
+      aprByPositionId: { p1: 35 },
       priceByAsset: { USDT: 1 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,
@@ -209,6 +211,46 @@ describe('positions integration', () => {
     container.remove();
   });
 
+  it('hydrates Discount Buy earnings from the no-knockout spot spread', async () => {
+    seedState([
+      {
+        id: 'bybit_discount_buy_1',
+        asset: 'ETH',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 1000,
+        targetPrice: 1900,
+        entryDate: '2026-02-20',
+        entryTime: '08:45',
+        settlementDate: '2026-02-21',
+        settlementTime: '08:45',
+        apr: 10,
+        positionKind: 'discount-buy',
+        projectedProfit: 0.27,
+      },
+    ]);
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, vi.fn());
+
+    expect(container.querySelector('#position-earn-bybit_discount_buy_1')?.textContent).not.toContain(
+      '+0.27 USDT',
+    );
+
+    await flushMicrotasks();
+
+    const earnCell = container.querySelector('#position-earn-bybit_discount_buy_1') as HTMLElement;
+    expect(earnCell.textContent).toContain('+52.63 USDT');
+    expect(earnCell.textContent).not.toContain('+0.27 USDT');
+    expect(container.querySelector('#position-apr-bybit_discount_buy_1')?.textContent).toContain(
+      '1921.05%',
+    );
+
+    dispose();
+    container.remove();
+  });
+
   it('shows USD equivalent for sell-high crypto positions', async () => {
     seedState([
       {
@@ -230,6 +272,7 @@ describe('positions integration', () => {
       weightedApr: 35,
       dailyEarningsUsd: 0.4,
       usdByPositionId: { p1: 400 },
+      aprByPositionId: { p1: 35 },
       priceByAsset: { ETH: 2000 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,
@@ -367,6 +410,7 @@ describe('positions integration', () => {
       weightedApr: 55,
       dailyEarningsUsd: 0.6,
       usdByPositionId: { p1: 500 },
+      aprByPositionId: { p1: 55 },
       priceByAsset: { USDT: 1 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,
@@ -390,6 +434,86 @@ describe('positions integration', () => {
     disposeSecond();
     secondContainer.remove();
     rafSpy.mockRestore();
+  });
+
+  it('keeps auto-synced rows mounted when only live values change', async () => {
+    vi.useFakeTimers();
+    mockMatchMedia(true);
+
+    const firstPosition: AppState['positions'][number] = {
+      id: 'bybit_derivative_btcusdt',
+      asset: 'BTC',
+      direction: 'sell-high',
+      subscriptionAsset: 'USDT',
+      amount: 1,
+      targetPrice: 0,
+      entryDate: '2026-02-20',
+      entryTime: '08:45',
+      settlementDate: '2026-02-23',
+      settlementTime: '03:00',
+      apr: 0,
+      positionKind: 'derivative',
+      displaySymbol: 'BTCUSDT',
+      side: 'long',
+      notionalUsd: 1000,
+      unrealizedPnlUsd: 12,
+    };
+    const firstPositions: AppState['positions'] = [firstPosition];
+    const secondPositions: AppState['positions'] = [
+      {
+        ...firstPosition,
+        unrealizedPnlUsd: 24,
+      },
+    ];
+
+    seedState(firstPositions, { mode: 'auto' });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance)
+      .mockImplementationOnce(async () => {
+        seedState(firstPositions, { mode: 'auto' });
+        return {
+          positions: firstPositions,
+          count: firstPositions.length,
+          balances: [],
+          totalUsdEstimate: 0,
+        };
+      })
+      .mockImplementationOnce(async () => {
+        seedState(secondPositions, { mode: 'auto' });
+        return {
+          positions: secondPositions,
+          count: secondPositions.length,
+          balances: [],
+          totalUsdEstimate: 0,
+        };
+      });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, vi.fn());
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const row = container.querySelector('[data-id="bybit_derivative_btcusdt"]');
+      const earn = container.querySelector('#position-earn-bybit_derivative_btcusdt');
+      expect(row).not.toBeNull();
+      expect(earn?.textContent).toContain('+$12');
+
+      await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(container.querySelector('[data-id="bybit_derivative_btcusdt"]')).toBe(row);
+      expect(earn?.textContent).toContain('+$24');
+      expect(syncPositionsFromBinance).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+      container.remove();
+      vi.useRealTimers();
+    }
   });
 
   it('renders the tracking view in read-only mode', async () => {
@@ -457,6 +581,7 @@ describe('positions integration', () => {
       weightedApr: 35,
       dailyEarningsUsd: 0.4,
       usdByPositionId: { p1: 400 },
+      aprByPositionId: { p1: 35 },
       priceByAsset: { USDT: 1 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: true,
@@ -503,6 +628,7 @@ describe('positions integration', () => {
       weightedApr: 35,
       dailyEarningsUsd: 0.4,
       usdByPositionId: { p1: 400 },
+      aprByPositionId: { p1: 35 },
       priceByAsset: { USDT: 1 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,
@@ -564,6 +690,7 @@ describe('positions integration', () => {
       weightedApr: 35,
       dailyEarningsUsd: 0.6,
       usdByPositionId: { p1: 450, p2: 150 },
+      aprByPositionId: { p1: 35, p2: 35 },
       priceByAsset: { USDT: 1 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,
@@ -621,6 +748,7 @@ describe('positions integration', () => {
       weightedApr: 35,
       dailyEarningsUsd: 0.4,
       usdByPositionId: { p1: 400 },
+      aprByPositionId: { p1: 35 },
       priceByAsset: { USDT: 1 },
       marketLastUpdatedAt: Date.now(),
       hasStalePrices: false,

@@ -29,6 +29,7 @@ export function getPositionsCacheKey(positions: DualPosition[]): string {
         id: position.id,
         asset: position.asset,
         direction: position.direction,
+        positionKind: position.positionKind ?? 'dual',
         subscriptionAsset: position.subscriptionAsset,
         amount: position.amount,
         targetPrice: position.targetPrice,

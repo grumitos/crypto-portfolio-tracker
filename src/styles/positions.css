@@ -213,8 +213,8 @@ tr:hover .pos-row-actions {
 }
 
 .positions-table {
-  width: max(100%, 1130px);
-  min-width: 1130px;
+  width: 100%;
+  min-width: 1040px;
   border-collapse: collapse;
   font-size: var(--font-size-body);
   table-layout: fixed;
@@ -222,8 +222,7 @@ tr:hover .pos-row-actions {
 }
 
 .positions-table--buy-low {
-  width: max(100%, 1130px);
-  min-width: 1130px;
+  min-width: 980px;
 }
 
 .positions-table td {
@@ -231,43 +230,76 @@ tr:hover .pos-row-actions {
 }
 
 .positions-table col.col-pos-asset {
-  width: 132px;
+  width: 11%;
 }
 
 .positions-table col.col-pos-amount {
-  width: 128px;
+  width: 12%;
 }
 
 .positions-table col.col-pos-apr {
-  width: 68px;
+  width: 7%;
 }
 
 .positions-table col.col-pos-usd {
-  width: 90px;
+  width: 9%;
 }
 
 .positions-table col.col-pos-target {
-  width: 76px;
+  width: 7%;
 }
 
 .positions-table col.col-pos-outcome {
-  width: 170px;
+  width: 15%;
 }
 
 .positions-table col.col-pos-subscription {
-  width: 104px;
+  width: 9.5%;
 }
 
 .positions-table col.col-pos-settlement {
-  width: 104px;
+  width: 9.5%;
 }
 
 .positions-table col.col-pos-earnings {
-  width: 124px;
+  width: 13%;
 }
 
 .positions-table col.col-pos-remaining {
-  width: 86px;
+  width: 7%;
+}
+
+.positions-table--buy-low col.col-pos-asset {
+  width: 12%;
+}
+
+.positions-table--buy-low col.col-pos-amount {
+  width: 14.5%;
+}
+
+.positions-table--buy-low col.col-pos-apr {
+  width: 9%;
+}
+
+.positions-table--buy-low col.col-pos-target {
+  width: 7.5%;
+}
+
+.positions-table--buy-low col.col-pos-outcome {
+  width: 18%;
+}
+
+.positions-table--buy-low col.col-pos-subscription,
+.positions-table--buy-low col.col-pos-settlement {
+  width: 10.5%;
+}
+
+.positions-table--buy-low col.col-pos-earnings {
+  width: 12%;
+}
+
+.positions-table--buy-low col.col-pos-remaining {
+  width: 6%;
 }
 
 .position-datetime-inputs {
@@ -336,6 +368,13 @@ tr:hover .pos-row-actions {
   min-width: 0;
 }
 
+.pos-outcome-line--compact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+}
+
 .pos-outcome-label {
   color: var(--text-muted);
   font-size: var(--positions-type-micro);
@@ -355,6 +394,10 @@ tr:hover .pos-row-actions {
 .pos-outcome-line--change .pos-outcome-value {
   color: var(--color-gain);
   font-weight: 600;
+}
+
+.pos-outcome-line--compact .pos-outcome-value {
+  display: inline;
 }
 
 .pos-outcome-muted {
@@ -522,7 +565,7 @@ tr:hover .pos-row-actions {
 .positions-table th {
   box-sizing: border-box;
   text-align: left;
-  padding: 0.58rem 0.45rem;
+  padding: 0.56rem 0.38rem;
   font-weight: 500;
   color: var(--text-muted);
   font-size: var(--positions-type-header);
@@ -538,7 +581,7 @@ tr:hover .pos-row-actions {
 
 .positions-table td {
   box-sizing: border-box;
-  padding: 0.62rem 0.45rem;
+  padding: 0.6rem 0.38rem;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
   white-space: nowrap;

@@ -1,5 +1,6 @@
 import type { DualPosition } from '../types';
 import { dailyEarnings as calculateDailyEarnings } from './calculator';
+import { calculateDualProjectedBilledDays } from './dual-yield';
 
 const STABLE_ASSETS = new Set(['USD', 'USDT', 'USDC', 'FDUSD', 'BUSD']);
 const priceCache = new Map<string, { value: number; ts: number }>();
@@ -78,6 +79,7 @@ export interface PositionMetrics {
   weightedApr: number;
   dailyEarningsUsd: number;
   usdByPositionId: Record<string, number>;
+  aprByPositionId: Record<string, number>;
   priceByAsset: Record<string, number>;
   marketLastUpdatedAt: number | null;
   hasStalePrices: boolean;
@@ -103,6 +105,53 @@ function isStable(asset: string): boolean {
 
 export function normalizeAsset(asset: string): string {
   return asset.toUpperCase().trim();
+}
+
+export function calculateDiscountBuyNoKnockoutProfit(
+  position: Pick<DualPosition, 'asset' | 'amount' | 'targetPrice'>,
+  snapshot: AssetPriceSnapshot,
+): number | null {
+  const asset = normalizeAsset(position.asset);
+  const spotPrice = asset ? (snapshot.priceByAsset[asset] ?? 0) : 0;
+  if (!Number.isFinite(spotPrice) || spotPrice <= 0) return null;
+  if (!Number.isFinite(position.amount) || position.amount <= 0) return null;
+  if (!Number.isFinite(position.targetPrice) || position.targetPrice <= 0) return null;
+
+  const purchasedAmount = position.amount / position.targetPrice;
+  return (spotPrice - position.targetPrice) * purchasedAmount;
+}
+
+export function calculateDiscountBuyEffectiveApr(
+  position: Pick<
+    DualPosition,
+    | 'asset'
+    | 'subscriptionAsset'
+    | 'amount'
+    | 'targetPrice'
+    | 'entryDate'
+    | 'entryTime'
+    | 'settlementDate'
+    | 'settlementTime'
+  >,
+  snapshot: AssetPriceSnapshot,
+): number | null {
+  const profit = calculateDiscountBuyNoKnockoutProfit(position, snapshot);
+  if (profit === null) return null;
+
+  const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
+  const subscriptionPrice = snapshot.priceByAsset[subscriptionAsset] ?? 0;
+  const capitalUsd = position.amount * subscriptionPrice;
+  const billedDays = calculateDualProjectedBilledDays(position);
+  if (!Number.isFinite(capitalUsd) || capitalUsd <= 0 || billedDays <= 0) return null;
+
+  return (profit / capitalUsd) * (365 / billedDays) * 100;
+}
+
+function resolveMetricsApr(position: DualPosition, snapshot: AssetPriceSnapshot): number {
+  if (position.positionKind === 'discount-buy') {
+    return calculateDiscountBuyEffectiveApr(position, snapshot) ?? 0;
+  }
+  return position.apr;
 }
 
 function isValidPrice(value: unknown): value is number {
@@ -452,9 +501,15 @@ function buildPositionMetricsCacheKey(positions: DualPosition[]): string {
     .map((position) =>
       [
         position.id,
+        normalizeAsset(position.asset),
         normalizeAsset(position.subscriptionAsset),
         position.amount.toFixed(8),
+        position.targetPrice.toFixed(8),
         position.apr.toFixed(8),
+        position.entryDate,
+        position.entryTime ?? '',
+        position.settlementDate,
+        position.settlementTime ?? '',
         position.positionKind ?? 'dual',
         Number.isFinite(position.notionalUsd) ? String(position.notionalUsd) : '',
       ].join(':'),
@@ -650,7 +705,8 @@ export function calculatePositionMetricsFromSnapshot(
   snapshot: AssetPriceSnapshot,
 ): PositionMetrics {
   const usdByPositionId: Record<string, number> = {};
-  const subscriptionAssets = new Set<string>();
+  const aprByPositionId: Record<string, number> = {};
+  const metricAssets = new Set<string>();
 
   let totalUsd = 0;
   let weightedAprNumerator = 0;
@@ -662,20 +718,28 @@ export function calculatePositionMetricsFromSnapshot(
       position.positionKind === 'derivative' && Number.isFinite(position.notionalUsd)
         ? Math.max(0, position.notionalUsd ?? 0)
         : position.amount * (snapshot.priceByAsset[subscriptionAsset] ?? 0);
+    const effectiveApr = resolveMetricsApr(position, snapshot);
     usdByPositionId[position.id] = usdValue;
+    aprByPositionId[position.id] = effectiveApr;
 
     totalUsd += usdValue;
-    weightedAprNumerator += position.apr * usdValue;
-    dailyEarningsUsd += calculateDailyEarnings(usdValue, position.apr);
+    weightedAprNumerator += effectiveApr * usdValue;
+    dailyEarningsUsd += calculateDailyEarnings(usdValue, effectiveApr);
 
     if (position.positionKind !== 'derivative') {
-      subscriptionAssets.add(subscriptionAsset);
+      metricAssets.add(subscriptionAsset);
+    }
+    if (position.positionKind === 'discount-buy') {
+      const underlyingAsset = normalizeAsset(position.asset);
+      if (underlyingAsset) {
+        metricAssets.add(underlyingAsset);
+      }
     }
   }
 
   const priceByAsset: Record<string, number> = {};
   const priceSourceByAsset: Record<string, PriceSource> = {};
-  subscriptionAssets.forEach((asset) => {
+  metricAssets.forEach((asset) => {
     priceByAsset[asset] = snapshot.priceByAsset[asset] ?? 0;
     priceSourceByAsset[asset] = snapshot.sourceByAsset[asset] ?? 'unavailable';
   });
@@ -686,6 +750,7 @@ export function calculatePositionMetricsFromSnapshot(
     weightedApr: totalUsd > 0 ? weightedAprNumerator / totalUsd : 0,
     dailyEarningsUsd,
     usdByPositionId,
+    aprByPositionId,
     priceByAsset,
     marketLastUpdatedAt: snapshot.marketLastUpdatedAt,
     hasStalePrices: sources.some((source) => source === 'cache-stale'),
@@ -720,9 +785,7 @@ export async function calculatePositionMetrics(
 
   const request = (async (): Promise<PositionMetrics> => {
     const snapshot = await getAssetPriceSnapshot(
-      positions
-        .filter((position) => position.positionKind !== 'derivative')
-        .map((position) => position.subscriptionAsset),
+      buildPositionMetricsAssetUniverse(positions),
       options,
     );
     const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);
@@ -740,6 +803,28 @@ export async function calculatePositionMetrics(
       positionMetricsInFlight.delete(cacheKey);
     }
   }
+}
+
+function buildPositionMetricsAssetUniverse(positions: DualPosition[]): string[] {
+  const assets = new Set<string>();
+
+  positions.forEach((position) => {
+    if (position.positionKind === 'derivative') return;
+
+    const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
+    if (subscriptionAsset) {
+      assets.add(subscriptionAsset);
+    }
+
+    if (position.positionKind === 'discount-buy') {
+      const underlyingAsset = normalizeAsset(position.asset);
+      if (underlyingAsset) {
+        assets.add(underlyingAsset);
+      }
+    }
+  });
+
+  return Array.from(assets);
 }
 
 export function clearMarketCaches(): void {

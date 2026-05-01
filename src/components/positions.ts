@@ -1,6 +1,10 @@
 import { loadState } from '../utils/storage';
 import { formatUSD, formatUSDCompact } from '../utils/calculator';
-import { normalizeAsset as normalizeAssetSymbol } from '../utils/market';
+import {
+  calculateDiscountBuyEffectiveApr,
+  calculateDiscountBuyNoKnockoutProfit,
+  normalizeAsset as normalizeAssetSymbol,
+} from '../utils/market';
 import type { AssetPriceSnapshot, PositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
@@ -37,12 +41,20 @@ import {
   SPOT_STRIP_EXCLUDED_ASSETS,
   SPOT_VALUE_SKELETON_WIDTH,
 } from './positions.constants';
-import { renderPositionsTemplate, renderSpotCardTemplate } from './positions.template';
+import {
+  renderPositionsEmptyState,
+  renderPositionsTemplate,
+  renderSpotCardTemplate,
+} from './positions.template';
 
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
 const spotStripValueAnimationByElement = new WeakMap<HTMLElement, number>();
 const spotStripChangeAnimationByElement = new WeakMap<HTMLElement, number>();
+const positionUsdAnimationByElement = new WeakMap<HTMLElement, number>();
+const positionEarnAnimationByElement = new WeakMap<HTMLElement, number>();
+const positionAprAnimationByElement = new WeakMap<HTMLElement, number>();
+const positionsCountAnimationByElement = new WeakMap<HTMLElement, number>();
 
 interface SpotAssetData {
   asset: string;
@@ -115,16 +127,60 @@ function setStatPercent(el: HTMLElement | null, value: number, animate: boolean)
   });
 }
 
-function setSpotValue(el: HTMLElement | null, value: number): void {
+function setAnimatedFallbackText(
+  el: HTMLElement | null,
+  numericMap: WeakMap<HTMLElement, number>,
+  text: string,
+): void {
   if (!el) return;
+  stopValueAnimation(numericMap, el);
+  delete el.dataset.numericValue;
+  setAnimatedText(textAnimationByElement, el, text, {
+    enabled: true,
+    mode: 'fade',
+    className: 'text-swap',
+  });
+}
+
+function setPositionsCount(el: HTMLElement | null, count: number, animate: boolean): void {
+  if (!el) return;
+  stopValueAnimation(textAnimationByElement, el);
+  setAnimatedNumber(positionsCountAnimationByElement, el, count, (next) => {
+    return String(Math.max(0, Math.round(next)));
+  }, {
+    enabled: animate,
+    durationMs: RESULT_NUMBER_ANIM_MS,
+    epsilon: 0.49,
+    allowRememberedStart: false,
+  });
+}
+
+function setPositionUsdValue(el: HTMLElement | null, value: number): void {
+  if (!el) return;
+
   if (!Number.isFinite(value) || value <= 0) {
-    stopValueAnimation(spotStripValueAnimationByElement, el);
-    delete el.dataset.numericValue;
-    el.textContent = POSITIONS_COPY.noData;
+    setAnimatedFallbackText(el, positionUsdAnimationByElement, POSITIONS_COPY.noData);
     el.classList.add('text-muted');
     return;
   }
 
+  stopValueAnimation(textAnimationByElement, el);
+  el.classList.remove('text-muted');
+  setAnimatedNumber(positionUsdAnimationByElement, el, value, (next) => formatUSDCompact(next), {
+    enabled: true,
+    durationMs: RESULT_NUMBER_ANIM_MS,
+  });
+}
+
+function setSpotValue(el: HTMLElement | null, value: number): void {
+  if (!el) return;
+  if (!Number.isFinite(value) || value <= 0) {
+    setAnimatedFallbackText(el, spotStripValueAnimationByElement, POSITIONS_COPY.noData);
+    el.classList.add('text-muted');
+    return;
+  }
+
+  stopValueAnimation(textAnimationByElement, el);
   el.classList.remove('text-muted');
   setAnimatedNumber(spotStripValueAnimationByElement, el, value, (next) => formatUSD(next), {
     enabled: true,
@@ -139,15 +195,124 @@ function formatSpotChange(value: number): string {
   return `${arrow}${sign}${value.toFixed(2)}%`;
 }
 
+function formatSignedUsdt(value: number): string {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return `${sign}${formatUSDCompact(Math.abs(value)).replace('$', '')} USDT`;
+}
+
+function formatSignedUsdCompact(value: number): string {
+  if (value > 0) return `+${formatUSDCompact(value)}`;
+  return formatUSDCompact(value);
+}
+
+function formatAprPercent(value: number): string {
+  return `${value.toFixed(2)}%`;
+}
+
+function updateDiscountBuyAprs(
+  container: HTMLElement,
+  positions: DualPosition[],
+  snapshot: AssetPriceSnapshot,
+): void {
+  const doc = container.ownerDocument;
+  positions.forEach((position) => {
+    if (position.positionKind !== 'discount-buy') return;
+
+    const el = doc.getElementById(`position-apr-${position.id}`) as HTMLElement | null;
+    if (!el || !container.contains(el)) return;
+
+    const apr = calculateDiscountBuyEffectiveApr(position, snapshot);
+    el.classList.remove('text-loss', 'text-muted');
+
+    if (apr === null) {
+      setAnimatedFallbackText(el, positionAprAnimationByElement, POSITIONS_COPY.noData);
+      el.classList.add('text-muted');
+      return;
+    }
+
+    stopValueAnimation(textAnimationByElement, el);
+    setAnimatedNumber(positionAprAnimationByElement, el, apr, formatAprPercent, {
+      enabled: true,
+      durationMs: RESULT_NUMBER_ANIM_MS,
+    });
+
+    if (apr < 0) {
+      el.classList.add('text-loss');
+    } else if (apr === 0) {
+      el.classList.add('text-muted');
+    }
+  });
+}
+
+function updateDiscountBuyEarnings(
+  container: HTMLElement,
+  positions: DualPosition[],
+  snapshot: AssetPriceSnapshot,
+): void {
+  const doc = container.ownerDocument;
+  positions.forEach((position) => {
+    if (position.positionKind !== 'discount-buy') return;
+
+    const el = doc.getElementById(`position-earn-${position.id}`) as HTMLElement | null;
+    if (!el || !container.contains(el)) return;
+
+    const profit = calculateDiscountBuyNoKnockoutProfit(position, snapshot);
+    el.classList.remove('text-gain', 'text-loss', 'text-muted');
+
+    if (profit === null) {
+      setAnimatedFallbackText(el, positionEarnAnimationByElement, POSITIONS_COPY.noData);
+      el.classList.add('text-muted');
+      return;
+    }
+
+    stopValueAnimation(textAnimationByElement, el);
+    setAnimatedNumber(positionEarnAnimationByElement, el, profit, formatSignedUsdt, {
+      enabled: true,
+      durationMs: RESULT_NUMBER_ANIM_MS,
+    });
+    if (profit > 0) {
+      el.classList.add('text-gain');
+    } else if (profit < 0) {
+      el.classList.add('text-loss');
+    } else {
+      el.classList.add('text-muted');
+    }
+  });
+}
+
+function updateDerivativeEarnings(container: HTMLElement, positions: DualPosition[]): void {
+  const doc = container.ownerDocument;
+  positions.forEach((position) => {
+    if (position.positionKind !== 'derivative') return;
+
+    const el = doc.getElementById(`position-earn-${position.id}`) as HTMLElement | null;
+    if (!el || !container.contains(el)) return;
+
+    const pnl = position.unrealizedPnlUsd ?? 0;
+    el.classList.remove('text-gain', 'text-loss', 'text-muted');
+    stopValueAnimation(textAnimationByElement, el);
+    setAnimatedNumber(positionEarnAnimationByElement, el, pnl, formatSignedUsdCompact, {
+      enabled: true,
+      durationMs: RESULT_NUMBER_ANIM_MS,
+    });
+
+    if (pnl > 0) {
+      el.classList.add('text-gain');
+    } else if (pnl < 0) {
+      el.classList.add('text-loss');
+    } else {
+      el.classList.add('text-muted');
+    }
+  });
+}
+
 function setSpotChange(el: HTMLElement | null, value: number | null): void {
   if (!el) return;
   const cardEl = el.closest('.positions-spot-card');
 
   const isValid = typeof value === 'number' && Number.isFinite(value);
   if (!isValid) {
-    stopValueAnimation(spotStripChangeAnimationByElement, el);
-    delete el.dataset.numericValue;
-    el.textContent = POSITIONS_COPY.noData;
+    setAnimatedFallbackText(el, spotStripChangeAnimationByElement, POSITIONS_COPY.noData);
     el.classList.remove('text-gain', 'text-loss');
     el.classList.add('text-muted');
     cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
@@ -169,6 +334,7 @@ function setSpotChange(el: HTMLElement | null, value: number | null): void {
   else if (next < 0) cardEl?.classList.add('is-loss');
   else cardEl?.classList.add('is-flat');
 
+  stopValueAnimation(textAnimationByElement, el);
   setAnimatedNumber(
     spotStripChangeAnimationByElement,
     el,
@@ -240,6 +406,46 @@ function createSpotCard(asset: string): HTMLElement {
   card.innerHTML = renderSpotCardTemplate(asset);
   bindSpotCardLogo(card, asset);
   return card;
+}
+
+function renderPositionTablesMarkup(positions: DualPosition[]): string {
+  const buyLow = positions.filter((p) => p.direction === 'buy-low');
+  const sellHigh = positions.filter((p) => p.direction === 'sell-high');
+
+  return `
+    ${buyLow.length > 0 ? renderPositionGroup(POSITIONS_COPY.buyLowTitle, buyLow) : ''}
+    ${sellHigh.length > 0 ? renderPositionGroup(POSITIONS_COPY.sellHighTitle, sellHigh) : ''}
+  `;
+}
+
+function shouldRenderPositionTables(
+  tablesContainer: Element,
+  positions: DualPosition[],
+  forceRender: boolean,
+): boolean {
+  if (forceRender) return true;
+  const hasRows = tablesContainer.querySelector('[data-id]') !== null;
+  const hasEmptyState = tablesContainer.querySelector('.positions-empty-state') !== null;
+  if (positions.length > 0) return !hasRows;
+  return !hasEmptyState;
+}
+
+function updatePositionTables(
+  container: HTMLElement,
+  positions: DualPosition[],
+  options: { forceRender: boolean; autoMode: boolean; hasApi: boolean },
+): void {
+  const tablesContainer = container.querySelector('#positions-tables-container');
+  if (!tablesContainer) return;
+  if (!shouldRenderPositionTables(tablesContainer, positions, options.forceRender)) return;
+
+  if (positions.length > 0) {
+    tablesContainer.innerHTML = renderPositionTablesMarkup(positions);
+    bindAssetLogoFallbacks(tablesContainer);
+    return;
+  }
+
+  tablesContainer.innerHTML = renderPositionsEmptyState(options.autoMode, options.hasApi);
 }
 
 function updateSpotStrip(
@@ -360,13 +566,14 @@ function applyPositionMarketData(
   }
 
   updateSpotStrip(container, positions, snapshot);
+  updateDiscountBuyAprs(container, positions, snapshot);
+  updateDiscountBuyEarnings(container, positions, snapshot);
+  updateDerivativeEarnings(container, positions);
 
   positions.forEach((position) => {
     const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;
     const usdValue = metrics.usdByPositionId[position.id] ?? 0;
-    if (rowEl) {
-      rowEl.textContent = usdValue > 0 ? formatUSDCompact(usdValue) : 'N/D';
-    }
+    setPositionUsdValue(rowEl, usdValue);
 
     if (position.components && position.amount > 0) {
       position.components.forEach((component) => {
@@ -376,8 +583,7 @@ function applyPositionMarketData(
         if (!componentRowEl) return;
         const ratio = component.amount / position.amount;
         const componentUsdValue = usdValue * ratio;
-        componentRowEl.textContent =
-          componentUsdValue > 0 ? formatUSDCompact(componentUsdValue) : 'N/D';
+        setPositionUsdValue(componentRowEl, componentUsdValue);
       });
     }
   });
@@ -408,29 +614,12 @@ async function performAutoSync(
     const { positions: synced, count } = snapshot;
     const nextPositionsKey = getPositionsCacheKey(synced);
 
-    const countEl = container.querySelector('#positions-count');
-    if (countEl) countEl.textContent = String(count);
-
-    const tablesContainer = container.querySelector('#positions-tables-container');
-    if (tablesContainer) {
-      const buyLow = synced.filter((p) => p.direction === 'buy-low');
-      const sellHigh = synced.filter((p) => p.direction === 'sell-high');
-
-      if (synced.length > 0) {
-        tablesContainer.innerHTML = `
-          ${buyLow.length > 0 ? renderPositionGroup(POSITIONS_COPY.buyLowTitle, buyLow) : ''}
-          ${sellHigh.length > 0 ? renderPositionGroup(POSITIONS_COPY.sellHighTitle, sellHigh) : ''}
-        `;
-        bindAssetLogoFallbacks(tablesContainer);
-      } else {
-        tablesContainer.innerHTML = `
-          <div class="card empty-state">
-            <p>${POSITIONS_COPY.autoEmptyTitle}</p>
-            <p class="text-muted">${POSITIONS_COPY.autoEmptyBody}</p>
-          </div>
-        `;
-      }
-    }
+    setPositionsCount(container.querySelector('#positions-count'), count, true);
+    updatePositionTables(container, synced, {
+      forceRender: previousPositionsKey !== nextPositionsKey,
+      autoMode: true,
+      hasApi: hasAnyExchangeApiCredentials(),
+    });
 
     await hydratePositionMarketData(container, synced, forceRefresh);
 

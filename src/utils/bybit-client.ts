@@ -1,6 +1,7 @@
 import type {
   BybitAccountBalance,
   BybitApiCredentials,
+  BybitDiscountBuyPosition,
   BybitDualAssetPosition,
   BybitPosition,
 } from '../types';
@@ -199,6 +200,29 @@ interface BybitDualAssetPositionResponse {
   }>;
 }
 
+interface BybitDiscountBuyPositionResponse {
+  nextPageCursor?: string;
+  list: Array<{
+    positionId: string;
+    productId: string;
+    category: string;
+    coin: string;
+    underlyingAsset: string;
+    amount: string;
+    purchasePrice: string;
+    knockoutPrice: string;
+    knockoutCouponE8: string;
+    status: string;
+    orderId?: string;
+    duration?: string;
+    settlementTime: string;
+    accountType?: string;
+    toAccountType?: string;
+    settleType?: string;
+    expectReceiveAt?: string;
+  }>;
+}
+
 interface BybitTickerResponse {
   category: string;
   list: Array<{
@@ -311,6 +335,24 @@ function calculateBybitAprFromProjectedProfit(
 
   const lockedDays = Math.max((endAt - yieldStartAt) / DAY_MS, 1);
   return ((projectedProfit as number) / amount) * (365 / lockedDays) * 100;
+}
+
+function calculateBybitCouponProjectedProfit(
+  amount: number,
+  apr: number,
+  duration: unknown,
+): number | undefined {
+  const durationDays = parseBybitDurationDays(duration);
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(apr) || !durationDays) {
+    return undefined;
+  }
+  return amount * (apr / 100) * (durationDays / 365);
+}
+
+function deriveBybitYieldStartAt(settlementTime: number, duration: unknown): number | undefined {
+  const durationDays = parseBybitDurationDays(duration);
+  if (!Number.isFinite(settlementTime) || !durationDays) return undefined;
+  return settlementTime - durationDays * DAY_MS;
 }
 
 function resolveBybitSymbolAssets(symbol: string): { baseAsset: string; quoteAsset: string } {
@@ -595,6 +637,54 @@ export async function fetchBybitDualAssetPositions(): Promise<BybitDualAssetPosi
       };
     })
     .filter((position) => position.amount > 0);
+}
+
+export async function fetchBybitDiscountBuyPositions(): Promise<BybitDiscountBuyPosition[]> {
+  const creds = loadBybitApiCredentials();
+  if (!creds) throw new Error('Bybit API credentials not configured');
+  const info = await getCurrentBybitReadOnlyInfo(creds);
+  if (!info.permissions?.Earn?.includes('Earn')) {
+    return [];
+  }
+
+  const payload = await fetchBybitSignedGet<BybitEnvelope<BybitDiscountBuyPositionResponse>>(
+    '/earn/advance/position',
+    { category: 'DiscountBuy', limit: 20 },
+    creds,
+  );
+  const result = assertBybitOk(payload);
+
+  return result.list
+    .map((row) => {
+      const amount = parseFiniteNumber(row.amount);
+      const apr = parseFiniteNumber(row.knockoutCouponE8) / 1_000_000;
+      const settlementTime = parseOptionalTimestamp(row.settlementTime) ?? Date.now();
+      const yieldStartAt = deriveBybitYieldStartAt(settlementTime, row.duration);
+      const projectedProfit = calculateBybitCouponProjectedProfit(amount, apr, row.duration);
+      const expectReceiveAt = parseOptionalTimestamp(row.expectReceiveAt);
+
+      return {
+        id: `bybit_discount_buy_${row.positionId}`,
+        productId: row.productId,
+        coin: row.coin.toUpperCase(),
+        underlyingAsset: row.underlyingAsset.toUpperCase(),
+        amount,
+        apr,
+        purchasePrice: parseFiniteNumber(row.purchasePrice),
+        knockoutPrice: parseFiniteNumber(row.knockoutPrice),
+        settlementTime,
+        status: row.status,
+        orderId: row.orderId,
+        duration: row.duration,
+        accountType: row.accountType,
+        toAccountType: row.toAccountType,
+        settleType: row.settleType,
+        expectReceiveAt,
+        yieldStartAt,
+        ...(Number.isFinite(projectedProfit) ? { projectedProfit } : {}),
+      };
+    })
+    .filter((position) => position.amount > 0 && position.purchasePrice > 0);
 }
 
 export function clearBybitClientCaches(): void {

@@ -22,6 +22,13 @@ function makePosition(overrides: Partial<DualPosition>): DualPosition {
     settlementTimeSource: overrides.settlementTimeSource,
     apr: overrides.apr ?? 50,
     components: overrides.components,
+    source: overrides.source,
+    positionKind: overrides.positionKind,
+    displaySymbol: overrides.displaySymbol,
+    projectedProfit: overrides.projectedProfit,
+    expectedSettlementAsset: overrides.expectedSettlementAsset,
+    expectedSettlementAmount: overrides.expectedSettlementAmount,
+    side: overrides.side,
   };
 }
 
@@ -67,6 +74,49 @@ describe('positions table rendering', () => {
     expect(group).toContain(
       'Hora de liquidación calculada desde settleDate con la ventana estándar de Binance.',
     );
+  });
+
+  it('renders Discount Buy rows compactly without showing knockout APR as earnings', () => {
+    const group = renderPositionGroup('Buy Low', [
+      makePosition({
+        id: 'bybit_discount_buy_1',
+        asset: 'ETH',
+        subscriptionAsset: 'USDT',
+        amount: 1000,
+        targetPrice: 2275,
+        apr: 10,
+        positionKind: 'discount-buy',
+        projectedProfit: 0.27,
+      }),
+    ]);
+
+    expect(group).toContain('ETH/USDT');
+    expect(group).not.toContain('Discount');
+    expect(group).not.toContain('10.00%');
+    expect(group).toContain('Compra');
+    expect(group).not.toContain('+0.27 USDT');
+    expect(group).not.toContain('Sin KO');
+    expect(group).not.toContain('1,000.27 USDT');
+  });
+
+  it('keeps both Sell High outcomes when Bybit reports an exact expected return', () => {
+    const group = renderPositionGroup('Sell High', [
+      makePosition({
+        id: 'bybit_dual_sell_1',
+        direction: 'sell-high',
+        asset: 'ETH',
+        subscriptionAsset: 'ETH',
+        amount: 8.741083,
+        targetPrice: 2300,
+        apr: 98.43,
+        projectedProfit: 0.023572,
+        expectedSettlementAsset: 'ETH',
+        expectedSettlementAmount: 8.764656,
+      }),
+    ]);
+
+    expect(group).toContain('20,104.51 USDT');
+    expect(group).toContain('8.764656 ETH');
   });
 
   it('renders a dropdown with component rows for grouped weighted positions', () => {

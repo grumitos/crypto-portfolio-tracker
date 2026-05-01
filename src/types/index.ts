@@ -51,7 +51,7 @@ export interface DualPosition {
   apr: number; // annual percentage rate
   components?: DualPositionComponent[]; // grouped source entries used for weighted aggregate rows
   source?: 'Binance' | 'Bybit';
-  positionKind?: 'dual' | 'derivative';
+  positionKind?: 'dual' | 'derivative' | 'discount-buy';
   displaySymbol?: string;
   notionalUsd?: number;
   unrealizedPnlUsd?: number;
@@ -241,5 +241,26 @@ export interface BybitDualAssetPosition {
   yieldEndAt?: number;
   expectedSettlementAsset?: string;
   expectedSettlementAmount?: number;
+  projectedProfit?: number;
+}
+
+export interface BybitDiscountBuyPosition {
+  id: string;
+  productId: string;
+  coin: string;
+  underlyingAsset: string;
+  amount: number;
+  apr: number;
+  purchasePrice: number;
+  knockoutPrice: number;
+  settlementTime: number;
+  status: 'Active' | 'Settling' | string;
+  orderId?: string;
+  duration?: string;
+  accountType?: string;
+  toAccountType?: string;
+  settleType?: 'Base' | 'Quote' | string;
+  expectReceiveAt?: number;
+  yieldStartAt?: number;
   projectedProfit?: number;
 }

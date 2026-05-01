@@ -84,6 +84,34 @@ describe('router', () => {
     expect(onNavigate).toHaveBeenCalledWith('positions');
   });
 
+  it('absorbs aborted View Transition promises', async () => {
+    const router = await loadRouterModule();
+    const onNavigate = vi.fn();
+    const ready = Promise.reject(new DOMException('aborted', 'InvalidStateError'));
+    const updateCallbackDone = Promise.reject(new DOMException('aborted', 'InvalidStateError'));
+    const finished = Promise.reject(new DOMException('aborted', 'InvalidStateError'));
+    const readyCatch = vi.spyOn(ready, 'catch');
+    const updateCatch = vi.spyOn(updateCallbackDone, 'catch');
+    const finishedCatch = vi.spyOn(finished, 'catch');
+
+    Object.defineProperty(document, 'startViewTransition', {
+      value: vi.fn((callback: () => void) => {
+        callback();
+        return { ready, updateCallbackDone, finished };
+      }),
+      configurable: true,
+      writable: true,
+    });
+
+    router.navigateTo('positions', onNavigate);
+
+    expect(onNavigate).toHaveBeenCalledWith('positions');
+    expect(readyCatch).toHaveBeenCalledTimes(1);
+    expect(updateCatch).toHaveBeenCalledTimes(1);
+    expect(finishedCatch).toHaveBeenCalledTimes(1);
+    await Promise.allSettled([ready, updateCallbackDone, finished]);
+  });
+
   it('falls back to direct navigation when reduced motion is enabled', async () => {
     mockMatchMedia(true);
     const router = await loadRouterModule();

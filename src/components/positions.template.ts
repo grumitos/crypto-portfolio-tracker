@@ -14,7 +14,7 @@ interface PositionsTemplateInput {
   hasPositions: boolean;
 }
 
-function renderEmptyState(autoMode: boolean, hasApi: boolean): string {
+export function renderPositionsEmptyState(autoMode: boolean, hasApi: boolean): string {
   if (autoMode) {
     return `
       <div class="card empty-state positions-empty-state" id="positions-empty-state">
@@ -66,7 +66,7 @@ export function renderPositionsTemplate(input: PositionsTemplateInput): string {
         ${
           input.hasPositions
             ? `${input.buyLowMarkup}${input.sellHighMarkup}`
-            : renderEmptyState(input.autoMode, input.hasApi)
+            : renderPositionsEmptyState(input.autoMode, input.hasApi)
         }
       </div>
     </div>

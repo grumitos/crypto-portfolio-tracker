@@ -277,6 +277,42 @@ describe('market utils', () => {
     expect(metrics.priceSourceByAsset.ETH).toBe('live');
   });
 
+  it('uses current Discount Buy spread as effective APR for run-rate metrics', async () => {
+    const market = await import('./market');
+    const snapshot: AssetPriceSnapshot = {
+      priceByAsset: { ETH: 2000, USDT: 1 },
+      sourceByAsset: { ETH: 'live', USDT: 'stable' },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+    };
+    const position: DualPosition = {
+      id: 'discount',
+      asset: 'ETH',
+      direction: 'buy-low',
+      subscriptionAsset: 'USDT',
+      amount: 1000,
+      targetPrice: 1900,
+      entryDate: '2026-02-20',
+      entryTime: '08:45',
+      settlementDate: '2026-02-21',
+      settlementTime: '08:45',
+      apr: 10,
+      positionKind: 'discount-buy',
+      projectedProfit: 0.27,
+    };
+
+    const expectedProfit = (2000 - 1900) * (1000 / 1900);
+    const expectedApr = (expectedProfit / 1000) * 365 * 100;
+    const metrics = market.calculatePositionMetricsFromSnapshot([position], snapshot);
+
+    expect(metrics.aprByPositionId.discount).toBeCloseTo(expectedApr, 8);
+    expect(metrics.weightedApr).toBeCloseTo(expectedApr, 8);
+    expect(metrics.dailyEarningsUsd).toBeCloseTo(expectedProfit, 8);
+    expect(metrics.weightedApr).not.toBeCloseTo(10, 8);
+    expect(metrics.priceSourceByAsset.ETH).toBe('live');
+  });
+
   it('deduplicates in-flight ticker requests for concurrent calls', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 15));
