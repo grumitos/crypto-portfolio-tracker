@@ -13,6 +13,18 @@ function jsonResponse(payload: unknown): Response {
   } as Response;
 }
 
+function errorResponse(status: number, payload: unknown): Response {
+  return {
+    ok: false,
+    status,
+    headers: {
+      get: () => null,
+    } as unknown as Headers,
+    json: async () => payload,
+    text: async () => JSON.stringify(payload),
+  } as Response;
+}
+
 function createCryptoStub(): Crypto {
   return {
     subtle: {
@@ -182,6 +194,9 @@ describe('binance client', () => {
   it('tests explicit credentials without reading persisted credentials', async () => {
     localStorage.clear();
     const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/time')) {
+        return Promise.resolve(jsonResponse({ serverTime: 2_000_000 }));
+      }
       if (url.includes('/account/apiRestrictions')) {
         return Promise.resolve(
           jsonResponse({
@@ -219,6 +234,60 @@ describe('binance client', () => {
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>)['X-MBX-APIKEY']).toBe('direct-key');
     expect(init.cache).toBe('no-store');
+  });
+
+  it('refreshes Binance server time and retries when the local clock is out of sync', async () => {
+    await seedCredentials();
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/time')) {
+        return Promise.resolve(jsonResponse({ serverTime: 1_600_000 }));
+      }
+      if (url.includes('timestamp=1000000')) {
+        return Promise.resolve(
+          errorResponse(400, {
+            code: -1021,
+            msg: 'Timestamp for this request is outside of the recvWindow.',
+          }),
+        );
+      }
+      if (url.includes('/account/apiRestrictions')) {
+        return Promise.resolve(
+          jsonResponse({
+            enableReading: true,
+            enableWithdrawals: false,
+            enableInternalTransfer: false,
+            enableMargin: false,
+            enableFutures: false,
+            permitsUniversalTransfer: false,
+            enableVanillaOptions: false,
+            enableFixApiTrade: false,
+            enableSpotAndMarginTrading: false,
+            enablePortfolioMarginTrading: false,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ balances: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    const balances = await client.fetchAccountBalances(true);
+
+    expect(balances).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/binance-api/v3/time',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    const signedUrls = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => !url.includes('/time'));
+    expect(signedUrls.some((url) => url.includes('timestamp=1000000'))).toBe(true);
+    signedUrls
+      .filter((url) => !url.includes('timestamp=1000000'))
+      .forEach((url) => {
+        expect(url).toContain('timestamp=1600000');
+      });
   });
 
   it('flags Binance keys with execution or movement permissions as not read-only', async () => {

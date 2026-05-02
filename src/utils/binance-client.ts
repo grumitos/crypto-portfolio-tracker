@@ -11,6 +11,7 @@ const SAPI_PROXY_BASE = '/binance-sapi/v1';
 const FETCH_TIMEOUT_MS = 10_000;
 const RECV_WINDOW = 5000;
 const READ_ONLY_CACHE_TTL_MS = 5 * 60 * 1000;
+const SERVER_TIME_CACHE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_SIGNED_GET_ENDPOINTS = new Set([
   `${API_PROXY_BASE}/account`,
   `${SAPI_PROXY_BASE}/account/apiRestrictions`,
@@ -32,6 +33,8 @@ let positionsCache: CacheEntry<BinanceDualPosition[]> | null = null;
 let balanceCache: CacheEntry<BinanceAccountBalance[]> | null = null;
 let readOnlyCheckCache: { apiKey: string; ts: number } | null = null;
 let readOnlyCheckInFlight: { apiKey: string; request: Promise<void> } | null = null;
+let serverTimeOffsetCache: { offsetMs: number; ts: number } | null = null;
+let serverTimeOffsetInFlight: Promise<number> | null = null;
 
 function normalizeBinanceAssetCode(asset: string): string {
   const normalized = asset.toUpperCase().trim();
@@ -84,16 +87,105 @@ async function hmacSign(secret: string, message: string): Promise<string> {
     .join('');
 }
 
+interface BinanceServerTimeResponse {
+  serverTime: number;
+}
+
+function clearServerTimeOffset(): void {
+  serverTimeOffsetCache = null;
+  serverTimeOffsetInFlight = null;
+}
+
+async function refreshServerTimeOffset(): Promise<number> {
+  if (serverTimeOffsetInFlight) return serverTimeOffsetInFlight;
+
+  const request = (async (): Promise<number> => {
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${API_PROXY_BASE}/time`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`Binance time API error ${response.status}: ${errorBody}`);
+      }
+
+      const payload = (await response.json()) as BinanceServerTimeResponse;
+      const serverTime = Number(payload.serverTime);
+      if (!Number.isFinite(serverTime) || serverTime <= 0) {
+        throw new Error('Binance time API returned an invalid serverTime.');
+      }
+
+      const endedAt = Date.now();
+      const localEstimate = startedAt + (endedAt - startedAt) / 2;
+      const offsetMs = Math.round(serverTime - localEstimate);
+      serverTimeOffsetCache = { offsetMs, ts: endedAt };
+      return offsetMs;
+    } finally {
+      clearTimeout(timeout);
+    }
+  })();
+
+  serverTimeOffsetInFlight = request;
+  try {
+    return await request;
+  } finally {
+    if (serverTimeOffsetInFlight === request) {
+      serverTimeOffsetInFlight = null;
+    }
+  }
+}
+
+async function getSignedTimestamp(forceRefresh = false): Promise<number> {
+  if (
+    !forceRefresh &&
+    serverTimeOffsetCache &&
+    Date.now() - serverTimeOffsetCache.ts < SERVER_TIME_CACHE_TTL_MS
+  ) {
+    return Math.round(Date.now() + serverTimeOffsetCache.offsetMs);
+  }
+
+  if (!forceRefresh) {
+    return Math.round(Date.now());
+  }
+
+  try {
+    const offsetMs = await refreshServerTimeOffset();
+    return Math.round(Date.now() + offsetMs);
+  } catch {
+    return Math.round(Date.now() + (serverTimeOffsetCache?.offsetMs ?? 0));
+  }
+}
+
 async function signedParams(
   params: Record<string, string | number>,
   secret: string,
+  options: { forceTimeRefresh?: boolean } = {},
 ): Promise<string> {
-  const entries = { ...params, timestamp: Date.now(), recvWindow: RECV_WINDOW };
+  const entries = {
+    ...params,
+    timestamp: await getSignedTimestamp(options.forceTimeRefresh),
+    recvWindow: RECV_WINDOW,
+  };
   const qs = Object.entries(entries)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join('&');
   const signature = await hmacSign(secret, qs);
   return `${qs}&signature=${signature}`;
+}
+
+function isTimestampOutsideRecvWindowError(status: number, errorBody: string): boolean {
+  if (status !== 400) return false;
+  try {
+    const payload = JSON.parse(errorBody) as { code?: unknown };
+    if (payload.code === -1021) return true;
+  } catch {
+    // Fall through to the text check below.
+  }
+  return errorBody.includes('-1021') && errorBody.toLowerCase().includes('timestamp');
 }
 
 // ── Generic fetch with timeout + auth ──
@@ -115,31 +207,41 @@ async function fetchSigned<T>(
     await assertBinanceCredentialsReadOnly(creds);
   }
 
-  const qs = await signedParams(params, creds.apiSecret);
-  const url = `${baseUrl}${path}?${qs}`;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'X-MBX-APIKEY': creds.apiKey,
-      },
-      cache: 'no-store',
-      signal: controller.signal,
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const qs = await signedParams(params, creds.apiSecret, {
+      forceTimeRefresh: attempt > 0,
     });
+    const url = `${baseUrl}${path}?${qs}`;
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      throw new Error(`Binance API error ${response.status}: ${errorBody}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': creds.apiKey,
+        },
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        if (attempt === 0 && isTimestampOutsideRecvWindowError(response.status, errorBody)) {
+          clearServerTimeOffset();
+          continue;
+        }
+        throw new Error(`Binance API error ${response.status}: ${errorBody}`);
+      }
+
+      return (await response.json()) as T;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return (await response.json()) as T;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error('Binance API request failed after refreshing server time.');
 }
 
 async function assertBinanceCredentialsReadOnly(creds: BinanceApiCredentials): Promise<void> {
@@ -344,4 +446,5 @@ export function clearAllCaches(): void {
   balanceCache = null;
   readOnlyCheckCache = null;
   readOnlyCheckInFlight = null;
+  clearServerTimeOffset();
 }

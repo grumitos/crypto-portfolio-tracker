@@ -46,19 +46,31 @@ describe('bybit client', () => {
   }
 
   it('checks Bybit read-only status without persisting explicit credentials', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({
-        retCode: 0,
-        retMsg: 'OK',
-        result: {
-          readOnly: 1,
-          permissions: {
-            Earn: ['Earn'],
-            Wallet: [],
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/market/time')) {
+        return Promise.resolve(
+          jsonResponse({
+            retCode: 0,
+            retMsg: 'OK',
+            result: { timeSecond: '2', timeNano: '2000000000' },
+            time: 2_000,
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({
+          retCode: 0,
+          retMsg: 'OK',
+          result: {
+            readOnly: 1,
+            permissions: {
+              Earn: ['Earn'],
+              Wallet: [],
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     const client = await import('./bybit-client');
@@ -76,11 +88,71 @@ describe('bybit client', () => {
       },
     });
     expect(localStorage.getItem('crypto-bybit-api')).toBeNull();
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/bybit-api/v5/user/query-api');
     expect(init.method).toBe('GET');
     expect(init.cache).toBe('no-store');
     expect((init.headers as Record<string, string>)['X-BAPI-API-KEY']).toBe('direct-key');
+  });
+
+  it('refreshes Bybit server time and retries when the local clock is out of sync', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/market/time')) {
+        return Promise.resolve(
+          jsonResponse({
+            retCode: 0,
+            retMsg: 'OK',
+            result: { timeSecond: '1600', timeNano: '1600000000000' },
+            time: 1_600_000,
+          }),
+        );
+      }
+      if (
+        url.includes('/user/query-api') &&
+        (init?.headers as Record<string, string>)['X-BAPI-TIMESTAMP'] === '1000000'
+      ) {
+        return Promise.resolve(
+          jsonResponse({
+            retCode: 10002,
+            retMsg: 'invalid request, please check your server timestamp or recv_window param',
+            result: {},
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({
+          retCode: 0,
+          retMsg: 'OK',
+          result: {
+            readOnly: 1,
+            permissions: {
+              Earn: ['Earn'],
+              Wallet: [],
+            },
+          },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./bybit-client');
+    const result = await client.testBybitApiConnection({
+      apiKey: 'direct-key',
+      apiSecret: 'direct-secret',
+    });
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/bybit-api/v5/market/time',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    const signedCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes('/user/query-api'),
+    ) as Array<[string, RequestInit]>;
+    expect(
+      signedCalls.map(([, init]) => (init.headers as Record<string, string>)['X-BAPI-TIMESTAMP']),
+    ).toEqual(['1000000', '1600000']);
   });
 
   it('flags Bybit read/write keys as not read-only', async () => {

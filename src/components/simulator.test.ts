@@ -3,11 +3,13 @@ import { renderSimulator } from './simulator';
 import { SIMULATOR_VIEW_KEY, saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import * as calculator from '../utils/calculator';
+import * as animation from '../utils/animation';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
 import { getSharedMarketData } from '../utils/api-runtime-cache';
 import { registerApiFailure } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
 import { resetMarketPollerForTests } from '../utils/market-poller';
+import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
 
 vi.mock('../utils/api-runtime-cache', () => ({
   getSharedMarketData: vi.fn(),
@@ -168,6 +170,104 @@ describe('simulator dual milestones', () => {
 
     dispose();
     container.remove();
+  });
+
+  it('updates projection table values in-place with animation after market ticks', async () => {
+    vi.useFakeTimers();
+    mockMatchMedia(false);
+
+    let rafTime = 0;
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        return setTimeout(() => {
+          rafTime += 16;
+          cb(rafTime);
+        }, 16) as unknown as number;
+      });
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+      clearTimeout(id);
+    });
+    const numberSpy = vi.spyOn(animation, 'setAnimatedNumber');
+    const container = document.createElement('div');
+    let dispose: (() => void) | null = null;
+
+    try {
+      let marketCall = 0;
+      vi.mocked(getSharedMarketData).mockImplementation(async () => {
+        marketCall += 1;
+        const totalUsd = marketCall === 1 ? 400 : 650;
+        const weightedApr = marketCall === 1 ? 35 : 45;
+        return {
+          positionsKey: 'p1',
+          snapshot: {
+            priceByAsset: { ETH: marketCall === 1 ? 2000 : 2500, USDT: 1 },
+            sourceByAsset: { ETH: 'live', USDT: 'stable' },
+            marketLastUpdatedAt: Date.now(),
+            hasStalePrices: false,
+            hasUnavailablePrices: false,
+            changePercent24hByAsset: { ETH: 0, USDT: 0 },
+          },
+          metrics: {
+            totalUsd,
+            weightedApr,
+            dailyEarningsUsd: 0.4,
+            usdByPositionId: { p1: totalUsd },
+            aprByPositionId: { p1: weightedApr },
+            priceByAsset: { USDT: 1 },
+            marketLastUpdatedAt: Date.now(),
+            hasStalePrices: false,
+            hasUnavailablePrices: false,
+            priceSourceByAsset: { USDT: 'stable' },
+          },
+        };
+      });
+
+      document.body.appendChild(container);
+      dispose = renderSimulator(container);
+
+      await vi.advanceTimersByTimeAsync(20);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const table = container.querySelector('.sim-projection-table');
+      const firstBalanceCell = container.querySelector(
+        '[data-projection-row="1"] [data-projection-cell="balance"]',
+      );
+      expect(table).not.toBeNull();
+      expect(firstBalanceCell).not.toBeNull();
+
+      const callsAfterInitialHydration = numberSpy.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(20);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(container.querySelector('.sim-projection-table')).toBe(table);
+      expect(
+        container.querySelector('[data-projection-row="1"] [data-projection-cell="balance"]'),
+      ).toBe(firstBalanceCell);
+
+      const postHydrationCalls = numberSpy.mock.calls.slice(callsAfterInitialHydration);
+      const animatedProjectionCells = postHydrationCalls
+        .filter((call) => {
+          const options = call[4] as { enabled?: boolean } | undefined;
+          return options?.enabled === true;
+        })
+        .map((call) => (call[1] as HTMLElement | null)?.dataset.projectionCell);
+
+      expect(animatedProjectionCells).toContain('balance');
+      expect(animatedProjectionCells).toContain('earned');
+    } finally {
+      dispose?.();
+      container.remove();
+      vi.clearAllTimers();
+      numberSpy.mockRestore();
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('shows N/D for auto APR hint until market hydration completes', async () => {

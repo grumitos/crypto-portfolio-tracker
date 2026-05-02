@@ -28,14 +28,21 @@ export interface DashboardTemplateInput {
   progressFill: number;
 }
 
-function formatBalanceAmount(amount: number): string {
+export function formatBalanceAmount(amount: number): string {
   if (amount < 1) return amount.toFixed(DASHBOARD_BALANCE_DECIMALS_SMALL);
   if (amount < 100) return amount.toFixed(DASHBOARD_BALANCE_DECIMALS_MEDIUM);
   return amount.toFixed(DASHBOARD_BALANCE_DECIMALS_LARGE);
 }
 
+export function getDashboardBalanceKey(
+  balance: Pick<BinanceAccountBalance, 'asset' | 'source'>,
+): string {
+  return `${balance.asset.trim().toUpperCase()}:${balance.source?.trim() ?? ''}`;
+}
+
 function renderBalanceItem(balance: BinanceAccountBalance): string {
   const total = balance.free + balance.locked;
+  const safeBalanceKey = escapeHtml(getDashboardBalanceKey(balance));
   const sources = resolveAssetLogoSources(balance.asset);
   const monogram = createAssetMonogram(balance.asset);
   const safePrimarySrc = escapeHtml(sources.primarySrc);
@@ -48,7 +55,7 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
   const safeSource = balance.source ? escapeHtml(balance.source) : '';
 
   return `
-    <article class="dashboard-balance-entry">
+    <article class="dashboard-balance-entry" data-balance-key="${safeBalanceKey}">
       <div class="dashboard-balance-entry-top">
         <div class="dashboard-balance-entry-main">
           <span class="dashboard-balance-logo-wrap" data-asset-logo-root>

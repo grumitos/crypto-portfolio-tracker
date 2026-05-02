@@ -22,7 +22,7 @@ import {
   persistSimulatorViewState,
   type AutoState,
 } from './simulator.state';
-import type { CompoundFrequency, DualPosition } from '../types';
+import type { CompoundFrequency, DualPosition, ProjectionRow } from '../types';
 import { subscribeToMarketTicks } from '../utils/market-poller';
 import {
   setAnimatedNumber,
@@ -34,6 +34,7 @@ import { PROJECTION_MAX_MONTH, RESULT_NUMBER_ANIM_MS, SIMULATOR_COPY } from './s
 import {
   formatAutoAprHint,
   projectionTableSkeletonHtml,
+  renderProjectionMilestone,
   renderProjectionTable,
   renderSimulatorTemplate,
 } from './simulator.template';
@@ -49,6 +50,8 @@ interface TriggerSimulationOptions {
 interface RunSimulationOptions {
   animate?: boolean;
 }
+
+type ProjectionDisplayRow = ProjectionRow & { rowClass: string };
 
 function renderProjectionLoadingState(container: HTMLElement): void {
   const elements = getSimulatorElements(container);
@@ -133,6 +136,20 @@ function setDurationOutput(
   setNumberOutput(el, totalDays, (next) => formatDashboardDurationLabel(next), animate);
 }
 
+function setProjectionNumberOutput(el: HTMLElement | null, value: number, animate: boolean): void {
+  if (!el) return;
+  stopTextAnimation(el);
+  setAnimatedNumber(valueAnimationByElement, el, value, (next) => formatUSD(next), {
+    enabled: animate,
+    durationMs: RESULT_NUMBER_ANIM_MS,
+    allowRememberedStart: false,
+  });
+}
+
+function setProjectionTextOutput(el: HTMLElement | null, value: string, animate: boolean): void {
+  setTextOutput(el, value, animate, 'fade');
+}
+
 function getReachedLabel(key: MilestoneKey): string {
   return key === 'be' ? SIMULATOR_COPY.reachedBreakEven : SIMULATOR_COPY.reachedGoal;
 }
@@ -195,6 +212,76 @@ function resolveProjectionRowClasses(
   if (month === goalCrossMonth) classes.push('sim-row-cross-goal');
 
   return classes.join(' ');
+}
+
+function hasReusableProjectionTable(table: HTMLElement, rows: ProjectionDisplayRow[]): boolean {
+  const existingRows = [
+    ...table.querySelectorAll<HTMLTableRowElement>('tbody tr[data-projection-row]'),
+  ];
+  if (existingRows.length !== rows.length) return false;
+
+  return existingRows.every((row, index) => {
+    return row.dataset.projectionRow === String(rows[index]?.month ?? '');
+  });
+}
+
+function updateProjectionTableInPlace(
+  table: HTMLElement,
+  rows: ProjectionDisplayRow[],
+  animate: boolean,
+): boolean {
+  if (!hasReusableProjectionTable(table, rows)) return false;
+
+  rows.forEach((row) => {
+    const rowEl = table.querySelector<HTMLTableRowElement>(
+      `tbody tr[data-projection-row="${row.month}"]`,
+    );
+    if (!rowEl) return;
+
+    rowEl.className = row.rowClass;
+
+    const monthEl = rowEl.querySelector<HTMLElement>('[data-projection-cell="month"]');
+    const dateEl = rowEl.querySelector<HTMLElement>('[data-projection-cell="date"]');
+    const balanceEl = rowEl.querySelector<HTMLElement>('[data-projection-cell="balance"]');
+    const earnedEl = rowEl.querySelector<HTMLElement>('[data-projection-cell="earned"]');
+    const milestoneEl = rowEl.querySelector<HTMLElement>('[data-projection-cell="milestone"]');
+
+    setProjectionTextOutput(monthEl, String(row.month), animate);
+    setProjectionTextOutput(dateEl, formatDateLatin(row.date), animate);
+
+    balanceEl?.classList.toggle('sim-projection-value-positive', row.balance > 0);
+    setProjectionNumberOutput(balanceEl, row.balance, animate);
+
+    earnedEl?.classList.toggle('text-gain', row.earned > 0);
+    setProjectionNumberOutput(earnedEl, row.earned, animate);
+
+    const nextMilestone = renderProjectionMilestone(row.rowClass);
+    if (milestoneEl && milestoneEl.innerHTML !== nextMilestone) {
+      milestoneEl.innerHTML = nextMilestone;
+      if (animate) {
+        milestoneEl.classList.remove('text-swap');
+        void milestoneEl.offsetWidth;
+        milestoneEl.classList.add('text-swap');
+      }
+    }
+  });
+
+  return true;
+}
+
+function updateProjectionTable(
+  table: HTMLElement,
+  rows: ProjectionDisplayRow[],
+  animate: boolean,
+): void {
+  if (updateProjectionTableInPlace(table, rows, animate)) return;
+
+  table.innerHTML = renderProjectionTable(rows, formatDateLatin, formatUSD);
+  if (animate) {
+    table.classList.remove('text-swap');
+    void table.offsetWidth;
+    table.classList.add('text-swap');
+  }
 }
 
 export function renderSimulator(container: HTMLElement): () => void {
@@ -520,16 +607,12 @@ function runSimulation(
 
   elements.tableContainer.hidden = false;
   elements.tableContainer.style.display = 'block';
-  elements.table.innerHTML = renderProjectionTable(
+  updateProjectionTable(
+    elements.table,
     projectedRows.map((row) => ({
       ...row,
-      rowClass: resolveProjectionRowClasses(
-        row.month,
-        beCrossMonth,
-        goalCrossMonth,
-      ),
+      rowClass: resolveProjectionRowClasses(row.month, beCrossMonth, goalCrossMonth),
     })),
-    formatDateLatin,
-    formatUSD,
+    animate,
   );
 }

@@ -39,6 +39,8 @@ import {
   GOAL_NUMBER_ANIM_MS,
 } from './dashboard.constants';
 import {
+  formatBalanceAmount,
+  getDashboardBalanceKey,
   renderBalanceDetailCards,
   renderBalanceEmptyState,
   renderDashboardTemplate,
@@ -61,6 +63,7 @@ interface DashboardRenderOptions {
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const daysAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
+const balanceDetailAnimationByElement = new WeakMap<HTMLElement, number>();
 
 export function resetDashboardLegendStateForTests(): void {
   clearDashboardLegendState();
@@ -488,7 +491,63 @@ function renderBalanceDetail(
     return;
   }
 
-  renderBalanceDetailCards(balanceStripItems, relevant);
+  updateBalanceDetailCards(balanceStripItems, relevant);
+}
+
+function sameBalanceCardStructure(
+  container: HTMLElement,
+  balances: BinanceAccountBalance[],
+): boolean {
+  const entries = [...container.querySelectorAll<HTMLElement>('.dashboard-balance-entry')];
+  if (entries.length !== balances.length) return false;
+
+  return entries.every((entry, index) => {
+    return entry.dataset.balanceKey === getDashboardBalanceKey(balances[index]);
+  });
+}
+
+function setBalanceDetailNumber(
+  el: HTMLElement | null,
+  value: number,
+  formatter: (next: number) => string,
+): void {
+  if (!el) return;
+  setAnimatedNumber(balanceDetailAnimationByElement, el, value, formatter, {
+    enabled: true,
+    durationMs: 180,
+    allowRememberedStart: false,
+  });
+}
+
+function updateBalanceDetailCards(container: HTMLElement, balances: BinanceAccountBalance[]): void {
+  if (!sameBalanceCardStructure(container, balances)) {
+    renderBalanceDetailCards(container, balances);
+    return;
+  }
+
+  const entries = [...container.querySelectorAll<HTMLElement>('.dashboard-balance-entry')];
+  entries.forEach((entry, index) => {
+    const balance = balances[index];
+    if (!balance) return;
+
+    const totalEl = entry.querySelector<HTMLElement>('.dashboard-balance-total-value');
+    const breakdownValues = entry.querySelectorAll<HTMLElement>(
+      '.dashboard-balance-breakdown-value',
+    );
+    const lockedRow = entry.querySelector<HTMLElement>(
+      '.dashboard-balance-breakdown-row.is-locked, .dashboard-balance-breakdown-row:last-child',
+    );
+    const total = balance.free + balance.locked;
+
+    setBalanceDetailNumber(
+      totalEl,
+      total,
+      (next) => `${formatBalanceAmount(next)} ${balance.asset}`,
+    );
+    setBalanceDetailNumber(breakdownValues[0] ?? null, balance.free, formatBalanceAmount);
+    setBalanceDetailNumber(breakdownValues[1] ?? null, balance.locked, formatBalanceAmount);
+    lockedRow?.classList.toggle('is-locked', balance.locked > 0);
+  });
 }
 
 function createInitialUiState(state: AppState): DashboardUiState {
@@ -624,7 +683,7 @@ async function hydrateDashboardMarketStats(
   positions: AppState['positions'],
   uiState: DashboardUiState,
   forceRefresh = false,
-  animateGoalSection = true,
+  animateDynamicValues = true,
 ): Promise<void> {
   const { apr, capital, daily } = getDashboardElements(container);
   if (!apr || !capital || !daily) return;
@@ -685,7 +744,13 @@ async function hydrateDashboardMarketStats(
 
     if (Math.abs(savingsOnlyBalance - storedBalance) >= 0.01) {
       const updatedState = updateBalance(savingsOnlyBalance);
-      updateBalanceInPlace(container, savingsOnlyBalance, uiState, updatedState.portfolio, false);
+      updateBalanceInPlace(
+        container,
+        savingsOnlyBalance,
+        uiState,
+        updatedState.portfolio,
+        animateDynamicValues,
+      );
     }
 
     setTextResult(apr, '---', true);
@@ -693,8 +758,8 @@ async function hydrateDashboardMarketStats(
     setTextResult(daily, '---', true);
     uiState.apr = null;
     updateGoalProgressVisual(container, uiState, {
-      animateNumbers: animateGoalSection,
-      animateText: animateGoalSection,
+      animateNumbers: animateDynamicValues,
+      animateText: animateDynamicValues,
     });
     return;
   }
@@ -720,7 +785,13 @@ async function hydrateDashboardMarketStats(
     if (shouldSyncBalance) {
       lastAutoBalanceSyncAt = now;
       const updatedState = updateBalance(totalBalance);
-      updateBalanceInPlace(container, totalBalance, uiState, updatedState.portfolio, false);
+      updateBalanceInPlace(
+        container,
+        totalBalance,
+        uiState,
+        updatedState.portfolio,
+        animateDynamicValues,
+      );
     }
 
     apr.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
@@ -755,8 +826,8 @@ async function hydrateDashboardMarketStats(
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
     updateGoalProgressVisual(container, uiState, {
-      animateNumbers: animateGoalSection,
-      animateText: animateGoalSection,
+      animateNumbers: animateDynamicValues,
+      animateText: animateDynamicValues,
     });
   } catch (err) {
     if (import.meta.env.DEV) console.warn('[Dashboard] market hydration failed:', err);
@@ -765,7 +836,7 @@ async function hydrateDashboardMarketStats(
     uiState.apr = null;
     updateGoalProgressVisual(container, uiState, {
       animateNumbers: false,
-      animateText: animateGoalSection,
+      animateText: animateDynamicValues,
     });
   }
 }

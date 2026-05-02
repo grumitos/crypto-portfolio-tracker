@@ -10,6 +10,7 @@ import { loadBybitApiCredentials } from './bybit-auth';
 const BYBIT_PROXY_BASE = '/bybit-api/v5';
 const FETCH_TIMEOUT_MS = 10_000;
 const READ_ONLY_CACHE_TTL_MS = 5 * 60 * 1000;
+const SERVER_TIME_CACHE_TTL_MS = 5 * 60 * 1000;
 const RECV_WINDOW = '5000';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -21,10 +22,12 @@ const ALLOWED_SIGNED_GET_PATHS = new Set([
   '/earn/advance/position',
 ]);
 
-const ALLOWED_PUBLIC_GET_PATHS = new Set(['/market/tickers']);
+const ALLOWED_PUBLIC_GET_PATHS = new Set(['/market/tickers', '/market/time']);
 
 let readOnlyCheckCache: { apiKey: string; ts: number; info: BybitApiKeyInfo } | null = null;
 let readOnlyCheckInFlight: { apiKey: string; request: Promise<BybitApiKeyInfo> } | null = null;
+let serverTimeOffsetCache: { offsetMs: number; ts: number } | null = null;
+let serverTimeOffsetInFlight: Promise<number> | null = null;
 
 async function hmacSign(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -48,6 +51,97 @@ function toQueryString(params: Record<string, string | number | undefined>): str
     .join('&');
 }
 
+interface BybitServerTimeResponse {
+  time?: number | string;
+  result?: {
+    timeSecond?: number | string;
+    timeNano?: number | string;
+  };
+}
+
+function parseBybitServerTime(payload: BybitServerTimeResponse): number {
+  const topLevelTime = Number(payload.time);
+  if (Number.isFinite(topLevelTime) && topLevelTime > 0) {
+    return topLevelTime;
+  }
+
+  const timeNano = Number(payload.result?.timeNano);
+  if (Number.isFinite(timeNano) && timeNano > 0) {
+    return Math.round(timeNano / 1_000_000);
+  }
+
+  const timeSecond = Number(payload.result?.timeSecond);
+  if (Number.isFinite(timeSecond) && timeSecond > 0) {
+    return Math.round(timeSecond * 1000);
+  }
+
+  throw new Error('Bybit time API returned an invalid server time.');
+}
+
+function clearBybitServerTimeOffset(): void {
+  serverTimeOffsetCache = null;
+  serverTimeOffsetInFlight = null;
+}
+
+async function refreshBybitServerTimeOffset(): Promise<number> {
+  if (serverTimeOffsetInFlight) return serverTimeOffsetInFlight;
+
+  const request = (async (): Promise<number> => {
+    const startedAt = Date.now();
+    const payload = await fetchBybitPublicGet<BybitServerTimeResponse>('/market/time');
+    const endedAt = Date.now();
+    const serverTime = parseBybitServerTime(payload);
+    const localEstimate = startedAt + (endedAt - startedAt) / 2;
+    const offsetMs = Math.round(serverTime - localEstimate);
+    serverTimeOffsetCache = { offsetMs, ts: endedAt };
+    return offsetMs;
+  })();
+
+  serverTimeOffsetInFlight = request;
+  try {
+    return await request;
+  } finally {
+    if (serverTimeOffsetInFlight === request) {
+      serverTimeOffsetInFlight = null;
+    }
+  }
+}
+
+async function getBybitSignedTimestamp(forceRefresh = false): Promise<string> {
+  if (
+    !forceRefresh &&
+    serverTimeOffsetCache &&
+    Date.now() - serverTimeOffsetCache.ts < SERVER_TIME_CACHE_TTL_MS
+  ) {
+    return String(Math.round(Date.now() + serverTimeOffsetCache.offsetMs));
+  }
+
+  if (!forceRefresh) {
+    return String(Math.round(Date.now()));
+  }
+
+  try {
+    const offsetMs = await refreshBybitServerTimeOffset();
+    return String(Math.round(Date.now() + offsetMs));
+  } catch {
+    return String(Math.round(Date.now() + (serverTimeOffsetCache?.offsetMs ?? 0)));
+  }
+}
+
+function isBybitTimestampErrorPayload(payload: unknown): boolean {
+  if (typeof payload !== 'object' || payload === null) return false;
+  const envelope = payload as { retCode?: unknown; retMsg?: unknown };
+  const retCode = Number(envelope.retCode);
+  const retMsg = String(envelope.retMsg ?? '').toLowerCase();
+  if (retCode === 10002) return true;
+  return (
+    retCode !== 0 &&
+    (retMsg.includes('timestamp') ||
+      retMsg.includes('recv_window') ||
+      retMsg.includes('recvwindow'))
+  );
+}
+
 async function fetchBybitSignedGet<T>(
   path: string,
   params: Record<string, string | number | undefined> = {},
@@ -60,39 +154,57 @@ async function fetchBybitSignedGet<T>(
   const creds = credentials ?? loadBybitApiCredentials();
   if (!creds) throw new Error('Bybit API credentials not configured');
 
-  const timestamp = String(Date.now());
   const queryString = toQueryString(params);
-  const signaturePayload = `${timestamp}${creds.apiKey}${RECV_WINDOW}${queryString}`;
-  const signature = await hmacSign(creds.apiSecret, signaturePayload);
   const url = queryString
     ? `${BYBIT_PROXY_BASE}${path}?${queryString}`
     : `${BYBIT_PROXY_BASE}${path}`;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const timestamp = await getBybitSignedTimestamp(attempt > 0);
+    const signaturePayload = `${timestamp}${creds.apiKey}${RECV_WINDOW}${queryString}`;
+    const signature = await hmacSign(creds.apiSecret, signaturePayload);
 
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'X-BAPI-API-KEY': creds.apiKey,
-        'X-BAPI-TIMESTAMP': timestamp,
-        'X-BAPI-RECV-WINDOW': RECV_WINDOW,
-        'X-BAPI-SIGN': signature,
-      },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      throw new Error(`Bybit API error ${response.status}: ${errorBody}`);
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-BAPI-API-KEY': creds.apiKey,
+          'X-BAPI-TIMESTAMP': timestamp,
+          'X-BAPI-RECV-WINDOW': RECV_WINDOW,
+          'X-BAPI-SIGN': signature,
+        },
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        if (
+          attempt === 0 &&
+          (errorBody.toLowerCase().includes('timestamp') ||
+            errorBody.toLowerCase().includes('recv_window'))
+        ) {
+          clearBybitServerTimeOffset();
+          continue;
+        }
+        throw new Error(`Bybit API error ${response.status}: ${errorBody}`);
+      }
+
+      const payload = (await response.json()) as T;
+      if (attempt === 0 && isBybitTimestampErrorPayload(payload)) {
+        clearBybitServerTimeOffset();
+        continue;
+      }
+      return payload;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return (await response.json()) as T;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error('Bybit API request failed after refreshing server time.');
 }
 
 async function fetchBybitPublicGet<T>(
@@ -690,6 +802,7 @@ export async function fetchBybitDiscountBuyPositions(): Promise<BybitDiscountBuy
 export function clearBybitClientCaches(): void {
   readOnlyCheckCache = null;
   readOnlyCheckInFlight = null;
+  clearBybitServerTimeOffset();
 }
 
 export async function fetchBybitSpotTicker(

@@ -6,6 +6,7 @@ import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '
 import { clearApiRuntimeCache } from '../utils/api-runtime-cache';
 import { resetMarketPollerForTests } from '../utils/market-poller';
 import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
+import * as animation from '../utils/animation';
 
 vi.mock('../utils/market', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/market')>();
@@ -234,9 +235,9 @@ describe('positions integration', () => {
     document.body.appendChild(container);
     const dispose = renderPositions(container, vi.fn());
 
-    expect(container.querySelector('#position-earn-bybit_discount_buy_1')?.textContent).not.toContain(
-      '+0.27 USDT',
-    );
+    expect(
+      container.querySelector('#position-earn-bybit_discount_buy_1')?.textContent,
+    ).not.toContain('+0.27 USDT');
 
     await flushMicrotasks();
 
@@ -438,7 +439,18 @@ describe('positions integration', () => {
 
   it('keeps auto-synced rows mounted when only live values change', async () => {
     vi.useFakeTimers();
-    mockMatchMedia(true);
+    mockMatchMedia(false);
+
+    let rafTime = 0;
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        rafTime += 64;
+        cb(rafTime);
+        return rafTime;
+      });
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const numberSpy = vi.spyOn(animation, 'setAnimatedNumber');
 
     const firstPosition: AppState['positions'][number] = {
       id: 'bybit_derivative_btcusdt',
@@ -501,6 +513,7 @@ describe('positions integration', () => {
       const earn = container.querySelector('#position-earn-bybit_derivative_btcusdt');
       expect(row).not.toBeNull();
       expect(earn?.textContent).toContain('+$12');
+      const callsAfterInitialHydration = numberSpy.mock.calls.length;
 
       await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
       await Promise.resolve();
@@ -509,9 +522,24 @@ describe('positions integration', () => {
       expect(container.querySelector('[data-id="bybit_derivative_btcusdt"]')).toBe(row);
       expect(earn?.textContent).toContain('+$24');
       expect(syncPositionsFromBinance).toHaveBeenCalledTimes(2);
+      const postHydrationEarnCalls = numberSpy.mock.calls
+        .slice(callsAfterInitialHydration)
+        .filter((call) => {
+          const el = call[1] as HTMLElement | null;
+          return el?.id === 'position-earn-bybit_derivative_btcusdt';
+        });
+      const animatedEarnCall = postHydrationEarnCalls.some((call) => {
+        const options = call[4] as { enabled?: boolean } | undefined;
+        return options?.enabled === true;
+      });
+      expect(animatedEarnCall).toBe(true);
+      expect(earn?.querySelector('.skeleton')).toBeNull();
     } finally {
       dispose();
       container.remove();
+      numberSpy.mockRestore();
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
       vi.useRealTimers();
     }
   });

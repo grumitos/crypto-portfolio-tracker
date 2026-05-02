@@ -536,6 +536,9 @@ describe('dashboard legends', () => {
     const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
       clearTimeout(id);
     });
+    const numberSpy = vi.spyOn(animation, 'setAnimatedNumber');
+    const container = document.createElement('div');
+    let dispose: (() => void) | null = null;
 
     try {
       let metricCall = 0;
@@ -606,10 +609,8 @@ describe('dashboard legends', () => {
       });
       seedState({ currentBalance: 600, savings: 200 });
 
-      const numberSpy = vi.spyOn(animation, 'setAnimatedNumber');
-      const container = document.createElement('div');
       document.body.appendChild(container);
-      const dispose = renderDashboard(container);
+      dispose = renderDashboard(container);
 
       await vi.advanceTimersByTimeAsync(1);
       await Promise.resolve();
@@ -633,13 +634,102 @@ describe('dashboard legends', () => {
       expect(secondTickCalls).toHaveLength(1);
       const secondTickOptions = secondTickCalls[0]?.[4] as { enabled?: boolean } | undefined;
       expect(secondTickOptions?.enabled).toBe(true);
-
+    } finally {
+      dispose?.();
+      container.remove();
+      vi.clearAllTimers();
       numberSpy.mockRestore();
       rafSpy.mockRestore();
       cafSpy.mockRestore();
-      dispose();
-      container.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('animates dashboard balance and PnL after the first market hydration', async () => {
+    vi.useFakeTimers();
+    mockMatchMedia(false);
+
+    let rafTime = 0;
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        return setTimeout(() => {
+          rafTime += 16;
+          cb(rafTime);
+        }, 16) as unknown as number;
+      });
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+      clearTimeout(id);
+    });
+    const numberSpy = vi.spyOn(animation, 'setAnimatedNumber');
+    const container = document.createElement('div');
+    let dispose: (() => void) | null = null;
+
+    try {
+      let metricCall = 0;
+      vi.mocked(getSharedMarketData).mockImplementation(async () => {
+        metricCall += 1;
+        const totalUsd = metricCall === 1 ? 400 : 650;
+        return {
+          positionsKey: 'p1',
+          snapshot: {
+            priceByAsset: { ETH: metricCall === 1 ? 2000 : 2500, USDT: 1 },
+            sourceByAsset: { ETH: 'live', USDT: 'stable' },
+            marketLastUpdatedAt: Date.now(),
+            hasStalePrices: false,
+            hasUnavailablePrices: false,
+            changePercent24hByAsset: { ETH: 0, USDT: 0 },
+          },
+          metrics: {
+            totalUsd,
+            weightedApr: metricCall === 1 ? 30 : 45,
+            dailyEarningsUsd: metricCall === 1 ? 0.32 : 0.8,
+            usdByPositionId: { p1: totalUsd },
+            aprByPositionId: { p1: metricCall === 1 ? 30 : 45 },
+            priceByAsset: { USDT: 1 },
+            marketLastUpdatedAt: Date.now(),
+            hasStalePrices: false,
+            hasUnavailablePrices: false,
+            priceSourceByAsset: { USDT: 'stable' },
+          },
+        };
+      });
+      seedState({ currentBalance: 600, savings: 200, totalInvested: 1000 });
+
+      document.body.appendChild(container);
+      dispose = renderDashboard(container);
+
+      await vi.advanceTimersByTimeAsync(240);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const callsAfterInitialHydration = numberSpy.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(240);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const postHydrationCalls = numberSpy.mock.calls.slice(callsAfterInitialHydration);
+      const animatedIds = postHydrationCalls
+        .filter((call) => {
+          const options = call[4] as { enabled?: boolean } | undefined;
+          return options?.enabled === true;
+        })
+        .map((call) => (call[1] as HTMLElement | null)?.id);
+
+      expect(animatedIds).toContain('dash-balance');
+      expect(animatedIds).toContain('dash-pnl');
+      expect(animatedIds).toContain('dash-pnl-pct');
+      expect(container.querySelector('#dash-balance')?.textContent).toContain('$850.00');
+      expect(container.querySelector('#dash-pnl')?.textContent).toContain('-$150.00');
     } finally {
+      dispose?.();
+      container.remove();
+      vi.clearAllTimers();
+      numberSpy.mockRestore();
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
       vi.useRealTimers();
     }
   });
@@ -746,6 +836,86 @@ describe('dashboard legends', () => {
 
     dispose();
     container.remove();
+  });
+
+  it('animates account balance detail values when auto balances refresh in-place', async () => {
+    vi.useFakeTimers();
+    mockMatchMedia(false);
+
+    let rafTime = 0;
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        return setTimeout(() => {
+          rafTime += 16;
+          cb(rafTime);
+        }, 16) as unknown as number;
+      });
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+      clearTimeout(id);
+    });
+    const numberSpy = vi.spyOn(animation, 'setAnimatedNumber');
+    const container = document.createElement('div');
+    let dispose: (() => void) | null = null;
+
+    try {
+      seedState({ mode: 'auto', positions: [] });
+      saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+      vi.mocked(syncPositionsFromBinance)
+        .mockResolvedValueOnce({
+          positions: [],
+          count: 0,
+          totalUsdEstimate: 260,
+          balances: [{ asset: 'USDT', free: 250, locked: 10 }],
+        })
+        .mockResolvedValueOnce({
+          positions: [],
+          count: 0,
+          totalUsdEstimate: 280,
+          balances: [{ asset: 'USDT', free: 275, locked: 5 }],
+        });
+
+      document.body.appendChild(container);
+      dispose = renderDashboard(container);
+
+      await vi.advanceTimersByTimeAsync(240);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const entry = container.querySelector('.dashboard-balance-entry');
+      const total = container.querySelector('.dashboard-balance-total-value');
+      expect(entry).not.toBeNull();
+      expect(total?.textContent).toContain('260.00 USDT');
+
+      const callsAfterInitialHydration = numberSpy.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(240);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(container.querySelector('.dashboard-balance-entry')).toBe(entry);
+
+      const animatedBalanceDetailClasses = numberSpy.mock.calls
+        .slice(callsAfterInitialHydration)
+        .filter((call) => {
+          const options = call[4] as { enabled?: boolean } | undefined;
+          return options?.enabled === true;
+        })
+        .map((call) => (call[1] as HTMLElement | null)?.className ?? '');
+
+      expect(animatedBalanceDetailClasses).toContain('dashboard-balance-total-value mono');
+      expect(animatedBalanceDetailClasses).toContain('dashboard-balance-breakdown-value mono');
+      expect(total?.textContent).toContain('280.00 USDT');
+    } finally {
+      dispose?.();
+      container.remove();
+      vi.clearAllTimers();
+      numberSpy.mockRestore();
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('adds active auto positions to the locked amount in the account balance detail', async () => {

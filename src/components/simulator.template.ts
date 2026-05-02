@@ -43,7 +43,7 @@ export function projectionTableSkeletonHtml(): string {
   `;
 }
 
-function renderProjectionMilestone(rowClass: string): string {
+export function renderProjectionMilestone(rowClass: string): string {
   const hitBe = rowClass.includes('sim-row-cross-be');
   const hitGoal = rowClass.includes('sim-row-cross-goal');
   if (hitBe && hitGoal) {
@@ -83,12 +83,12 @@ export function renderProjectionTable(
         ${rows
           .map(
             (row) => `
-              <tr${row.rowClass ? ` class="${row.rowClass}"` : ''}>
-                <td class="mono sim-projection-cell-month">${row.month}</td>
-                <td class="mono sim-projection-cell-date">${formatDate(row.date)}</td>
-                <td class="mono sim-projection-cell-balance ${row.balance > 0 ? 'sim-projection-value-positive' : ''}">${formatCurrency(row.balance)}</td>
-                <td class="mono sim-projection-cell-earned ${row.earned > 0 ? 'text-gain' : ''}">${formatCurrency(row.earned)}</td>
-                <td class="sim-projection-cell-milestone">${renderProjectionMilestone(row.rowClass)}</td>
+              <tr data-projection-row="${row.month}"${row.rowClass ? ` class="${row.rowClass}"` : ''}>
+                <td class="mono sim-projection-cell-month" data-projection-cell="month">${row.month}</td>
+                <td class="mono sim-projection-cell-date" data-projection-cell="date">${formatDate(row.date)}</td>
+                <td class="mono sim-projection-cell-balance ${row.balance > 0 ? 'sim-projection-value-positive' : ''}" data-projection-cell="balance">${formatCurrency(row.balance)}</td>
+                <td class="mono sim-projection-cell-earned ${row.earned > 0 ? 'text-gain' : ''}" data-projection-cell="earned">${formatCurrency(row.earned)}</td>
+                <td class="sim-projection-cell-milestone" data-projection-cell="milestone">${renderProjectionMilestone(row.rowClass)}</td>
               </tr>
             `,
           )
