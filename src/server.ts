@@ -301,14 +301,36 @@ function publicFile(path: string, contentType: string): Response {
   });
 }
 
-function copyProxyHeaders(req: Request): Headers {
+const STRIPPED_PROXY_RESPONSE_HEADERS = [
+  'connection',
+  'content-encoding',
+  'content-length',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+] as const;
+
+export function copyProxyHeaders(req: Request): Headers {
   const headers = new Headers(req.headers);
   headers.delete('host');
   headers.delete('origin');
   headers.delete('referer');
   headers.delete('connection');
   headers.delete('content-length');
+  headers.set('accept-encoding', 'identity');
   return headers;
+}
+
+export function copyProxyResponseHeaders(headers: Headers): Headers {
+  const next = new Headers(headers);
+  for (const header of STRIPPED_PROXY_RESPONSE_HEADERS) {
+    next.delete(header);
+  }
+  return next;
 }
 
 function proxyTargetUrl(req: Request, prefix: string, targetBase: string): string {
@@ -322,11 +344,17 @@ function hasRequestBody(method: string): boolean {
 }
 
 async function proxyRequest(req: Request, prefix: string, targetBase: string): Promise<Response> {
-  return fetch(proxyTargetUrl(req, prefix, targetBase), {
+  const upstream = await fetch(proxyTargetUrl(req, prefix, targetBase), {
     method: req.method,
     headers: copyProxyHeaders(req),
     body: hasRequestBody(req.method) ? req.body : undefined,
     redirect: 'manual',
+  });
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: copyProxyResponseHeaders(upstream.headers),
   });
 }
 
