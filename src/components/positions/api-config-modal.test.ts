@@ -181,6 +181,33 @@ describe('api config modal', () => {
     });
   });
 
+  it('allows loading DPAPI credentials even when local storage has no API keys', async () => {
+    loadLocalVaultCredentialsMock.mockResolvedValue({
+      binance: { apiKey: 'binance-key', apiSecret: 'binance-secret' },
+      bybit: { apiKey: 'bybit-key', apiSecret: 'bybit-secret' },
+    });
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    const unlockButton = document.querySelector<HTMLButtonElement>('#btn-api-vault-unlock');
+
+    expect(unlockButton?.disabled).toBe(false);
+
+    unlockButton?.click();
+    await flushMicrotasks();
+
+    expect(loadLocalVaultCredentialsMock).toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem('crypto-binance-api') ?? '{}')).toEqual({
+      apiKey: 'binance-key',
+    });
+    expect(JSON.parse(localStorage.getItem('crypto-bybit-api') ?? '{}')).toEqual({
+      apiKey: 'bybit-key',
+    });
+    expect(document.querySelector('#api-config-status')?.textContent).toContain(
+      'Credenciales DPAPI cargadas',
+    );
+  });
+
   it('saves Bybit without asking for the existing Binance secret again', async () => {
     localStorage.setItem('crypto-binance-api', JSON.stringify({ apiKey: 'stored-binance-key' }));
     testBybitApiConnectionMock.mockResolvedValue({

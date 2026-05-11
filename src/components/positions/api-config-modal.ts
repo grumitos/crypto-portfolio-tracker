@@ -117,7 +117,7 @@ function getOrCreateModal(): HTMLDialogElement {
             <div class="modal-api-block-kicker" id="config-security-title">${iconLock(14)} Seguridad</div>
           </div>
           <div class="modal-api-inline-actions">
-            <button type="button" class="btn btn-sm" id="btn-api-vault-unlock" ${hasStoredBinanceApiKey || hasStoredBybitApiKey ? '' : 'disabled aria-disabled="true"'}>Cargar DPAPI</button>
+            <button type="button" class="btn btn-sm" id="btn-api-vault-unlock">Cargar DPAPI</button>
           </div>
         </section>
 

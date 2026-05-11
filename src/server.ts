@@ -88,21 +88,30 @@ async function dpapiProtect(secret: string): Promise<string> {
   );
 }
 
-async function dpapiUnprotect(secretDpapi: string): Promise<string> {
-  return runPowerShellJson(
+async function dpapiUnprotectMany(secretDpapiValues: string[]): Promise<string[]> {
+  if (secretDpapiValues.length === 0) return [];
+
+  const output = await runPowerShellJson(
     `
       $payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
       Add-Type -AssemblyName System.Security
-      $protected = [Convert]::FromBase64String([string]$payload.secretDpapi)
-      $bytes = [Security.Cryptography.ProtectedData]::Unprotect(
-        $protected,
-        $null,
-        [Security.Cryptography.DataProtectionScope]::CurrentUser
-      )
-      [Console]::Out.Write([Text.Encoding]::UTF8.GetString($bytes))
+      $plain = @()
+      foreach ($secretDpapi in @($payload.secretDpapiValues)) {
+        $protected = [Convert]::FromBase64String([string]$secretDpapi)
+        $bytes = [Security.Cryptography.ProtectedData]::Unprotect(
+          $protected,
+          $null,
+          [Security.Cryptography.DataProtectionScope]::CurrentUser
+        )
+        $plain += [Text.Encoding]::UTF8.GetString($bytes)
+      }
+      [Console]::Out.Write(($plain | ConvertTo-Json -Compress))
     `,
-    { secretDpapi },
+    { secretDpapiValues },
   );
+  const parsed = JSON.parse(output) as unknown;
+  if (Array.isArray(parsed)) return parsed.map(String);
+  return [String(parsed)];
 }
 
 async function readStoredLocalVault(): Promise<LocalVaultStoredPayload | null> {
@@ -117,18 +126,34 @@ async function readStoredLocalVault(): Promise<LocalVaultStoredPayload | null> {
 async function readPlainLocalVault(): Promise<LocalVaultPlainPayload> {
   const stored = await readStoredLocalVault();
   const plain: LocalVaultPlainPayload = {};
+  const encrypted: Array<{
+    exchange: 'binance' | 'bybit';
+    field: keyof LocalVaultExchangeCredentials;
+    value: string;
+  }> = [];
+
   if (stored?.binance) {
-    plain.binance = {
-      apiKey: await dpapiUnprotect(stored.binance.apiKeyDpapi),
-      apiSecret: await dpapiUnprotect(stored.binance.secretDpapi),
-    };
+    encrypted.push(
+      { exchange: 'binance', field: 'apiKey', value: stored.binance.apiKeyDpapi },
+      { exchange: 'binance', field: 'apiSecret', value: stored.binance.secretDpapi },
+    );
   }
   if (stored?.bybit) {
-    plain.bybit = {
-      apiKey: await dpapiUnprotect(stored.bybit.apiKeyDpapi),
-      apiSecret: await dpapiUnprotect(stored.bybit.secretDpapi),
-    };
+    encrypted.push(
+      { exchange: 'bybit', field: 'apiKey', value: stored.bybit.apiKeyDpapi },
+      { exchange: 'bybit', field: 'apiSecret', value: stored.bybit.secretDpapi },
+    );
   }
+
+  const decrypted = await dpapiUnprotectMany(encrypted.map((item) => item.value));
+  encrypted.forEach((item, index) => {
+    const exchangeCredentials = (plain[item.exchange] ??= { apiKey: '', apiSecret: '' });
+    exchangeCredentials[item.field] = decrypted[index] ?? '';
+  });
+
+  if (plain.binance && !isLocalVaultCredentials(plain.binance)) delete plain.binance;
+  if (plain.bybit && !isLocalVaultCredentials(plain.bybit)) delete plain.bybit;
+
   return plain;
 }
 
