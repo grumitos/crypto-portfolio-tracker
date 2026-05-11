@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '#test';
 import { MARKET_POLL_INTERVAL_MS, ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from './constants';
 
 describe('constants', () => {

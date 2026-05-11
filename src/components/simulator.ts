@@ -417,7 +417,8 @@ async function hydrateAutoValues(
       aprHint.textContent = formatAutoAprHint(metrics.weightedApr > 0 ? metrics.weightedApr : null);
     }
   } catch (err) {
-    if (import.meta.env.DEV) console.warn('[Simulator] market hydration failed:', err);
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true)
+      console.warn('[Simulator] market hydration failed:', err);
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
   }

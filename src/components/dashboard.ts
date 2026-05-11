@@ -175,7 +175,7 @@ function readSimulatorFrequency(fallback: CompoundFrequency): CompoundFrequency 
     const parsed = JSON.parse(raw) as { frequency?: unknown };
     return sanitizeFrequency(parsed.frequency, fallback);
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[dashboard] failed to read simulator frequency', err);
     }
     return fallback;
@@ -830,7 +830,8 @@ async function hydrateDashboardMarketStats(
       animateText: animateDynamicValues,
     });
   } catch (err) {
-    if (import.meta.env.DEV) console.warn('[Dashboard] market hydration failed:', err);
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true)
+      console.warn('[Dashboard] market hydration failed:', err);
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
     uiState.apr = null;

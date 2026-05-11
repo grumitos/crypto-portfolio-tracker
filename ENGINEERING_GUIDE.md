@@ -4,7 +4,7 @@ Guía técnica del repositorio para agentes y colaboradores humanos.
 
 ## Resumen
 
-- Stack: `Vite + TypeScript` sin framework.
+- Stack: `Bun + TypeScript` sin framework.
 - UI: SPA por hash con vistas `dashboard`, `positions`, `simulator` y `calculadora`.
 - Persistencia: `localStorage`.
 - Proyeccion: tabla mensual en `simulator`, sin dependencia de graficos.
@@ -14,12 +14,12 @@ Guía técnica del repositorio para agentes y colaboradores humanos.
 
 | Tarea                 | Comando             |
 | --------------------- | ------------------- |
-| Desarrollo            | `npm run dev`       |
-| Typecheck             | `npm run typecheck` |
-| Tests                 | `npm run test:run`  |
-| Build                 | `npm run build`     |
-| Verificación completa | `npm run check`     |
-| Cobertura CI          | `npm run check:ci`  |
+| Desarrollo            | `bun run dev`       |
+| Typecheck             | `bun run typecheck` |
+| Tests                 | `bun run test:run`  |
+| Build                 | `bun run build`     |
+| Verificación completa | `bun run check`     |
+| Cobertura CI          | `bun run check:ci`  |
 
 ## Arquitectura actual
 
@@ -74,8 +74,8 @@ Estado actual:
 - Bybit Dual Asset vive en `GET /v5/earn/advance/position` y requiere permiso `Earn`; se mapea como posicion `dual`.
 - Las posiciones derivadas abiertas de Bybit requieren `ContractTrade: Position`; son opcionales y su nocional no debe sumarse al saldo del Dashboard encima del wallet.
 - Si `GET /v5/account/wallet-balance` no esta permitido, los saldos Bybit deben caer a `GET /v5/asset/transfer/query-account-coins-balance` con permisos de Activos.
-- Las credenciales de exchanges se configuran desde el modal local, no desde `.env.local`, porque Vite expone las variables `VITE_*` en el bundle del navegador.
-- Los secrets se guardan en el vault DPAPI local expuesto por `vite.config.ts` y consumido desde `src/utils/local-vault.ts`; en `localStorage` solo deben persistir metadatos no secretos como la API key.
+- Las credenciales de exchanges se configuran desde el modal local, no desde `.env.local`, porque Bun puede exponer las variables `PUBLIC_*` en el bundle del navegador.
+- Los secrets se guardan en el vault DPAPI local expuesto por `src/server.ts` y consumido desde `src/utils/local-vault.ts`; en `localStorage` solo deben persistir metadatos no secretos como la API key.
 
 ## Criterios de calidad
 
@@ -88,7 +88,7 @@ Estado actual:
   - `aria-*` correcto
   - foco visible
   - navegación por teclado
-- Cualquier refactor relevante debe cerrar con `npm run check`.
+- Cualquier refactor relevante debe cerrar con `bun run check`.
 
 ## Archivos de referencia
 

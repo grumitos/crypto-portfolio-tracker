@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import { renderDashboard, resetDashboardLegendStateForTests } from './dashboard';
 import { DASHBOARD_VIEW_KEY, loadState, saveState } from '../utils/storage';
 import type { AppState } from '../types';

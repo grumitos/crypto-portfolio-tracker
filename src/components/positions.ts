@@ -145,14 +145,20 @@ function setAnimatedFallbackText(
 function setPositionsCount(el: HTMLElement | null, count: number, animate: boolean): void {
   if (!el) return;
   stopValueAnimation(textAnimationByElement, el);
-  setAnimatedNumber(positionsCountAnimationByElement, el, count, (next) => {
-    return String(Math.max(0, Math.round(next)));
-  }, {
-    enabled: animate,
-    durationMs: RESULT_NUMBER_ANIM_MS,
-    epsilon: 0.49,
-    allowRememberedStart: false,
-  });
+  setAnimatedNumber(
+    positionsCountAnimationByElement,
+    el,
+    count,
+    (next) => {
+      return String(Math.max(0, Math.round(next)));
+    },
+    {
+      enabled: animate,
+      durationMs: RESULT_NUMBER_ANIM_MS,
+      epsilon: 0.49,
+      allowRememberedStart: false,
+    },
+  );
 }
 
 function setPositionUsdValue(el: HTMLElement | null, value: number): void {
@@ -235,6 +241,33 @@ function updateDiscountBuyAprs(
       enabled: true,
       durationMs: RESULT_NUMBER_ANIM_MS,
     });
+
+    if (apr < 0) {
+      el.classList.add('text-loss');
+    } else if (apr === 0) {
+      el.classList.add('text-muted');
+    }
+  });
+}
+
+function updateDualPositionAprs(
+  container: HTMLElement,
+  positions: DualPosition[],
+  metrics: PositionMetrics,
+): void {
+  const doc = container.ownerDocument;
+  positions.forEach((position) => {
+    if ((position.positionKind ?? 'dual') !== 'dual') return;
+
+    const el = doc.getElementById(`position-apr-${position.id}`) as HTMLElement | null;
+    if (!el || !container.contains(el)) return;
+
+    const apr = metrics.aprByPositionId[position.id] ?? position.apr;
+    el.classList.remove('text-loss', 'text-muted');
+    stopValueAnimation(textAnimationByElement, el);
+    stopValueAnimation(positionAprAnimationByElement, el);
+    el.textContent = formatAprPercent(apr);
+    el.dataset.numericValue = String(apr);
 
     if (apr < 0) {
       el.classList.add('text-loss');
@@ -540,8 +573,13 @@ function applyPositionMarketData(
   const hasSubMinuteCountdown = updateRemainingTimesInPlace(container, positions);
   registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
 
-  aprEl.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
-  if (metrics.weightedApr > 0) {
+  aprEl.style.color =
+    metrics.weightedApr > 0
+      ? 'var(--text-primary)'
+      : metrics.weightedApr < 0
+        ? 'var(--color-loss)'
+        : 'var(--text-muted)';
+  if (Number.isFinite(metrics.weightedApr) && metrics.weightedApr !== 0) {
     setStatPercent(aprEl, metrics.weightedApr, true);
   } else {
     setStatText(aprEl, '---', true);
@@ -553,8 +591,13 @@ function applyPositionMarketData(
     setStatText(capitalEl, '---', true);
   }
 
-  dailyEl.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
-  if (metrics.dailyEarningsUsd > 0) {
+  dailyEl.style.color =
+    metrics.dailyEarningsUsd > 0
+      ? 'var(--color-gain)'
+      : metrics.dailyEarningsUsd < 0
+        ? 'var(--color-loss)'
+        : 'var(--text-muted)';
+  if (Number.isFinite(metrics.dailyEarningsUsd) && metrics.dailyEarningsUsd !== 0) {
     setStatCurrency(dailyEl, metrics.dailyEarningsUsd, true);
   } else {
     setStatText(dailyEl, '---', true);
@@ -566,6 +609,7 @@ function applyPositionMarketData(
   }
 
   updateSpotStrip(container, positions, snapshot);
+  updateDualPositionAprs(container, positions, metrics);
   updateDiscountBuyAprs(container, positions, snapshot);
   updateDiscountBuyEarnings(container, positions, snapshot);
   updateDerivativeEarnings(container, positions);
@@ -627,7 +671,8 @@ async function performAutoSync(
       onStateChange();
     }
   } catch (err) {
-    if (import.meta.env.DEV) console.warn('[positions] Auto-sync failed:', err);
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true)
+      console.warn('[positions] Auto-sync failed:', err);
     const msg = err instanceof Error ? err.message : 'Error desconocido';
     showApiErrorBanner(`No se pudieron sincronizar las posiciones desde Binance: ${msg}`);
   } finally {
@@ -757,7 +802,8 @@ async function hydratePositionMarketData(
     const { snapshot, metrics } = await getSharedMarketData(positions, forceRefresh);
     return applyPositionMarketData(container, positions, snapshot, metrics);
   } catch (err) {
-    if (import.meta.env.DEV) console.warn('[Positions] market hydration failed:', err);
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true)
+      console.warn('[Positions] market hydration failed:', err);
     registerApiFailure();
     showApiErrorBanner(POSITIONS_COPY.marketError);
     updateSpotStrip(container, positions, createUnavailableSpotSnapshot(positions));

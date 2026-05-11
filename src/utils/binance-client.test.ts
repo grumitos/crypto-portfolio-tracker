@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import { createMemoryStorage } from '../test/test-utils';
+import { clearAllCaches } from './binance-client';
 
 function jsonResponse(payload: unknown): Response {
   return {
@@ -36,8 +37,8 @@ function createCryptoStub(): Crypto {
 
 describe('binance client', () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.unstubAllGlobals();
+    clearAllCaches();
 
     Object.defineProperty(globalThis, 'localStorage', {
       value: createMemoryStorage(),

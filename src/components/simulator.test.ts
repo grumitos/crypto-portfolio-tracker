@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import { renderSimulator } from './simulator';
 import { SIMULATOR_VIEW_KEY, saveState } from '../utils/storage';
 import type { AppState } from '../types';

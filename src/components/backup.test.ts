@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 
 const backupMocks = vi.hoisted(() => ({
   exportBackup: vi.fn(),
@@ -194,7 +194,9 @@ describe('backup modal', () => {
 
     expect(readAsText).not.toHaveBeenCalled();
     expect(backupMocks.importBackup).not.toHaveBeenCalled();
-    expect(backupMocks.showAlertDialog).toHaveBeenCalledWith('Selecciona un archivo JSON de backup.');
+    expect(backupMocks.showAlertDialog).toHaveBeenCalledWith(
+      'Selecciona un archivo JSON de backup.',
+    );
   });
 
   it('rejects oversized backup files before reading', () => {

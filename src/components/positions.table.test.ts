@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import type { DualPosition } from '../types';
 import {
   formatTimeHHMM,
@@ -28,6 +28,7 @@ function makePosition(overrides: Partial<DualPosition>): DualPosition {
     projectedProfit: overrides.projectedProfit,
     expectedSettlementAsset: overrides.expectedSettlementAsset,
     expectedSettlementAmount: overrides.expectedSettlementAmount,
+    quoteAsset: overrides.quoteAsset,
     side: overrides.side,
   };
 }
@@ -117,6 +118,25 @@ describe('positions table rendering', () => {
 
     expect(group).toContain('20,104.51 USDT');
     expect(group).toContain('8.764656 ETH');
+  });
+
+  it('renders sell-high outcomes with the actual quote asset for non-stable pairs', () => {
+    const group = renderPositionGroup('Sell High', [
+      makePosition({
+        id: 'eth-btc',
+        direction: 'sell-high',
+        asset: 'ETH',
+        subscriptionAsset: 'ETH',
+        quoteAsset: 'BTC',
+        amount: 1.25,
+        targetPrice: 0.055,
+        apr: 120,
+      }),
+    ]);
+
+    expect(group).toContain('ETH/BTC');
+    expect(group).toContain('BTC');
+    expect(group).not.toContain('ETH/USDT');
   });
 
   it('renders a dropdown with component rows for grouped weighted positions', () => {

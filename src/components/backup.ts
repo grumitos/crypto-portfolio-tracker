@@ -122,7 +122,7 @@ export function bindBackupControls(root: ParentNode, onImportSuccess: () => void
         importBackup(json);
         onImportSuccess();
       } catch (err) {
-        if (import.meta.env.DEV) {
+        if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
           console.warn('[backup] import failed', err);
         }
         void showAlertDialog('Error al importar el archivo. Asegúrate de que sea un JSON válido.');

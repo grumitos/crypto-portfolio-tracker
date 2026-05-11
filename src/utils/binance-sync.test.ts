@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 
 vi.mock('./binance-client', () => ({
   fetchDualPositions: vi.fn(),
@@ -264,10 +264,47 @@ describe('binance sync cache', () => {
           displaySymbol: 'ETHUSDT',
           direction: 'buy-low',
           subscriptionAsset: 'USDT',
+          quoteAsset: 'USDT',
           amount: 20,
           targetPrice: 2325,
           apr: 902.7,
           projectedProfit: 1.25,
+        }),
+      ]),
+    );
+  });
+
+  it('preserves Bybit Dual Asset quote coin for crypto-cross positions', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([
+      {
+        id: 'bybit_dual_eth_btc',
+        productId: '36399',
+        baseCoin: 'ETH',
+        quoteCoin: 'BTC',
+        investCoin: 'ETH',
+        amount: 1,
+        apr: 120,
+        direction: 'SellHigh',
+        targetPrice: 0.055,
+        settlementTime: Date.parse('2026-05-10T08:00:00.000Z'),
+        status: 'Active',
+        yieldStartAt: Date.parse('2026-05-09T08:00:00.000Z'),
+      },
+    ]);
+
+    const snapshot = await fetchBinancePortfolioSnapshot(true);
+
+    expect(snapshot.positions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'bybit_dual_eth_btc',
+          displaySymbol: 'ETHBTC',
+          direction: 'sell-high',
+          asset: 'ETH',
+          subscriptionAsset: 'ETH',
+          quoteAsset: 'BTC',
+          targetPrice: 0.055,
         }),
       ]),
     );
@@ -391,7 +428,7 @@ describe('binance sync cache', () => {
     const snapshot = await fetchBinancePortfolioSnapshot(true);
     const expectedSettlement = resolveBinanceDualSettlementLocal('2026-03-20');
 
-    expect(snapshot.positions[0]?.settlementDate).toBe(expectedSettlement?.date);
-    expect(snapshot.positions[0]?.settlementTime).toBe(expectedSettlement?.time);
+    expect(snapshot.positions[0]?.settlementDate).toBe(expectedSettlement!.date);
+    expect(snapshot.positions[0]?.settlementTime).toBe(expectedSettlement!.time);
   });
 });

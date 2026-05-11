@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import { createMemoryStorage, flushMicrotasks } from '../../test/test-utils';
 
 const testApiConnectionMock = vi.fn();
@@ -30,6 +30,10 @@ vi.mock('../../utils/binance-client', () => ({
 vi.mock('../../utils/bybit-client', () => ({
   clearBybitClientCaches: vi.fn(),
   testBybitApiConnection: testBybitApiConnectionMock,
+}));
+
+vi.mock('../../utils/binance-sync', () => ({
+  clearBinanceSyncCaches: vi.fn(),
 }));
 
 vi.mock('../../utils/local-vault', () => ({

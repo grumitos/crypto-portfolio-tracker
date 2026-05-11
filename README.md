@@ -4,8 +4,8 @@ App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual 
 
 ## Alcance
 
-- Frontend: `Vite + TypeScript`.
-- Sin backend: todo corre en el navegador.
+- Frontend: `Bun + TypeScript` con HTML imports.
+- Servidor local Bun para assets, proxy de exchanges y vault DPAPI.
 - Persistencia local en `localStorage`.
 - Tabla de proyeccion mensual en la vista `Simulador`.
 - Import/export de backup en JSON.
@@ -17,35 +17,34 @@ App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual 
 
 ## Requisitos
 
-- Node.js 20+
-- npm 10+
+- Bun 1.3+
 
 ## Inicio rapido
 
 ```bash
-npm ci
-npm run dev
+bun install
+bun run dev
 ```
 
-Abrir la URL local que imprime Vite (por defecto `http://localhost:5176`).
+Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
 
 ## Scripts
 
 | Comando                 | Descripcion                  |
 | ----------------------- | ---------------------------- |
-| `npm run dev`           | Desarrollo con hot reload    |
-| `npm run build`         | Build de produccion          |
-| `npm run preview`       | Servir build local           |
-| `npm run test`          | Tests en modo watch          |
-| `npm run test:run`      | Tests una sola vez           |
-| `npm run test:coverage` | Tests + reporte de coverage  |
-| `npm run typecheck`     | Validacion TypeScript        |
-| `npm run lint`          | Lint con ESLint              |
-| `npm run lint:fix`      | Lint + autofix               |
-| `npm run format`        | Formatear con Prettier       |
-| `npm run format:check`  | Verificar formato            |
-| `npm run check`         | Typecheck + tests + build    |
-| `npm run check:ci`      | Typecheck + coverage + build |
+| `bun run dev`           | Desarrollo con hot reload    |
+| `bun run build`         | Build de produccion Bun      |
+| `bun run preview`       | Servir build local           |
+| `bun run test`          | Tests en modo watch          |
+| `bun run test:run`      | Tests una sola vez           |
+| `bun run test:coverage` | Tests + reporte de coverage  |
+| `bun run typecheck`     | Validacion TypeScript        |
+| `bun run lint`          | Lint con ESLint              |
+| `bun run lint:fix`      | Lint + autofix               |
+| `bun run format`        | Formatear con Prettier       |
+| `bun run format:check`  | Verificar formato            |
+| `bun run check`         | Typecheck + tests + build    |
+| `bun run check:ci`      | Typecheck + coverage + build |
 
 ## Flujo recomendado de uso
 
@@ -134,7 +133,7 @@ Abrir la URL local que imprime Vite (por defecto `http://localhost:5176`).
   - `GET /v5/position/list` para posiciones abiertas `linear`, `inverse` y `option`.
   - `GET /v5/market/tickers` para precios spot publicos.
 - En ambas integraciones, el `API Secret` se guarda cifrado en localStorage con WebCrypto AES-GCM y una contraseña maestra que no se persiste; tras recargar, hay que desbloquear el vault para firmar lecturas privadas.
-- Las credenciales de exchanges no se cargan desde `.env.local`: en una SPA de Vite esos valores terminan expuestos al bundle del navegador. Configuralas solo desde el modal local de la app.
+- Las credenciales de exchanges no se cargan desde `.env.local`: las variables `PUBLIC_*` de Bun pueden quedar expuestas al bundle del navegador. Configuralas solo desde el modal local de la app.
 - Dashboard puede sumar saldos de Binance y Bybit a la vez. Las posiciones automatizadas incluyen Binance Dual Investment, Bybit Dual Asset y, solo si la key lo permite, posiciones derivadas abiertas de Bybit; el nocional derivado Bybit no se suma encima del wallet para evitar doble conteo.
 
 ## Regla de facturacion (Dual Binance)
@@ -208,7 +207,7 @@ Los tokens semanticos activos cubren superficie, texto, borde, accent, success, 
 
 ## Checklist de PR
 
-- Ejecutar `npm run check`.
+- Ejecutar `bun run check`.
 - Verificar estados `light` y `dark`.
 - Revisar shell en mobile y desktop.
 - Confirmar que no se introduzcan nuevos hardcodeos visuales en TypeScript.

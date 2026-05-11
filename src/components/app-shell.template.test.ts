@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '#test';
 import { renderAppShell } from './app-shell.template';
 import type { AppShellNavItem } from './app-shell.constants';
 

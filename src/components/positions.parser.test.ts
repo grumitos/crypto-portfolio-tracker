@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '#test';
 import { parseBinancePositions, parseImportedPositions } from './positions.parser';
 
 describe('positions parser', () => {
@@ -29,6 +29,30 @@ Holding
     expect(parsed[1].direction).toBe('sell-high');
     expect(parsed[1].asset).toBe('SOL');
     expect(parsed[1].subscriptionAsset).toBe('SOL');
+    expect(parsed[1].quoteAsset).toBe('USDT');
+  });
+
+  it('preserves the quote asset for non-stable sell-high pairs', () => {
+    const raw = `
+ETH-BTC
+Sell-high
+2026-05-09 08:45
+1 ETH
+0.055 2026-05-10 03:00
+120%
+Holding
+`.trim();
+
+    const parsed = parseBinancePositions(raw);
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({
+      asset: 'ETH',
+      direction: 'sell-high',
+      subscriptionAsset: 'ETH',
+      quoteAsset: 'BTC',
+      targetPrice: 0.055,
+    });
   });
 
   it('parses Spanish "Comprar bajo" direction from pasted Binance rows', () => {

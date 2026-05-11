@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 
 function mockMatchMedia(matches: boolean): void {
   Object.defineProperty(window, 'matchMedia', {
@@ -30,8 +30,9 @@ function setRect(el: HTMLElement, left: number, top: number): void {
 }
 
 async function loadRouterModule() {
-  vi.resetModules();
-  return import('./router');
+  const router = await import('./router');
+  router.resetRouterForTests();
+  return router;
 }
 
 describe('router', () => {

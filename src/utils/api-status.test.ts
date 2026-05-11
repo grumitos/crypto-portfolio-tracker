@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from '#test';
 import { createMemoryStorage, resetDom } from '../test/test-utils';
+import { resetApiStatusForTests } from './api-status';
 
 async function loadApiStatus() {
   return import('./api-status');
@@ -14,8 +15,8 @@ function addStatusTarget(): HTMLElement {
 
 describe('api-status utils', () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.useFakeTimers();
+    resetApiStatusForTests();
     Object.defineProperty(globalThis, 'localStorage', {
       value: createMemoryStorage(),
       configurable: true,

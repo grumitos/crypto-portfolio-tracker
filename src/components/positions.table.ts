@@ -90,7 +90,7 @@ function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean })
           ? `<td class="mono pos-usd-cell" id="position-usd-${p.id}" data-label="Valor USD">${initialUsdCellHtml(p)}</td>`
           : ''
       }
-      <td class="mono" data-label="Target">${p.targetPrice > 0 ? formatCompactNumber(p.targetPrice) : '---'}</td>
+      <td class="mono" data-label="Target">${p.targetPrice > 0 ? formatTargetPrice(p.targetPrice) : '---'}</td>
       <td class="pos-outcome-cell" data-label="Resultado">${renderOutcomeCell(p)}</td>
       <td class="pos-datetime-cell" data-label="Suscripcion">${renderDateTimeCell(p.entryDate, entryHint)}</td>
       <td class="pos-datetime-cell" data-label="Liquidacion">${isDerivative ? '<span class="pos-date-value">---</span>' : renderDateTimeCell(p.settlementDate, settlementHint)}</td>
@@ -128,7 +128,7 @@ function renderAprCell(position: DualPosition): string {
     return `<td class="mono pos-emphasis text-muted" id="position-apr-${escapeHtml(position.id)}" data-label="APR"><span class="skeleton skeleton-number" style="width:64px"></span></td>`;
   }
 
-  return `<td class="mono pos-emphasis" data-label="APR">${position.apr.toFixed(2)}%</td>`;
+  return `<td class="mono pos-emphasis" id="position-apr-${escapeHtml(position.id)}" data-label="APR">${position.apr.toFixed(2)}%</td>`;
 }
 
 function renderEarningsCell(
@@ -178,7 +178,7 @@ function renderComponentRows(parent: DualPosition, options: { showUsdColumn: boo
           ? `<td class="mono pos-usd-cell" id="position-usd-${parent.id}-comp-${c.id}"></td>`
           : ''
       }
-      <td class="mono">${c.targetPrice > 0 ? formatCompactNumber(c.targetPrice) : '---'}</td>
+      <td class="mono">${c.targetPrice > 0 ? formatTargetPrice(c.targetPrice) : '---'}</td>
       <td class="pos-outcome-cell">${renderOutcomeCell(tempPos)}</td>
       <td class="pos-datetime-cell">${renderDateTimeCell(c.entryDate)}</td>
       <td class="pos-datetime-cell">${renderDateTimeCell(c.settlementDate)}</td>
@@ -263,11 +263,17 @@ function resolveOutcomeRows(
     ]);
   }
 
+  const quoteAsset = getQuoteAsset(position);
+  const executedAmount =
+    position.targetPrice > 0 && quoteAsset !== 'USDT'
+      ? (position.amount + projectedProfit) * position.targetPrice
+      : position.amount * position.targetPrice + projectedProfit;
+
   return applyExpectedSettlementRow(position, [
     {
       label: 'Ejecuta',
-      amount: position.amount * position.targetPrice + projectedProfit,
-      asset: 'USDT',
+      amount: executedAmount,
+      asset: quoteAsset,
       changed: true,
     },
     {
@@ -390,11 +396,17 @@ function formatAmount(amount: number, asset: string): string {
   return amount.toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' ' + asset;
 }
 
-function formatCompactNumber(value: number): string {
+function formatTargetPrice(value: number): string {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: value > 0 && value < 1 ? 8 : 2,
   });
+}
+
+function getQuoteAsset(position: DualPosition): string {
+  if (position.quoteAsset) return position.quoteAsset;
+  if (position.direction === 'sell-high') return 'USDT';
+  return position.subscriptionAsset;
 }
 
 function productLabel(position: DualPosition): string {
@@ -408,7 +420,7 @@ function productLabel(position: DualPosition): string {
   }
 
   if (position.direction === 'sell-high') {
-    return `${position.subscriptionAsset}/USDT`;
+    return `${position.subscriptionAsset}/${getQuoteAsset(position)}`;
   }
   return `${position.asset}/${position.subscriptionAsset}`;
 }

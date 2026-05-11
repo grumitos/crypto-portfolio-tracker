@@ -1,13 +1,8 @@
-// @vitest-environment node
+import { describe, expect, it } from '#test';
+import { isAllowedLocalVaultRequest, isLocalVaultCredentials } from './server';
 
-import type { IncomingHttpHeaders } from 'node:http';
-import { describe, expect, it } from 'vitest';
-import { isAllowedLocalVaultRequest, isLocalVaultCredentials } from './vite.config';
-
-function requestWith(
-  headers: IncomingHttpHeaders,
-): Parameters<typeof isAllowedLocalVaultRequest>[0] {
-  return { headers };
+function requestWith(headers: HeadersInit): Pick<Request, 'headers'> {
+  return { headers: new Headers(headers) };
 }
 
 describe('local DPAPI vault request guards', () => {

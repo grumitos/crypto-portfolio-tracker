@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import { MARKET_POLL_INTERVAL_MS } from './constants';
+import { resetMarketPollerForTests } from './market-poller';
 
 async function loadMarketPoller() {
-  vi.resetModules();
+  resetMarketPollerForTests();
   return import('./market-poller');
 }
 

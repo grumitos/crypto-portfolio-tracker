@@ -73,14 +73,15 @@ function parseBinanceChunk(chunk: string[], allowedAssets: Set<string>): DualPos
   if (!Number.isFinite(apr) || apr < 0) return null;
 
   const targetPrice = extractTargetPrice(chunk, settlement) ?? 0;
-  const resolvedAsset = resolveAssetForDirection(direction, pair, subscriptionAsset);
-  if (!resolvedAsset || !allowedAssets.has(resolvedAsset)) return null;
+  const resolvedPair = resolveAssetsForDirection(direction, pair, subscriptionAsset);
+  if (!resolvedPair || !allowedAssets.has(resolvedPair.asset)) return null;
 
   return {
     id: generateId(),
-    asset: resolvedAsset,
+    asset: resolvedPair.asset,
     direction,
     subscriptionAsset,
+    quoteAsset: resolvedPair.quoteAsset,
     amount,
     targetPrice,
     entryDate: entry.date,
@@ -202,14 +203,17 @@ function normalizeText(value: string): string {
     .trim();
 }
 
-function resolveAssetForDirection(
+function resolveAssetsForDirection(
   direction: Direction,
   pair: { left: string; right: string },
   subscriptionAsset: string,
-): string | null {
+): { asset: string; quoteAsset: string } | null {
   if (subscriptionAsset !== pair.left && subscriptionAsset !== pair.right) return null;
-  if (direction === 'sell-high') return subscriptionAsset;
-  return subscriptionAsset === pair.left ? pair.right : pair.left;
+  const otherAsset = subscriptionAsset === pair.left ? pair.right : pair.left;
+  if (direction === 'sell-high') {
+    return { asset: subscriptionAsset, quoteAsset: otherAsset };
+  }
+  return { asset: otherAsset, quoteAsset: subscriptionAsset };
 }
 
 function normalizeTimeForSort(value?: string): string {
@@ -250,6 +254,7 @@ interface PositionAccumulator {
   asset: string;
   direction: Direction;
   subscriptionAsset: string;
+  quoteAsset?: string;
   amount: number;
   aprWeightSum: number;
   targetWeightSum: number;
@@ -267,7 +272,7 @@ export function consolidatePositionsByPair(positions: DualPosition[]): DualPosit
     const weight = Number.isFinite(position.amount) && position.amount > 0 ? position.amount : 0;
     if (weight <= 0) return;
 
-    const key = `${position.direction}|${position.asset}|${position.subscriptionAsset}|${position.settlementDate}`;
+    const key = `${position.direction}|${position.asset}|${position.subscriptionAsset}|${position.quoteAsset ?? ''}|${position.settlementDate}`;
     const existing = grouped.get(key);
 
     if (!existing) {
@@ -276,6 +281,7 @@ export function consolidatePositionsByPair(positions: DualPosition[]): DualPosit
         asset: position.asset,
         direction: position.direction,
         subscriptionAsset: position.subscriptionAsset,
+        quoteAsset: position.quoteAsset,
         amount: weight,
         aprWeightSum: position.apr * weight,
         targetWeightSum: position.targetPrice * weight,
@@ -346,6 +352,7 @@ export function consolidatePositionsByPair(positions: DualPosition[]): DualPosit
       asset: aggregate.asset,
       direction: aggregate.direction,
       subscriptionAsset: aggregate.subscriptionAsset,
+      quoteAsset: aggregate.quoteAsset,
       amount: total,
       targetPrice: total > 0 ? aggregate.targetWeightSum / total : 0,
       entryDate: aggregate.entryDate,

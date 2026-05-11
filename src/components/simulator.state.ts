@@ -62,7 +62,7 @@ export function loadSimulatorViewState(defaults: SimulatorViewState): SimulatorV
       autoGoal: typeof parsed.autoGoal === 'boolean' ? parsed.autoGoal : defaults.autoGoal,
     };
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[simulator.state] failed to load view state', err);
     }
     return defaults;

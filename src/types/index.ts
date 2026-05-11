@@ -40,6 +40,7 @@ export interface DualPosition {
   asset: string; // e.g. "ETH", "SOL", "BTC"
   direction: Direction; // buy-low or sell-high
   subscriptionAsset: string; // e.g. "USDT", "USDC", "SOL"
+  quoteAsset?: string; // quote asset for targetPrice, e.g. "USDT", "BTC"
   amount: number; // subscription amount
   targetPrice: number;
   entryDate: string; // ISO date

@@ -1,0 +1,17 @@
+[serve]
+port = 5176
+
+[serve.static]
+env = "PUBLIC_*"
+
+[test]
+preload = ["./src/test/setup.ts"]
+coverageReporter = ["text", "lcov"]
+coverageDir = "./coverage"
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = [
+  "src/test/**",
+  "src/types/**",
+  "src/main.ts",
+  "src/server.ts",
+]

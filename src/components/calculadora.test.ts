@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from '#test';
 import { renderCalculadora } from './calculadora';
 import { createMemoryStorage, mockMatchMedia, resetDom } from '../test/test-utils';
 import { DEFAULT_CALC_REBUY_PCT, DEFAULT_CALC_SELL_PCT, saveCalcState } from '../utils/storage';

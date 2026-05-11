@@ -21,5 +21,5 @@
 
 ## Acceptance Checks
 - Preserve routes, localStorage keys and Binance integration behavior.
-- Keep `npm run check` green.
+- Keep `bun run check` green.
 - Maintain keyboard navigation, focus visibility and current AA-oriented contrast baseline.

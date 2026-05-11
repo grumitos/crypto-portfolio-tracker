@@ -20,7 +20,8 @@ let pendingResolve: ((value: boolean) => void) | null = null;
 
 function ensureDialogElements(): DialogElements | null {
   if (typeof document === 'undefined') return null;
-  if (dialogElements) return dialogElements;
+  if (dialogElements?.overlay.isConnected) return dialogElements;
+  dialogElements = null;
 
   const overlay = document.createElement('dialog');
   overlay.id = 'modal-app-dialog';

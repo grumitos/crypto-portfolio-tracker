@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi } from '#test';
 
 export function createMemoryStorage(): Storage {
   const map = new Map<string, string>();

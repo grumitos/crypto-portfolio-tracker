@@ -48,7 +48,7 @@ export function loadDashboardLegendState(defaultState: DashboardLegendState): Da
       goal: legend.goal ?? fallback.goal,
     });
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[dashboard.state] failed to load legend state', err);
     }
     return fallback;

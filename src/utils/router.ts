@@ -3,6 +3,7 @@ import type { View } from '../types';
 let currentView: View = 'dashboard';
 let snapshotRects: Map<string, DOMRect> | null = null;
 let isViewSwitch = false;
+let hashChangeHandler: (() => void) | null = null;
 
 export function getCurrentView(): View {
   return currentView;
@@ -19,16 +20,32 @@ function ignoreViewTransitionAbort(transition: {
 }
 
 export function initRouter(onNavigate: (view: View) => void): void {
-  window.addEventListener('hashchange', () => {
+  if (hashChangeHandler) {
+    window.removeEventListener('hashchange', hashChangeHandler);
+  }
+
+  hashChangeHandler = () => {
     const hash = window.location.hash.slice(1) as View;
     if (['dashboard', 'positions', 'simulator', 'calculadora'].includes(hash)) {
       navigateTo(hash, onNavigate);
     }
-  });
+  };
+
+  window.addEventListener('hashchange', hashChangeHandler);
 
   const hash = window.location.hash.slice(1) as View;
   if (['dashboard', 'positions', 'simulator', 'calculadora'].includes(hash)) {
     currentView = hash;
+  }
+}
+
+export function resetRouterForTests(): void {
+  currentView = 'dashboard';
+  snapshotRects = null;
+  isViewSwitch = false;
+  if (hashChangeHandler) {
+    window.removeEventListener('hashchange', hashChangeHandler);
+    hashChangeHandler = null;
   }
 }
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from '#test';
 import { createMemoryStorage } from '../test/test-utils';
 import { DASHBOARD_VIEW_KEY } from '../utils/storage';
 import {

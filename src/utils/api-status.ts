@@ -20,7 +20,7 @@ function readStoredTimestamp(): number | null {
   try {
     return normalizeTimestamp(localStorage.getItem(API_LAST_UPDATED_KEY));
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[api-status] failed to read timestamp from storage', err);
     }
     return null;
@@ -32,7 +32,7 @@ function writeStoredTimestamp(value: number): void {
   try {
     localStorage.setItem(API_LAST_UPDATED_KEY, String(value));
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[api-status] failed to write timestamp to storage', err);
     }
     // Ignore storage failures (private mode, quota, etc.)
@@ -151,4 +151,14 @@ export function registerApiFailure(): void {
   ensureFallbackNextPollAt();
   ensureStatusTicker();
   updateHeaderLabel();
+}
+
+export function resetApiStatusForTests(): void {
+  cachedLastUpdatedAt = undefined;
+  hasApiFailure = false;
+  fallbackNextPollAt = null;
+  if (statusTicker) {
+    clearInterval(statusTicker);
+    statusTicker = null;
+  }
 }

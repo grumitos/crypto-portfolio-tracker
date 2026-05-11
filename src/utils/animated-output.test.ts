@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 
 const animationMocks = vi.hoisted(() => ({
   setAnimatedNumber: vi.fn(),
@@ -141,10 +141,12 @@ describe('animated-output', () => {
     expect(animationMocks.setAnimatedText).toHaveBeenCalledTimes(2);
 
     const fadeOptions = animationMocks.setAnimatedText.mock.calls[0][3] as {
+      enabled: boolean;
       mode: string;
       className: string;
     };
     const scrambleOptions = animationMocks.setAnimatedText.mock.calls[1][3] as {
+      enabled: boolean;
       mode: string;
       className: string;
       durationMs: number;

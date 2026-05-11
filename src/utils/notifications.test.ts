@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from '#test';
 import { resetDom } from '../test/test-utils';
 
 describe('notifications utils', () => {

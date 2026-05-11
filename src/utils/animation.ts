@@ -105,7 +105,7 @@ function prefersReducedMotion(): boolean {
   try {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[animation] matchMedia unavailable', err);
     }
     return false;

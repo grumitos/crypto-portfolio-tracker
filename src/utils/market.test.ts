@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import type { DualPosition } from '../types';
-import type { AssetPriceSnapshot } from './market';
+import { clearMarketCaches, type AssetPriceSnapshot } from './market';
 
 const BINANCE_GLOBAL_URL = 'https://api.binance.com/api/v3/ticker/price';
 const BINANCE_US_URL = 'https://api.binance.us/api/v3/ticker/price';
@@ -65,9 +65,9 @@ async function readAssetPriceUSD(
 
 describe('market utils', () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    clearMarketCaches();
   });
 
   it('returns stable assets as 1 without calling fetch', async () => {
@@ -311,6 +311,39 @@ describe('market utils', () => {
     expect(metrics.dailyEarningsUsd).toBeCloseTo(expectedProfit, 8);
     expect(metrics.weightedApr).not.toBeCloseTo(10, 8);
     expect(metrics.priceSourceByAsset.ETH).toBe('live');
+  });
+
+  it('uses the current non-stable pair settlement value as effective APR', async () => {
+    const market = await import('./market');
+    const snapshot: AssetPriceSnapshot = {
+      priceByAsset: { ETH: 3300, BTC: 60000 },
+      sourceByAsset: { ETH: 'live', BTC: 'live' },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+    };
+    const position: DualPosition = {
+      id: 'eth-btc-sell',
+      asset: 'ETH',
+      direction: 'sell-high',
+      subscriptionAsset: 'ETH',
+      quoteAsset: 'BTC',
+      amount: 1,
+      targetPrice: 0.05,
+      entryDate: '2026-05-09',
+      entryTime: '08:00',
+      settlementDate: '2026-05-10',
+      settlementTime: '08:00',
+      apr: 0,
+    };
+
+    const metrics = market.calculatePositionMetricsFromSnapshot([position], snapshot);
+    const expectedApr = ((0.055 - 0.05) / 0.05) * 365 * 100;
+
+    expect(metrics.aprByPositionId['eth-btc-sell']).toBeCloseTo(expectedApr, 8);
+    expect(metrics.weightedApr).toBeCloseTo(expectedApr, 8);
+    expect(metrics.aprByPositionId['eth-btc-sell']).not.toBe(0);
+    expect(metrics.priceSourceByAsset.BTC).toBe('live');
   });
 
   it('deduplicates in-flight ticker requests for concurrent calls', async () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import { renderPositions } from './positions';
 import { saveState } from '../utils/storage';
 import type { AppState } from '../types';
@@ -8,10 +8,51 @@ import { resetMarketPollerForTests } from '../utils/market-poller';
 import { MARKET_POLL_INTERVAL_MS } from '../utils/constants';
 import * as animation from '../utils/animation';
 
-vi.mock('../utils/market', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/market')>();
+vi.mock('../utils/market', () => {
+  function normalizeAsset(asset: string): string {
+    return asset.toUpperCase().trim();
+  }
+
+  function isValidPrice(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0;
+  }
+
+  function calculateDiscountBuyNoKnockoutProfit(
+    position: { asset: string; amount: number; targetPrice: number },
+    snapshot: { priceByAsset: Record<string, number> },
+  ): number | null {
+    const spotPrice = snapshot.priceByAsset[normalizeAsset(position.asset)] ?? 0;
+    if (
+      !isValidPrice(spotPrice) ||
+      !isValidPrice(position.amount) ||
+      !isValidPrice(position.targetPrice)
+    ) {
+      return null;
+    }
+    return (spotPrice - position.targetPrice) * (position.amount / position.targetPrice);
+  }
+
+  function calculateDiscountBuyEffectiveApr(
+    position: {
+      asset: string;
+      subscriptionAsset: string;
+      amount: number;
+      targetPrice: number;
+    },
+    snapshot: { priceByAsset: Record<string, number> },
+  ): number | null {
+    const profit = calculateDiscountBuyNoKnockoutProfit(position, snapshot);
+    const subscriptionPrice =
+      snapshot.priceByAsset[normalizeAsset(position.subscriptionAsset)] ?? 0;
+    const capitalUsd = position.amount * subscriptionPrice;
+    if (profit === null || !isValidPrice(capitalUsd)) return null;
+    return (profit / capitalUsd) * 365 * 100;
+  }
+
   return {
-    ...actual,
+    calculateDiscountBuyEffectiveApr,
+    calculateDiscountBuyNoKnockoutProfit,
+    normalizeAsset,
     getAssetPriceSnapshot: vi.fn(),
     calculatePositionMetricsFromSnapshot: vi.fn(),
   };

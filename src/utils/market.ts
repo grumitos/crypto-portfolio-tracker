@@ -19,7 +19,7 @@ const DEFAULT_BINANCE_TICKER_ENDPOINTS = [
 const TICKER_SYMBOL_PATTERN = /^[A-Z0-9_-]{3,20}$/;
 
 function resolveTickerEndpoints(): string[] {
-  const raw = import.meta.env.VITE_BINANCE_ENDPOINTS;
+  const raw = typeof process !== 'undefined' ? process.env.PUBLIC_BINANCE_ENDPOINTS : undefined;
   if (typeof raw !== 'string') {
     return [...DEFAULT_BINANCE_TICKER_ENDPOINTS];
   }
@@ -151,7 +151,63 @@ function resolveMetricsApr(position: DualPosition, snapshot: AssetPriceSnapshot)
   if (position.positionKind === 'discount-buy') {
     return calculateDiscountBuyEffectiveApr(position, snapshot) ?? 0;
   }
+  const crossPairApr = calculateCrossPairDualEffectiveApr(position, snapshot);
+  if (crossPairApr !== null) return crossPairApr;
   return position.apr;
+}
+
+function resolveQuoteAsset(position: DualPosition): string {
+  const quoteAsset = normalizeAsset(position.quoteAsset ?? '');
+  if (quoteAsset) return quoteAsset;
+  if (position.direction === 'sell-high') return 'USDT';
+  return normalizeAsset(position.subscriptionAsset);
+}
+
+function getSnapshotPrice(snapshot: AssetPriceSnapshot, asset: string): number {
+  return snapshot.priceByAsset[normalizeAsset(asset)] ?? 0;
+}
+
+function resolveCurrentPairPrice(
+  position: DualPosition,
+  snapshot: AssetPriceSnapshot,
+): number | null {
+  const basePrice = getSnapshotPrice(snapshot, position.asset);
+  const quotePrice = getSnapshotPrice(snapshot, resolveQuoteAsset(position));
+  if (!isValidPrice(basePrice) || !isValidPrice(quotePrice)) return null;
+  return basePrice / quotePrice;
+}
+
+function isNonStableDualPair(position: DualPosition): boolean {
+  if ((position.positionKind ?? 'dual') !== 'dual') return false;
+  const baseAsset = normalizeAsset(position.asset);
+  const quoteAsset = resolveQuoteAsset(position);
+  return Boolean(
+    baseAsset &&
+    quoteAsset &&
+    baseAsset !== quoteAsset &&
+    !isStable(baseAsset) &&
+    !isStable(quoteAsset),
+  );
+}
+
+function calculateCrossPairDualEffectiveApr(
+  position: DualPosition,
+  snapshot: AssetPriceSnapshot,
+): number | null {
+  if (!isNonStableDualPair(position)) return null;
+  if (position.direction !== 'sell-high') return null;
+
+  const currentPairPrice = resolveCurrentPairPrice(position, snapshot);
+  const billedDays = calculateDualProjectedBilledDays(position);
+
+  if (currentPairPrice === null || !isValidPrice(position.targetPrice) || billedDays <= 0) {
+    return null;
+  }
+
+  const pairMove = currentPairPrice - position.targetPrice;
+  if (pairMove <= 0) return null;
+
+  return (pairMove / position.targetPrice) * (365 / billedDays) * 100;
 }
 
 function isValidPrice(value: unknown): value is number {
@@ -299,7 +355,7 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
   try {
     return await fetch(url, { cache: 'no-store', signal: controller.signal });
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[market] fetch failed', { url, err });
     }
     return null;
@@ -330,7 +386,7 @@ async function fetchTickerRowsWithFallback(query: string): Promise<Map<string, n
       markEndpointHealthy(index);
       return rows;
     } catch (err) {
-      if (import.meta.env.DEV) {
+      if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
         console.warn('[market] invalid ticker payload', { baseUrl, err });
       }
       continue;
@@ -362,7 +418,7 @@ async function fetchTicker24hRowsWithFallback(query: string): Promise<Map<string
       mark24hEndpointHealthy(index);
       return rows;
     } catch (err) {
-      if (import.meta.env.DEV) {
+      if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
         console.warn('[market] invalid ticker 24h payload', { baseUrl, err });
       }
       continue;
@@ -503,6 +559,7 @@ function buildPositionMetricsCacheKey(positions: DualPosition[]): string {
         position.id,
         normalizeAsset(position.asset),
         normalizeAsset(position.subscriptionAsset),
+        resolveQuoteAsset(position),
         position.amount.toFixed(8),
         position.targetPrice.toFixed(8),
         position.apr.toFixed(8),
@@ -512,6 +569,10 @@ function buildPositionMetricsCacheKey(positions: DualPosition[]): string {
         position.settlementTime ?? '',
         position.positionKind ?? 'dual',
         Number.isFinite(position.notionalUsd) ? String(position.notionalUsd) : '',
+        normalizeAsset(position.expectedSettlementAsset ?? ''),
+        Number.isFinite(position.expectedSettlementAmount)
+          ? String(position.expectedSettlementAmount)
+          : '',
       ].join(':'),
     )
     .sort()
@@ -728,6 +789,14 @@ export function calculatePositionMetricsFromSnapshot(
 
     if (position.positionKind !== 'derivative') {
       metricAssets.add(subscriptionAsset);
+      const quoteAsset = resolveQuoteAsset(position);
+      if (quoteAsset) {
+        metricAssets.add(quoteAsset);
+      }
+      const expectedSettlementAsset = normalizeAsset(position.expectedSettlementAsset ?? '');
+      if (expectedSettlementAsset) {
+        metricAssets.add(expectedSettlementAsset);
+      }
     }
     if (position.positionKind === 'discount-buy') {
       const underlyingAsset = normalizeAsset(position.asset);
@@ -814,6 +883,16 @@ function buildPositionMetricsAssetUniverse(positions: DualPosition[]): string[] 
     const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
     if (subscriptionAsset) {
       assets.add(subscriptionAsset);
+    }
+
+    const quoteAsset = resolveQuoteAsset(position);
+    if (quoteAsset) {
+      assets.add(quoteAsset);
+    }
+
+    const expectedSettlementAsset = normalizeAsset(position.expectedSettlementAsset ?? '');
+    if (expectedSettlementAsset) {
+      assets.add(expectedSettlementAsset);
     }
 
     if (position.positionKind === 'discount-buy') {

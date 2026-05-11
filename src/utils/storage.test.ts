@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from '#test';
 import {
   DEFAULT_CALC_REBUY_PCT,
   DEFAULT_CALC_SELL_PCT,
@@ -199,6 +199,31 @@ describe('storage', () => {
     expect(position.source).toBe('Bybit');
     expect(position.displaySymbol).toBe('BTCUSDT');
     expect(position.projectedProfit).toBeCloseTo(0.005479452054794521, 12);
+  });
+
+  it('preserves quote asset for crypto-cross auto positions', () => {
+    saveStoredPositionsMode('auto');
+    replaceAutoPositions([
+      {
+        id: 'bybit_dual_eth_btc',
+        asset: 'ETH',
+        direction: 'sell-high',
+        subscriptionAsset: 'ETH',
+        quoteAsset: 'BTC',
+        amount: 1,
+        targetPrice: 0.055,
+        entryDate: '2026-05-09',
+        settlementDate: '2026-05-10',
+        apr: 120,
+        source: 'Bybit',
+        positionKind: 'dual',
+        displaySymbol: 'ETHBTC',
+      },
+    ]);
+
+    const position = loadState().autoPositions[0];
+    expect(position.quoteAsset).toBe('BTC');
+    expect(position.displaySymbol).toBe('ETHBTC');
   });
 
   it('preserves grouped components when importing aggregated positions', () => {

@@ -147,9 +147,7 @@ function sanitizePositionSource(value: unknown): DualPosition['source'] | undefi
 }
 
 function sanitizePositionKind(value: unknown): DualPosition['positionKind'] | undefined {
-  return value === 'dual' || value === 'derivative' || value === 'discount-buy'
-    ? value
-    : undefined;
+  return value === 'dual' || value === 'derivative' || value === 'discount-buy' ? value : undefined;
 }
 
 function sanitizePositionSide(value: unknown): DualPosition['side'] | undefined {
@@ -235,6 +233,11 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
     apr: sanitizeNonNegative(record.apr, defaults.apr),
     ...(components.length > 1 ? { components } : {}),
   };
+
+  if (typeof record.quoteAsset === 'string') {
+    const quoteAsset = sanitizeSymbol(record.quoteAsset, '');
+    if (quoteAsset) position.quoteAsset = quoteAsset;
+  }
 
   const source = sanitizePositionSource(record.source);
   if (source) position.source = source;
@@ -415,7 +418,7 @@ export function loadState(): AppState {
     const parsed = JSON.parse(raw) as Partial<AppState>;
     return sanitizeAppState(parsed);
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[storage] failed to load app state', err);
     }
     return getDefaultState();
@@ -450,7 +453,7 @@ export function saveState(state: AppState | Partial<AppState>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeAppState(state)));
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[storage] failed to save app state', err);
     }
     notifyStorageError();
@@ -628,7 +631,7 @@ export function loadCalcState(): CalculadoraState {
     const parsed = JSON.parse(raw) as Partial<CalculadoraState>;
     return sanitizeCalcState(parsed);
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[storage] failed to load calculadora state', err);
     }
     return sanitizeCalcState(getDefaultCalcState());
@@ -639,7 +642,7 @@ export function saveCalcState(state: CalculadoraState): void {
   try {
     localStorage.setItem(CALC_KEY, JSON.stringify(state));
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[storage] failed to save calculadora state', err);
     }
     notifyStorageError();

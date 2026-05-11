@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '#test';
 import { createAssetMonogram, resolveAssetLogoSources } from './asset-logos';
 
 describe('asset logos', () => {

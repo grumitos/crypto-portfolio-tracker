@@ -31,6 +31,7 @@ export function getPositionsCacheKey(positions: DualPosition[]): string {
         direction: position.direction,
         positionKind: position.positionKind ?? 'dual',
         subscriptionAsset: position.subscriptionAsset,
+        quoteAsset: position.quoteAsset ?? '',
         amount: position.amount,
         targetPrice: position.targetPrice,
         entryDate: position.entryDate,
@@ -64,6 +65,16 @@ function buildAssetUniverse(positions: DualPosition[]): string[] {
     const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
     if (subscriptionAsset) {
       assets.add(subscriptionAsset);
+    }
+
+    const quoteAsset = normalizeAsset(position.quoteAsset ?? '');
+    if (quoteAsset) {
+      assets.add(quoteAsset);
+    }
+
+    const expectedSettlementAsset = normalizeAsset(position.expectedSettlementAsset ?? '');
+    if (expectedSettlementAsset) {
+      assets.add(expectedSettlementAsset);
     }
   });
 

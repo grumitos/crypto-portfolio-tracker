@@ -12,7 +12,7 @@ async function invokeSubscriber(callback: TickCallback, forceRefresh: boolean): 
     await callback(forceRefresh);
   } catch (err) {
     // Individual subscriber errors must not break other subscribers.
-    if (import.meta.env.DEV) {
+    if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true) {
       console.warn('[market-poller] subscriber failed', err);
     }
   }

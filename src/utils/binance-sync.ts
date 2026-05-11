@@ -73,6 +73,7 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
   const direction: Direction = bp.optionType === 'CALL' ? 'sell-high' : 'buy-low';
   const asset = bp.optionType === 'CALL' ? bp.investCoin : bp.exercisedCoin;
   const subscriptionAsset = bp.investCoin;
+  const quoteAsset = bp.optionType === 'CALL' ? bp.exercisedCoin : bp.investCoin;
 
   const entryTimestamp = resolveEntryTimestamp(bp);
   const entryAt = new Date(entryTimestamp);
@@ -84,6 +85,7 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
     asset,
     direction,
     subscriptionAsset,
+    quoteAsset,
     amount: bp.amount,
     targetPrice: bp.strikePrice,
     entryDate: entry.date,
@@ -107,6 +109,7 @@ function mapBybitPosition(position: BybitPosition): DualPosition {
     asset: position.baseAsset,
     direction: position.side === 'Sell' ? 'sell-high' : 'buy-low',
     subscriptionAsset: position.baseAsset,
+    quoteAsset: position.quoteAsset,
     amount: position.size,
     targetPrice: position.markPrice || position.avgPrice,
     entryDate: entry?.date ?? today,
@@ -131,6 +134,7 @@ function mapBybitDualAssetPosition(position: BybitDualAssetPosition): DualPositi
     asset: position.baseCoin,
     direction: position.direction === 'SellHigh' ? 'sell-high' : 'buy-low',
     subscriptionAsset: position.investCoin,
+    quoteAsset: position.quoteCoin,
     amount: position.amount,
     targetPrice: position.targetPrice,
     entryDate: entry.date,
@@ -156,6 +160,7 @@ function mapBybitDiscountBuyPosition(position: BybitDiscountBuyPosition): DualPo
     asset: position.underlyingAsset,
     direction: 'buy-low',
     subscriptionAsset: position.coin,
+    quoteAsset: position.coin,
     amount: position.amount,
     targetPrice: position.purchasePrice,
     entryDate: entry.date,
@@ -260,15 +265,14 @@ async function fetchExchangeBalances(forceRefresh: boolean): Promise<{
       withExchangeTimeout(
         fetchBybitWalletBalances().catch(() => fetchBybitAssetBalances()),
         'Bybit balances',
-      )
-        .then((balances) => ({
-          balances: balances.map(mapBybitBalance),
-          knownUsdByAsset: Object.fromEntries(
-            balances
-              .filter((balance) => Number.isFinite(balance.usdValue) && balance.usdValue > 0)
-              .map((balance) => [`Bybit:${balance.asset}`, balance.usdValue]),
-          ),
-        })),
+      ).then((balances) => ({
+        balances: balances.map(mapBybitBalance),
+        knownUsdByAsset: Object.fromEntries(
+          balances
+            .filter((balance) => Number.isFinite(balance.usdValue) && balance.usdValue > 0)
+            .map((balance) => [`Bybit:${balance.asset}`, balance.usdValue]),
+        ),
+      })),
     );
   }
 
