@@ -1,3 +1,7 @@
+[install]
+ignoreScripts = true
+minimumReleaseAge = 86400
+
 [serve]
 port = 5176
 
