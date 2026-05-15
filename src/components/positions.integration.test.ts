@@ -227,12 +227,8 @@ describe('positions integration', () => {
     expect(container.querySelector('#positions-capital')?.textContent).toContain('$400.00');
     expect(container.querySelector('#positions-daily')?.textContent).toContain('$0.40');
     expect(container.querySelector('#position-usd-p1')).toBeNull();
-    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
-      'Ejecuta',
-    );
-    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
-      'No ejec.',
-    );
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('Ejec.');
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('No ej.');
     expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('ETH');
     expect(container.querySelector('#positions-spot-ETH')?.textContent).toContain('ETH');
     expect(container.querySelector('#positions-spot-value-ETH')?.textContent).toContain(
@@ -328,12 +324,8 @@ describe('positions integration', () => {
     await flushMicrotasks();
 
     expect(container.querySelector('#position-usd-p1')?.textContent).toContain('$400');
-    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
-      'Ejecuta',
-    );
-    expect(container.querySelector('[data-label="Resultado"]')?.textContent).not.toContain(
-      'No ejec.',
-    );
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('Ejec.');
+    expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('No ej.');
     expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('USDT');
     expect(container.querySelector('[data-label="Resultado"]')?.textContent).toContain('ETH');
 
@@ -834,14 +826,14 @@ describe('positions integration', () => {
     const img = card.querySelector('.positions-spot-logo') as HTMLImageElement;
     const fallback = card.querySelector('.positions-spot-fallback') as HTMLElement;
 
-    expect(
-      img.src.startsWith('data:image/svg+xml') || img.src.includes('/src/assets/crypto/eth.svg'),
-    ).toBe(true);
+    expect(img.src).toContain('/assets/crypto/eth.svg');
 
     img.dispatchEvent(new Event('error'));
-    expect(img.src).toContain(
-      'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/eth.svg',
-    );
+    expect(img.src).toContain('/assets/crypto/coinmarketcap/eth.png');
+    expect(fallback.style.display).toBe('none');
+
+    img.dispatchEvent(new Event('error'));
+    expect(img.src).toBe('https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png');
     expect(fallback.style.display).toBe('none');
 
     img.dispatchEvent(new Event('error'));

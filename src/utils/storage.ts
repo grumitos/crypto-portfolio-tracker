@@ -258,6 +258,14 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
   const projectedProfit = sanitizeNumber(record.projectedProfit, NaN);
   if (Number.isFinite(projectedProfit)) position.projectedProfit = projectedProfit;
 
+  const expectedSettlementAsset = sanitizeSymbol(record.expectedSettlementAsset, '');
+  if (expectedSettlementAsset) position.expectedSettlementAsset = expectedSettlementAsset;
+
+  const expectedSettlementAmount = sanitizeNonNegative(record.expectedSettlementAmount, NaN);
+  if (Number.isFinite(expectedSettlementAmount)) {
+    position.expectedSettlementAmount = expectedSettlementAmount;
+  }
+
   const side = sanitizePositionSide(record.side);
   if (side) position.side = side;
 

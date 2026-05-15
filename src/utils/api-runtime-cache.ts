@@ -39,6 +39,13 @@ export function getPositionsCacheKey(positions: DualPosition[]): string {
         settlementDate: position.settlementDate,
         settlementTime: position.settlementTime ?? '',
         apr: position.apr,
+        projectedProfit: Number.isFinite(position.projectedProfit)
+          ? position.projectedProfit
+          : null,
+        expectedSettlementAsset: position.expectedSettlementAsset ?? '',
+        expectedSettlementAmount: Number.isFinite(position.expectedSettlementAmount)
+          ? position.expectedSettlementAmount
+          : null,
         components:
           position.components?.map((component) => ({
             id: component.id,

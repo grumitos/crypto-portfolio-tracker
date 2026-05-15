@@ -12,10 +12,50 @@ import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-log
 import { escapeHtml } from '../utils/ui-helpers';
 import type { DualPosition } from '../types';
 
+type PositionFieldId =
+  | 'asset'
+  | 'amount'
+  | 'apr'
+  | 'usd'
+  | 'target'
+  | 'outcome'
+  | 'subscription'
+  | 'settlement'
+  | 'earnings'
+  | 'remaining';
+
+type PositionRowKind = 'main' | 'component';
+
+interface PositionRenderContext {
+  position: DualPosition;
+  showUsdColumn: boolean;
+  rowKind: PositionRowKind;
+  parent?: DualPosition;
+  componentId?: string;
+  hasComponents?: boolean;
+}
+
+interface PositionCellRender {
+  className?: string;
+  id?: string;
+  html: string;
+}
+
+interface PositionField {
+  id: PositionFieldId;
+  heading: string;
+  label: string;
+  colClass: string;
+  include?: (context: { showUsdColumn: boolean }) => boolean;
+  cellClass?: string | ((context: PositionRenderContext) => string);
+  render: (context: PositionRenderContext) => PositionCellRender;
+}
+
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
   const isBuyLow = positions[0]?.direction !== 'sell-high';
   const safeTitle = escapeHtml(title);
   const groupSummary = `${positions.length} posicion${positions.length > 1 ? 'es' : ''}`;
+  const fields = getPositionFields(!isBuyLow);
   return `
     <div class="card positions-group-card">
       <div class="flex-between positions-group-head">
@@ -30,29 +70,11 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
             ${safeTitle}: ${groupSummary}
           </caption>
           <colgroup>
-            <col class="col-pos-asset">
-            <col class="col-pos-amount">
-            <col class="col-pos-apr">
-            ${isBuyLow ? '' : '<col class="col-pos-usd">'}
-            <col class="col-pos-target">
-            <col class="col-pos-outcome">
-            <col class="col-pos-subscription">
-            <col class="col-pos-settlement">
-            <col class="col-pos-earnings">
-            <col class="col-pos-remaining">
+            ${fields.map((field) => `<col class="${field.colClass}" data-field="${field.id}">`).join('')}
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">Activo</th>
-              <th scope="col">Monto</th>
-              <th scope="col">APR</th>
-              ${isBuyLow ? '' : '<th scope="col">Valor USD</th>'}
-              <th scope="col">Target</th>
-              <th scope="col">Resultado</th>
-              <th scope="col">Suscrip.</th>
-              <th scope="col">Liq.</th>
-              <th scope="col">Ganancia</th>
-              <th scope="col">Rest.</th>
+              ${fields.map((field) => `<th scope="col" class="pos-head-cell pos-head-cell--${field.id}" data-field="${field.id}">${field.heading}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
@@ -64,52 +86,190 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
   `;
 }
 
-function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean }): string {
-  const isDerivative = p.positionKind === 'derivative';
-  const daysDisplay = isDerivative
-    ? '<span class="mono pos-remaining-value pos-remaining-value--accent">Abierta</span>'
-    : formatRemainingTime(p);
-  const projectedEarned = isDerivative
-    ? (p.unrealizedPnlUsd ?? 0)
-    : calculateDualProjectedProfit(p);
-  const earningsCell = renderEarningsCell(p, projectedEarned);
-  const hasComponents = p.components && p.components.length > 1;
-
-  const entryHint = getDateTimeHint(p, 'entry');
-  const settlementHint = getDateTimeHint(p, 'settlement');
-
-  const mainRow = `
-    <tr data-id="${p.id}" ${hasComponents ? 'class="pos-row-grouped"' : ''}>
-      <td data-label="Activo">
-        <span class="pos-product-label">${productLabelHtml(p)}</span>
-      </td>
-      <td class="mono" data-label="Monto">${formatAmount(p.amount, p.subscriptionAsset)}</td>
-      ${renderAprCell(p)}
-      ${
-        options.showUsdColumn
-          ? `<td class="mono pos-usd-cell" id="position-usd-${p.id}" data-label="Valor USD">${initialUsdCellHtml(p)}</td>`
-          : ''
-      }
-      <td class="mono" data-label="Target">${p.targetPrice > 0 ? formatTargetPrice(p.targetPrice) : '---'}</td>
-      <td class="pos-outcome-cell" data-label="Resultado">${renderOutcomeCell(p)}</td>
-      <td class="pos-datetime-cell" data-label="Suscripcion">${renderDateTimeCell(p.entryDate, entryHint)}</td>
-      <td class="pos-datetime-cell" data-label="Liquidacion">${isDerivative ? '<span class="pos-date-value">---</span>' : renderDateTimeCell(p.settlementDate, settlementHint)}</td>
-      <td class="${earningsCell.className}" id="position-earn-${escapeHtml(p.id)}" data-label="Ganancia">${earningsCell.html}</td>
-      <td class="pos-row-tail${hasComponents ? ' pos-row-tail-grouped' : ''}" data-label="Restante">
-        <span class="pos-row-tail-content">
-          <span id="position-remaining-${p.id}">${daysDisplay}</span>
-          ${
-            hasComponents
-              ? `
+// Single source of truth for every rendered position field.
+const POSITION_FIELDS: PositionField[] = [
+  {
+    id: 'asset',
+    heading: 'Activo',
+    label: 'Activo',
+    colClass: 'col-pos-asset',
+    cellClass: 'pos-product-cell',
+    render: ({ position, rowKind }) => ({
+      html:
+        rowKind === 'component'
+          ? ''
+          : `<span class="pos-product-label">${productLabelHtml(position)}</span>`,
+    }),
+  },
+  {
+    id: 'amount',
+    heading: 'Monto',
+    label: 'Monto',
+    colClass: 'col-pos-amount',
+    cellClass: 'mono',
+    render: ({ position }) => ({
+      html: formatAmount(position.amount, position.subscriptionAsset),
+    }),
+  },
+  {
+    id: 'apr',
+    heading: 'APR',
+    label: 'APR',
+    colClass: 'col-pos-apr',
+    render: ({ position, rowKind }) => renderAprCell(position, rowKind),
+  },
+  {
+    id: 'usd',
+    heading: 'Valor USD',
+    label: 'Valor USD',
+    colClass: 'col-pos-usd',
+    include: ({ showUsdColumn }) => showUsdColumn,
+    cellClass: 'mono pos-usd-cell',
+    render: ({ position, parent, componentId, rowKind }) => ({
+      id:
+        rowKind === 'component'
+          ? `position-usd-${parent!.id}-comp-${componentId}`
+          : `position-usd-${position.id}`,
+      html: rowKind === 'component' ? '' : initialUsdCellHtml(position),
+    }),
+  },
+  {
+    id: 'target',
+    heading: 'Target',
+    label: 'Target',
+    colClass: 'col-pos-target',
+    cellClass: 'mono',
+    render: ({ position }) => ({
+      html: position.targetPrice > 0 ? formatTargetPrice(position.targetPrice) : '---',
+    }),
+  },
+  {
+    id: 'outcome',
+    heading: 'Resultado',
+    label: 'Resultado',
+    colClass: 'col-pos-outcome',
+    cellClass: 'pos-outcome-cell',
+    render: ({ position }) => ({ html: renderOutcomeCell(position) }),
+  },
+  {
+    id: 'subscription',
+    heading: 'Suscrip.',
+    label: 'Suscripción',
+    colClass: 'col-pos-subscription',
+    cellClass: 'pos-datetime-cell',
+    render: ({ position, rowKind }) => ({
+      html: renderDateTimeCell(
+        position.entryDate,
+        rowKind === 'main' ? getDateTimeHint(position, 'entry') : null,
+      ),
+    }),
+  },
+  {
+    id: 'settlement',
+    heading: 'Liq.',
+    label: 'Liquidación',
+    colClass: 'col-pos-settlement',
+    cellClass: 'pos-datetime-cell',
+    render: ({ position, rowKind }) => ({
+      html:
+        position.positionKind === 'derivative'
+          ? '<span class="pos-date-value">---</span>'
+          : renderDateTimeCell(
+              position.settlementDate,
+              rowKind === 'main' ? getDateTimeHint(position, 'settlement') : null,
+            ),
+    }),
+  },
+  {
+    id: 'earnings',
+    heading: 'Ganancia',
+    label: 'Ganancia',
+    colClass: 'col-pos-earnings',
+    render: ({ position, rowKind }) => {
+      const projectedEarned =
+        position.positionKind === 'derivative'
+          ? (position.unrealizedPnlUsd ?? 0)
+          : calculateDualProjectedProfit(position);
+      const earningsCell = renderEarningsCell(position, projectedEarned);
+      return {
+        ...earningsCell,
+        id: rowKind === 'main' ? `position-earn-${position.id}` : undefined,
+      };
+    },
+  },
+  {
+    id: 'remaining',
+    heading: 'Rest.',
+    label: 'Restante',
+    colClass: 'col-pos-remaining',
+    cellClass: ({ hasComponents }) => `pos-row-tail${hasComponents ? ' pos-row-tail-grouped' : ''}`,
+    render: ({ position, parent, componentId, rowKind, hasComponents }) => {
+      const daysDisplay =
+        position.positionKind === 'derivative'
+          ? '<span class="mono pos-remaining-value pos-remaining-value--accent">Abierta</span>'
+          : formatRemainingTime(position);
+      const remainingId =
+        rowKind === 'component'
+          ? `position-remaining-${parent!.id}-comp-${componentId}`
+          : `position-remaining-${position.id}`;
+      const toggle =
+        rowKind === 'main' && hasComponents
+          ? `
             <button type="button" class="pos-components-summary" data-toggle-components aria-expanded="false" aria-label="Ver desglose de la posicion">
               <span class="pos-components-chevron" aria-hidden="true">▸</span>
-              Ver desglose (${p.components!.length})
+              Ver desglose (${position.components!.length})
             </button>
           `
-              : ''
-          }
+          : '';
+      return {
+        html: `
+        <span class="pos-row-tail-content">
+          <span id="${escapeHtml(remainingId)}">${daysDisplay}</span>
+          ${toggle}
         </span>
-      </td>
+      `,
+      };
+    },
+  },
+];
+
+function getPositionFields(showUsdColumn: boolean): PositionField[] {
+  const context = { showUsdColumn };
+  return POSITION_FIELDS.filter((field) => !field.include || field.include(context));
+}
+
+function classNames(...values: Array<string | undefined | false>): string {
+  return values.filter(Boolean).join(' ');
+}
+
+function getCellClass(field: PositionField, context: PositionRenderContext): string {
+  const fieldClass =
+    typeof field.cellClass === 'function' ? field.cellClass(context) : field.cellClass;
+  return classNames('pos-cell', `pos-cell--${field.id}`, fieldClass);
+}
+
+function renderPositionCells(context: PositionRenderContext): string {
+  return getPositionFields(context.showUsdColumn)
+    .map((field) => {
+      const rendered = field.render(context);
+      const className = classNames(getCellClass(field, context), rendered.className);
+      const idAttr = rendered.id ? ` id="${escapeHtml(rendered.id)}"` : '';
+      return `<td${idAttr} class="${className}" data-field="${field.id}" data-label="${escapeHtml(field.label)}">${rendered.html}</td>`;
+    })
+    .join('');
+}
+
+function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean }): string {
+  const hasComponents = Boolean(p.components && p.components.length > 1);
+
+  const mainRow = `
+    <tr data-id="${escapeHtml(p.id)}" ${hasComponents ? 'class="pos-row-grouped"' : ''}>
+      ${renderPositionCells({
+        position: p,
+        showUsdColumn: options.showUsdColumn,
+        rowKind: 'main',
+        hasComponents,
+      })}
     </tr>
   `;
 
@@ -119,16 +279,26 @@ function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean })
   return mainRow + componentRows;
 }
 
-function renderAprCell(position: DualPosition): string {
+function renderAprCell(position: DualPosition, rowKind: PositionRowKind): PositionCellRender {
+  const id = rowKind === 'main' ? `position-apr-${position.id}` : undefined;
+
   if (position.positionKind === 'derivative') {
-    return '<td class="mono pos-emphasis" data-label="APR">---</td>';
+    return { className: 'mono pos-emphasis', html: '---' };
   }
 
   if (position.positionKind === 'discount-buy') {
-    return `<td class="mono pos-emphasis text-muted" id="position-apr-${escapeHtml(position.id)}" data-label="APR"><span class="skeleton skeleton-number" style="width:64px"></span></td>`;
+    return {
+      className: 'mono pos-emphasis text-muted',
+      id,
+      html: '<span class="skeleton skeleton-number" style="width:64px"></span>',
+    };
   }
 
-  return `<td class="mono pos-emphasis" id="position-apr-${escapeHtml(position.id)}" data-label="APR">${position.apr.toFixed(2)}%</td>`;
+  return {
+    className: 'mono pos-emphasis',
+    id,
+    html: `${position.apr.toFixed(2)}%`,
+  };
 }
 
 function renderEarningsCell(
@@ -145,7 +315,7 @@ function renderEarningsCell(
   const isDerivative = position.positionKind === 'derivative';
   const projectedEarnedStr = isDerivative
     ? formatUSDCompact(projectedEarned)
-    : formatAmount(projectedEarned, position.subscriptionAsset);
+    : formatPositionEarnings(position, projectedEarned);
   return {
     className: 'mono pos-earn-cell',
     html: `${isDerivative && projectedEarned < 0 ? '' : '+'}${projectedEarnedStr}`,
@@ -154,7 +324,6 @@ function renderEarningsCell(
 
 function renderComponentRows(parent: DualPosition, options: { showUsdColumn: boolean }): string {
   const components = parent.components!;
-  const subscriptionAsset = parent.subscriptionAsset;
   const sorted = [...components].sort((a, b) => {
     const aKey = `${a.entryDate} ${normalizeTime(a.entryTime) ?? '00:00'}`;
     const bKey = `${b.entryDate} ${normalizeTime(b.entryTime) ?? '00:00'}`;
@@ -164,28 +333,16 @@ function renderComponentRows(parent: DualPosition, options: { showUsdColumn: boo
   const subRows = sorted
     .map((c) => {
       const tempPos: DualPosition = { ...parent, ...c };
-      const cDaysDisplay = formatRemainingTime(tempPos);
-      const cEarned = calculateDualProjectedProfit(tempPos);
-      const cEarnedStr = formatAmount(cEarned, subscriptionAsset);
 
       return `
     <tr class="pos-sub-row" hidden data-ignore-row-edit="true">
-      <td></td>
-      <td class="mono">${formatAmount(c.amount, subscriptionAsset)}</td>
-      <td class="mono pos-emphasis">${c.apr.toFixed(2)}%</td>
-      ${
-        options.showUsdColumn
-          ? `<td class="mono pos-usd-cell" id="position-usd-${parent.id}-comp-${c.id}"></td>`
-          : ''
-      }
-      <td class="mono">${c.targetPrice > 0 ? formatTargetPrice(c.targetPrice) : '---'}</td>
-      <td class="pos-outcome-cell">${renderOutcomeCell(tempPos)}</td>
-      <td class="pos-datetime-cell">${renderDateTimeCell(c.entryDate)}</td>
-      <td class="pos-datetime-cell">${renderDateTimeCell(c.settlementDate)}</td>
-      <td class="mono pos-earn-cell">+${cEarnedStr}</td>
-      <td class="pos-row-tail">
-        <span id="position-remaining-${parent.id}-comp-${c.id}">${cDaysDisplay}</span>
-      </td>
+      ${renderPositionCells({
+        position: tempPos,
+        showUsdColumn: options.showUsdColumn,
+        rowKind: 'component',
+        parent,
+        componentId: c.id,
+      })}
     </tr>
     `;
     })
@@ -220,6 +377,7 @@ function renderOutcomeCell(position: DualPosition): string {
         .map(
           (row) => `
             <span class="pos-outcome-line ${row.changed ? 'pos-outcome-line--change' : ''}">
+              <span class="pos-outcome-label">${escapeHtml(row.label)}</span>
               <span class="mono pos-outcome-value">${formatAmount(row.amount, row.asset)}</span>
             </span>
           `,
@@ -245,17 +403,15 @@ function renderDiscountBuyOutcomeCell(position: DualPosition): string {
 function resolveOutcomeRows(
   position: DualPosition,
 ): Array<{ label: string; amount: number; asset: string; changed: boolean }> {
-  const projectedProfit =
-    Number.isFinite(position.projectedProfit) && (position.projectedProfit as number) > 0
-      ? (position.projectedProfit as number)
-      : calculateDualProjectedProfit(position);
+  const projectedProfit = calculateDualProjectedProfit(position);
 
   if (position.direction === 'buy-low') {
-    const executedAmount = position.targetPrice > 0 ? position.amount / position.targetPrice : 0;
+    const executedAmount =
+      position.targetPrice > 0 ? (position.amount + projectedProfit) / position.targetPrice : 0;
     return applyExpectedSettlementRow(position, [
-      { label: 'Ejecuta', amount: executedAmount, asset: position.asset, changed: true },
+      { label: 'Ejec.', amount: executedAmount, asset: position.asset, changed: true },
       {
-        label: 'No ejec.',
+        label: 'No ej.',
         amount: position.amount + projectedProfit,
         asset: position.subscriptionAsset,
         changed: false,
@@ -265,19 +421,17 @@ function resolveOutcomeRows(
 
   const quoteAsset = getQuoteAsset(position);
   const executedAmount =
-    position.targetPrice > 0 && quoteAsset !== 'USDT'
-      ? (position.amount + projectedProfit) * position.targetPrice
-      : position.amount * position.targetPrice + projectedProfit;
+    position.targetPrice > 0 ? (position.amount + projectedProfit) * position.targetPrice : 0;
 
   return applyExpectedSettlementRow(position, [
     {
-      label: 'Ejecuta',
+      label: 'Ejec.',
       amount: executedAmount,
       asset: quoteAsset,
       changed: true,
     },
     {
-      label: 'No ejec.',
+      label: 'No ej.',
       amount: position.amount + projectedProfit,
       asset: position.subscriptionAsset,
       changed: false,
@@ -362,6 +516,13 @@ function isSubMinuteCountdown(position: DualPosition): boolean {
   return Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_MINUTE_MS;
 }
 
+function getContainedElementById(container: HTMLElement, id: string): HTMLElement | null {
+  if (container.id === id) return container;
+  return (
+    Array.from(container.querySelectorAll<HTMLElement>('[id]')).find((el) => el.id === id) ?? null
+  );
+}
+
 function renderDateTimeCell(date: string, hint?: string | null): string {
   const titleAttr = hint ? ` title="${escapeHtml(hint)}"` : '';
   return `<span class="pos-datetime-wrap"${titleAttr}><span class="pos-date-value">${escapeHtml(formatDateLatin(date))}</span></span>`;
@@ -390,10 +551,48 @@ function getDateTimeHint(position: DualPosition, field: 'entry' | 'settlement'):
 }
 
 function formatAmount(amount: number, asset: string): string {
+  const safeAsset = escapeHtml(asset);
   if (asset === 'USDT' || asset === 'USDC') {
-    return formatUSDCompact(amount).replace('$', '') + ' ' + asset;
+    return formatUSDCompact(amount).replace('$', '') + ' ' + safeAsset;
   }
-  return amount.toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' ' + asset;
+  return amount.toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' ' + safeAsset;
+}
+
+function sameAsset(left: string | undefined, right: string | undefined): boolean {
+  return Boolean(left && right && left.toUpperCase() === right.toUpperCase());
+}
+
+function resolveSellHighQuoteProfit(
+  position: DualPosition,
+  projectedProfit: number,
+  quoteAsset: string,
+): number {
+  if (position.targetPrice <= 0) return projectedProfit;
+
+  const expectedAmount = position.expectedSettlementAmount;
+  if (
+    sameAsset(position.expectedSettlementAsset, quoteAsset) &&
+    Number.isFinite(expectedAmount) &&
+    (expectedAmount as number) > 0
+  ) {
+    const principalQuote = position.amount * position.targetPrice;
+    const exactQuoteProfit = (expectedAmount as number) - principalQuote;
+    if (Number.isFinite(exactQuoteProfit) && exactQuoteProfit >= 0) {
+      return exactQuoteProfit;
+    }
+  }
+
+  return projectedProfit * position.targetPrice;
+}
+
+function formatPositionEarnings(position: DualPosition, projectedProfit: number): string {
+  if (position.direction !== 'sell-high' || position.targetPrice <= 0) {
+    return formatAmount(projectedProfit, position.subscriptionAsset);
+  }
+
+  const quoteAsset = getQuoteAsset(position);
+  const quoteProfit = resolveSellHighQuoteProfit(position, projectedProfit, quoteAsset);
+  return formatAmount(quoteProfit, quoteAsset);
 }
 
 function formatTargetPrice(value: number): string {
@@ -433,13 +632,13 @@ function productLabelHtml(position: DualPosition): string {
   const sources = resolveAssetLogoSources(logoAsset);
   const monogram = createAssetMonogram(logoAsset);
 
-  const safePrimarySrc = escapeHtml(sources.primarySrc);
-  const safeFallbackAttr = sources.fallbackSrc
-    ? `data-fallback="${escapeHtml(sources.fallbackSrc)}"`
+  const safePrimaryAttr = sources.primarySrc ? `src="${escapeHtml(sources.primarySrc)}"` : '';
+  const safeFallbackAttr = sources.fallbackSrcs.length
+    ? `data-fallbacks="${escapeHtml(JSON.stringify(sources.fallbackSrcs))}"`
     : '';
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
-  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap" data-asset-logo-root><img class="pos-pair-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="pos-pair-fallback" data-asset-logo-fallback>${safeMonogram}</span></span>${label}</span>`;
+  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap" data-asset-logo-root><img class="pos-pair-logo" data-asset-logo-img ${safePrimaryAttr} ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="pos-pair-fallback" data-asset-logo-fallback>${safeMonogram}</span></span>${label}</span>`;
 }
 
 export function updateRemainingTimesInPlace(
@@ -454,9 +653,7 @@ export function updateRemainingTimesInPlace(
     if (isMainSubMinute) hasSubMinuteCountdown = true;
 
     if (!subMinuteOnly || isMainSubMinute) {
-      const remainingEl = container.querySelector(
-        `#position-remaining-${position.id}`,
-      ) as HTMLElement | null;
+      const remainingEl = getContainedElementById(container, `position-remaining-${position.id}`);
       if (!remainingEl) return;
       const nextHtml = formatRemainingTime(position);
       if (remainingEl.innerHTML !== nextHtml) remainingEl.innerHTML = nextHtml;
@@ -469,9 +666,10 @@ export function updateRemainingTimesInPlace(
         if (isComponentSubMinute) hasSubMinuteCountdown = true;
         if (subMinuteOnly && !isComponentSubMinute) return;
 
-        const cRemainingEl = container.querySelector(
+        const cRemainingEl = getContainedElementById(
+          container,
           `#position-remaining-${position.id}-comp-${c.id}`,
-        ) as HTMLElement | null;
+        );
         if (!cRemainingEl) return;
         const cNextHtml = formatRemainingTime(tempPos);
         if (cRemainingEl.innerHTML !== cNextHtml) cRemainingEl.innerHTML = cNextHtml;

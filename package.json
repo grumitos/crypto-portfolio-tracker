@@ -2,6 +2,7 @@
   "name": "crypto-portfolio-tracker",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "pnpm@11.0.0",
   "type": "module",
   "imports": {
     "#test": "./src/test/bun-test.ts"
@@ -19,8 +20,8 @@
     "format": "prettier --write src/",
     "format:check": "prettier --check src/",
     "eth:analysis": "python scripts/eth_analysis_runner.py",
-    "check": "bun run typecheck && bun run test:coverage && bun run build",
-    "check:ci": "bun run check"
+    "check": "pnpm run typecheck && pnpm run test:coverage && pnpm run build",
+    "check:ci": "pnpm run check"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

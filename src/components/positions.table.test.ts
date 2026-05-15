@@ -53,8 +53,8 @@ describe('positions table rendering', () => {
     expect(buyGroup).not.toContain('Valor USD');
     expect(sellGroup).toContain('Valor USD');
     expect(buyGroup).toContain('Resultado');
-    expect(buyGroup).not.toContain('Ejecuta');
-    expect(buyGroup).not.toContain('No ejec.');
+    expect(buyGroup).toContain('Ejec.');
+    expect(buyGroup).toContain('No ej.');
     expect(buyGroup).not.toContain('Spot (USD)');
     expect(buyGroup).not.toContain('position-spot-buy1');
     expect(buyGroup).not.toContain('btn-del-pos');
@@ -116,8 +116,49 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(group).toContain('20,104.51 USDT');
+    expect(group).toContain('20,158.71 USDT');
     expect(group).toContain('8.764656 ETH');
+    expect(group).toContain('+54.22 USDT');
+  });
+
+  it('renders sell-high USDT executed profit in USDT without mixing ETH units', () => {
+    const group = renderPositionGroup('Sell High', [
+      makePosition({
+        id: 'sell_usdt_profit',
+        direction: 'sell-high',
+        asset: 'ETH',
+        subscriptionAsset: 'ETH',
+        quoteAsset: 'USDT',
+        amount: 1,
+        targetPrice: 2000,
+        projectedProfit: 0.01,
+      }),
+    ]);
+
+    expect(group).toContain('ETH/USDT');
+    expect(group).toContain('2,020 USDT');
+    expect(group).toContain('1.01 ETH');
+    expect(group).toContain('+20 USDT');
+    expect(group).not.toContain('2,000.01 USDT');
+    expect(group).not.toContain('+0.01 ETH');
+  });
+
+  it('includes projected yield in buy-low executed crypto outcome', () => {
+    const group = renderPositionGroup('Buy Low', [
+      makePosition({
+        id: 'buy_low_with_yield',
+        direction: 'buy-low',
+        asset: 'ETH',
+        subscriptionAsset: 'USDT',
+        amount: 1000,
+        targetPrice: 2000,
+        projectedProfit: 10,
+      }),
+    ]);
+
+    expect(group).toContain('0.505 ETH');
+    expect(group).toContain('1,010 USDT');
+    expect(group).not.toContain('0.5 ETH');
   });
 
   it('renders sell-high outcomes with the actual quote asset for non-stable pairs', () => {
@@ -137,6 +178,21 @@ describe('positions table rendering', () => {
     expect(group).toContain('ETH/BTC');
     expect(group).toContain('BTC');
     expect(group).not.toContain('ETH/USDT');
+  });
+
+  it('escapes imported asset symbols before rendering amount HTML', () => {
+    const group = renderPositionGroup('Buy Low', [
+      makePosition({
+        id: 'escaped_asset',
+        asset: 'ETH<svg/onload=alert(1)>',
+        subscriptionAsset: 'USDT&X',
+      }),
+    ]);
+
+    expect(group).toContain('ETH&lt;svg/onload=alert(1)&gt;/USDT&amp;X');
+    expect(group).toContain('100 USDT&amp;X');
+    expect(group).not.toContain('<svg/onload');
+    expect(group).not.toContain('USDT&X');
   });
 
   it('renders a dropdown with component rows for grouped weighted positions', () => {
@@ -179,6 +235,7 @@ describe('positions table rendering', () => {
     expect(grouped).toContain('pos-sub-row');
     expect(grouped).toContain('186.148196 SOL');
     expect(grouped).toContain('397.80%');
+    expect(grouped.match(/position-apr-/g)).toHaveLength(1);
   });
 
   it('formats remaining time as seconds, hours/minutes, day countdown and settled state', () => {
@@ -262,6 +319,27 @@ describe('positions table rendering', () => {
 
     expect(hasSubMinute).toBe(true);
     expect(remaining.textContent).toContain('30s');
+  });
+
+  it('updates remaining labels for ids that are not valid CSS selectors', () => {
+    vi.setSystemTime(new Date(2026, 1, 21, 12, 0, 30));
+    const position = makePosition({
+      id: 'p.count/1:live',
+      entryDate: '2026-02-21',
+      entryTime: '11:00',
+      settlementDate: '2026-02-21',
+      settlementTime: '12:01',
+    });
+    const container = document.createElement('div');
+    container.innerHTML = renderPositionGroup('Buy Low', [position]);
+
+    const hasSubMinute = updateRemainingTimesInPlace(container, [position]);
+    const remaining = Array.from(container.querySelectorAll<HTMLElement>('[id]')).find(
+      (element) => element.id === 'position-remaining-p.count/1:live',
+    );
+
+    expect(hasSubMinute).toBe(true);
+    expect(remaining?.textContent).toContain('30s');
   });
 
   it('formats Date values as HH:mm', () => {

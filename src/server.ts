@@ -1,5 +1,3 @@
-import { mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
 import index from './index.html';
 
 interface LocalVaultExchangeCredentials {
@@ -26,8 +24,8 @@ interface LocalVaultStoredPayload {
 }
 
 const DEFAULT_PORT = 5176;
-const LOCAL_VAULT_PATH = resolve(process.cwd(), '.local', 'credentials.dpapi.json');
-const PUBLIC_DIR = resolve(process.cwd(), 'public');
+const LOCAL_VAULT_URL = new URL('../.local/credentials.dpapi.json', import.meta.url);
+const PUBLIC_DIR_URL = new URL('../public/', import.meta.url);
 
 const jsonHeaders = {
   'Cache-Control': 'no-store',
@@ -116,7 +114,7 @@ async function dpapiUnprotectMany(secretDpapiValues: string[]): Promise<string[]
 
 async function readStoredLocalVault(): Promise<LocalVaultStoredPayload | null> {
   try {
-    const parsed = (await Bun.file(LOCAL_VAULT_PATH).json()) as LocalVaultStoredPayload;
+    const parsed = (await Bun.file(LOCAL_VAULT_URL).json()) as LocalVaultStoredPayload;
     return parsed.version === 1 ? parsed : null;
   } catch {
     return null;
@@ -175,8 +173,7 @@ async function writePlainLocalVault(payload: LocalVaultPlainPayload): Promise<vo
       secretDpapi: await dpapiProtect(payload.bybit.apiSecret),
     };
   }
-  await mkdir(dirname(LOCAL_VAULT_PATH), { recursive: true });
-  await Bun.write(LOCAL_VAULT_PATH, `${JSON.stringify(stored, null, 2)}\n`);
+  await Bun.write(LOCAL_VAULT_URL, `${JSON.stringify(stored, null, 2)}\n`);
 }
 
 function firstHeader(headers: Headers, name: string): string {
@@ -274,7 +271,7 @@ async function handleLocalVaultCredentials(req: Request): Promise<Response> {
       const current = await readPlainLocalVault();
       delete current[exchange];
       if (!current.binance && !current.bybit) {
-        const file = Bun.file(LOCAL_VAULT_PATH);
+        const file = Bun.file(LOCAL_VAULT_URL);
         if (await file.exists()) await file.delete();
       } else {
         await writePlainLocalVault(current);
@@ -292,13 +289,31 @@ async function handleLocalVaultCredentials(req: Request): Promise<Response> {
 }
 
 function publicFile(path: string, contentType: string): Response {
-  return new Response(Bun.file(resolve(PUBLIC_DIR, path)), {
+  return new Response(Bun.file(new URL(path, PUBLIC_DIR_URL)), {
     headers: {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=300',
       'X-Content-Type-Options': 'nosniff',
     },
   });
+}
+
+const PUBLIC_CRYPTO_ASSET_RE =
+  /^\/(?:public\/)?assets\/crypto\/(?:coinmarketcap\/)?[a-z0-9-]+\.(png|svg)$/;
+
+export function isAllowedPublicAssetPath(pathname: string): boolean {
+  return PUBLIC_CRYPTO_ASSET_RE.test(pathname);
+}
+
+function publicAssetFile(req: Request): Response {
+  const pathname = new URL(req.url).pathname;
+  if (!isAllowedPublicAssetPath(pathname)) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  const publicPath = pathname.replace(/^\/public\//, '').slice(1);
+  const contentType = publicPath.endsWith('.png') ? 'image/png' : 'image/svg+xml; charset=utf-8';
+  return publicFile(publicPath, contentType);
 }
 
 const STRIPPED_PROXY_RESPONSE_HEADERS = [
@@ -375,12 +390,16 @@ export function createServerOptions(): Bun.ServeOptions {
         publicFile('manifest.json', 'application/manifest+json; charset=utf-8'),
       '/public/icon-192.svg': () => publicFile('icon-192.svg', 'image/svg+xml; charset=utf-8'),
       '/public/icon-512.svg': () => publicFile('icon-512.svg', 'image/svg+xml; charset=utf-8'),
+      '/public/favicon.svg': () => publicFile('favicon.svg', 'image/svg+xml; charset=utf-8'),
       '/public/sw.js': () => publicFile('sw.js', 'text/javascript; charset=utf-8'),
       '/manifest.json': () =>
         publicFile('manifest.json', 'application/manifest+json; charset=utf-8'),
       '/icon-192.svg': () => publicFile('icon-192.svg', 'image/svg+xml; charset=utf-8'),
       '/icon-512.svg': () => publicFile('icon-512.svg', 'image/svg+xml; charset=utf-8'),
+      '/favicon.svg': () => publicFile('favicon.svg', 'image/svg+xml; charset=utf-8'),
       '/sw.js': () => publicFile('sw.js', 'text/javascript; charset=utf-8'),
+      '/assets/*': publicAssetFile,
+      '/public/assets/*': publicAssetFile,
       '/local-vault/credentials': handleLocalVaultCredentials,
       '/binance-api/*': (req: Request) =>
         proxyRequest(req, '/binance-api', 'https://api.binance.com/api'),

@@ -415,11 +415,12 @@ function bindSpotCardLogo(cardEl: HTMLElement, asset: string): void {
   logoEl.style.display = '';
   logoEl.alt = sources.alt;
 
-  let fallbackTried = false;
+  let fallbackIndex = 0;
   logoEl.onerror = () => {
-    if (!fallbackTried && sources.fallbackSrc) {
-      fallbackTried = true;
-      logoEl.src = sources.fallbackSrc;
+    const fallbackSrc = sources.fallbackSrcs[fallbackIndex];
+    if (fallbackSrc) {
+      fallbackIndex += 1;
+      logoEl.src = fallbackSrc;
       return;
     }
     logoEl.style.display = 'none';
@@ -429,7 +430,12 @@ function bindSpotCardLogo(cardEl: HTMLElement, asset: string): void {
     logoEl.style.display = '';
     fallbackEl.style.display = 'none';
   };
-  logoEl.src = sources.primarySrc;
+  if (sources.primarySrc) {
+    logoEl.src = sources.primarySrc;
+  } else {
+    logoEl.style.display = 'none';
+    fallbackEl.style.display = 'inline-flex';
+  }
 }
 
 function createSpotCard(asset: string): HTMLElement {

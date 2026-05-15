@@ -45,9 +45,9 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
   const safeBalanceKey = escapeHtml(getDashboardBalanceKey(balance));
   const sources = resolveAssetLogoSources(balance.asset);
   const monogram = createAssetMonogram(balance.asset);
-  const safePrimarySrc = escapeHtml(sources.primarySrc);
-  const safeFallbackAttr = sources.fallbackSrc
-    ? `data-fallback="${escapeHtml(sources.fallbackSrc)}"`
+  const safePrimaryAttr = sources.primarySrc ? `src="${escapeHtml(sources.primarySrc)}"` : '';
+  const safeFallbackAttr = sources.fallbackSrcs.length
+    ? `data-fallbacks="${escapeHtml(JSON.stringify(sources.fallbackSrcs))}"`
     : '';
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
@@ -59,7 +59,7 @@ function renderBalanceItem(balance: BinanceAccountBalance): string {
       <div class="dashboard-balance-entry-top">
         <div class="dashboard-balance-entry-main">
           <span class="dashboard-balance-logo-wrap" data-asset-logo-root>
-            <img class="dashboard-balance-logo" data-asset-logo-img src="${safePrimarySrc}" ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async">
+            <img class="dashboard-balance-logo" data-asset-logo-img ${safePrimaryAttr} ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async">
             <span class="dashboard-balance-fallback" data-asset-logo-fallback>${safeMonogram}</span>
           </span>
           <span class="dashboard-balance-card-meta">

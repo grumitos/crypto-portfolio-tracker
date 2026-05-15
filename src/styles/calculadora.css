@@ -144,12 +144,21 @@
   color: var(--text-muted);
 }
 
+.calc-purchase-header > :nth-child(2),
+.calc-purchase-header > :nth-child(3) {
+  text-align: right;
+}
+
 .calc-purchase-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 36px;
   gap: var(--space-sm);
   align-items: center;
   margin-bottom: var(--space-xs);
+}
+
+.calc-purchase-row .calc-locked {
+  text-align: right;
 }
 
 .calc-remove-btn {

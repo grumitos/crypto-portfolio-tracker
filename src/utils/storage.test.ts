@@ -226,6 +226,34 @@ describe('storage', () => {
     expect(position.displaySymbol).toBe('ETHBTC');
   });
 
+  it('preserves exact expected settlement fields for auto positions', () => {
+    saveStoredPositionsMode('auto');
+    replaceAutoPositions([
+      {
+        id: 'bybit_dual_eth_usdt',
+        asset: 'ETH',
+        direction: 'sell-high',
+        subscriptionAsset: 'ETH',
+        quoteAsset: 'USDT',
+        amount: 4.535577,
+        targetPrice: 2242.5,
+        entryDate: '2026-05-14',
+        settlementDate: '2026-05-15',
+        apr: 120,
+        source: 'Bybit',
+        positionKind: 'dual',
+        displaySymbol: 'ETHUSDT',
+        projectedProfit: 0.002,
+        expectedSettlementAsset: 'USDT',
+        expectedSettlementAmount: 10174.53,
+      },
+    ]);
+
+    const position = loadState().autoPositions[0];
+    expect(position.expectedSettlementAsset).toBe('USDT');
+    expect(position.expectedSettlementAmount).toBe(10174.53);
+  });
+
   it('preserves grouped components when importing aggregated positions', () => {
     replacePositions([
       {

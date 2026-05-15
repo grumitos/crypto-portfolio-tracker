@@ -2,6 +2,7 @@ import { describe, expect, it } from '#test';
 import {
   copyProxyHeaders,
   copyProxyResponseHeaders,
+  isAllowedPublicAssetPath,
   isAllowedLocalVaultRequest,
   isLocalVaultCredentials,
 } from './server';
@@ -91,5 +92,19 @@ describe('server proxy headers', () => {
     expect(headers.get('content-length')).toBeNull();
     expect(headers.get('transfer-encoding')).toBeNull();
     expect(headers.get('content-type')).toBe('application/json');
+  });
+});
+
+describe('public asset request guards', () => {
+  it('allows bundled crypto image assets', () => {
+    expect(isAllowedPublicAssetPath('/assets/crypto/sol.svg')).toBe(true);
+    expect(isAllowedPublicAssetPath('/assets/crypto/coinmarketcap/sol.png')).toBe(true);
+    expect(isAllowedPublicAssetPath('/public/assets/crypto/btc.svg')).toBe(true);
+  });
+
+  it('blocks traversal and unsupported public asset paths', () => {
+    expect(isAllowedPublicAssetPath('/assets/crypto/../favicon.svg')).toBe(false);
+    expect(isAllowedPublicAssetPath('/assets/crypto/sol.html')).toBe(false);
+    expect(isAllowedPublicAssetPath('/assets/other/sol.svg')).toBe(false);
   });
 });
