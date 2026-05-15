@@ -5,7 +5,8 @@ App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual 
 ## Alcance
 
 - Frontend: `Bun + TypeScript` con HTML imports.
-- Servidor local Bun para assets, proxy de exchanges y vault DPAPI.
+- Servidor local Bun para assets, proxy de exchanges y vault DPAPI local en Windows.
+- Dependencias gestionadas con `pnpm`.
 - Persistencia local en `localStorage`.
 - Tabla de proyeccion mensual en la vista `Simulador`.
 - Import/export de backup en JSON.
@@ -13,67 +14,71 @@ App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual 
 ## Documentacion tecnica
 
 - Guia tecnica del repo: `ENGINEERING_GUIDE.md`
-- Hallazgos de auditoria y remediacion: `design-audit-findings.md`
+- Riesgos vigentes de diseno: `design-audit-findings.md`
 
 ## Requisitos
 
 - Bun 1.3+
+- pnpm 11+
+- Windows para guardar credenciales privadas en el vault DPAPI local. Sin DPAPI, la app sigue funcionando en modo manual y con datos publicos.
+- Python 3 solo para `pnpm run eth:analysis`.
 
 ## Inicio rapido
 
 ```bash
-bun install
-bun run dev
+pnpm install
+pnpm run dev
 ```
 
 Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
 
 ## Scripts
 
-| Comando                 | Descripcion                  |
-| ----------------------- | ---------------------------- |
-| `bun run dev`           | Desarrollo con hot reload    |
-| `bun run build`         | Build de produccion Bun      |
-| `bun run preview`       | Servir build local           |
-| `bun run test`          | Tests en modo watch          |
-| `bun run test:run`      | Tests una sola vez           |
-| `bun run test:coverage` | Tests + reporte de coverage  |
-| `bun run typecheck`     | Validacion TypeScript        |
-| `bun run lint`          | Lint con ESLint              |
-| `bun run lint:fix`      | Lint + autofix               |
-| `bun run format`        | Formatear con Prettier       |
-| `bun run format:check`  | Verificar formato            |
-| `bun run check`         | Typecheck + tests + build    |
-| `bun run check:ci`      | Typecheck + coverage + build |
+| Comando                  | Descripcion                  |
+| ------------------------ | ---------------------------- |
+| `pnpm run dev`           | Desarrollo con hot reload    |
+| `pnpm run build`         | Build de produccion Bun      |
+| `pnpm run preview`       | Servir build local           |
+| `pnpm run test`          | Tests en modo watch          |
+| `pnpm run test:run`      | Tests una sola vez           |
+| `pnpm run test:coverage` | Tests + reporte de coverage  |
+| `pnpm run typecheck`     | Validacion TypeScript        |
+| `pnpm run lint`          | Lint con ESLint              |
+| `pnpm run lint:fix`      | Lint + autofix               |
+| `pnpm run format`        | Formatear con Prettier       |
+| `pnpm run format:check`  | Verificar formato            |
+| `pnpm run eth:analysis`  | Ejecutar analisis ETH Python |
+| `pnpm run check`         | Typecheck + coverage + build |
+| `pnpm run check:ci`      | Alias CI de `check`          |
 
 ## Flujo recomendado de uso
 
-1. Configurar `Ahorros` y `Configurar` (invertido/meta) en `Dashboard`.
-2. Cargar posiciones en `Posiciones` (manual o con pegado de Binance).
+1. Abrir `Configuracion` desde el engrane del shell y definir portfolio: invertido, meta, modo Manual/Auto y ahorros externos cuando aplique.
+2. En modo Manual, cargar posiciones en `Posiciones`; en modo Auto, conectar Binance o Bybit en solo lectura y sincronizar.
 3. Revisar proyecciones en `Simulador` (AUTO o MANUAL).
 4. Evaluar ciclos en `Calculadora Swing Trade`.
-5. Exportar backup JSON desde el boton de archivo en la barra superior.
+5. Exportar backup JSON desde la seccion `Respaldo` del modal de configuracion.
 
 ## Vistas y comportamiento
 
 ### 1) Dashboard
 
 - Resumen de portfolio: balance, P&L, progreso a breakeven (BE) y meta.
-- Modales:
-  - `Ahorros`: actualiza balance disponible.
-  - `Configurar`: define total invertido y meta.
+- La configuracion de invertido, meta, modo de lectura y ahorros externos vive en el modal global `Configuracion`.
 - Barra de progreso con leyenda BE/Meta; el estado de la leyenda se persiste.
 - Tarjetas de capital/APR/rendimiento diario calculadas desde posiciones y precios de mercado.
+- En modo Auto con credenciales, muestra saldos por activo reportados por los exchanges configurados.
 
 ### 2) Posiciones
 
-- CRUD completo de posiciones Dual Investment.
+- CRUD manual de posiciones Dual Investment.
+- Modo Auto con posiciones sincronizadas desde Binance y Bybit.
 - **Tira de precios spot**: muestra precio actual y cambio 24h de los activos con posiciones (BTC, ETH, BNB, SOL). Orden fijo, excluye stablecoins.
 - Modo `Editar` para eliminar rapido desde la tabla.
 - Importacion masiva con `Pegar y reemplazar`:
   - Parsea texto de posiciones exportadas/copypasteadas desde Binance.
-  - Reemplaza la lista completa por las posiciones parseadas.
-- Parser estricto Binance-only (sin capas ni opciones de otros exchanges).
+  - Reemplaza la lista manual completa por las posiciones parseadas.
+- Parser manual estricto Binance-only; la lectura automatica de exchanges usa clientes separados.
 - Activo base permitido por defecto para parser: `BTC`, `ETH`, `BNB`, `SOL`, `USDT`, `USDC`.
 
 ### 3) Simulador
@@ -85,7 +90,7 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
   - Meta (AUTO: meta del dashboard).
 - Boton `Resetear AUTO` para restaurar sincronizacion automatica.
 - Resultado con hitos de BE/meta y tabla de proyeccion mensual.
-- Arquitectura interna refactorizada en `constants`, `template` y `dom`.
+- Arquitectura interna refactorizada en `constants`, `template`, `dom` y `state`.
 
 ### 4) Calculadora Swing Trade
 
@@ -100,14 +105,16 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
 
 - Shell compartido extraido para header, navegacion y acciones globales.
 - Sistema visual consolidado alrededor de `src/styles/variables.css` y `src/utils/theme.ts`.
-- `dashboard`, `simulator` y `calculadora` ya siguen un patron modular; `positions` conserva mas logica de coordinacion pero ya extrae constants/template.
+- `dashboard`, `simulator` y `calculadora` siguen un patron modular; `positions` ya extrae constants/template/table/parser, pero conserva logica de coordinacion en `positions.ts`.
 - Los colores de browser theme se derivan de tokens CSS para evitar drift entre tema y runtime.
 
 ## Datos de mercado
 
-- Endpoints usados (con fallback):
+- Endpoints publicos Binance usados por defecto (con fallback):
   - `https://api.binance.com/api/v3/ticker/price`
   - `https://api.binance.us/api/v3/ticker/price`
+- Para cambio 24h se deriva el endpoint `/ticker/24hr`.
+- `PUBLIC_BINANCE_ENDPOINTS` puede reemplazar la lista de endpoints publicos en builds locales.
 - Estrategia de precio:
   - Par directo `ASSETUSDT`.
   - Fallback via `ASSETBTC` x `BTCUSDT`.
@@ -130,11 +137,14 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
   - `GET /v5/account/wallet-balance` para saldos `UNIFIED`, `CONTRACT` y `SPOT`.
   - `GET /v5/asset/transfer/query-account-coins-balance` como respaldo de saldos con permisos de Activos.
   - `GET /v5/earn/advance/position` para posiciones activas de Advanced Earn Dual Asset cuando la key tiene permiso `Earn`.
+  - `GET /v5/earn/advance/position` con categoria `DiscountBuy` para posiciones Discount Buy cuando la key tiene permiso `Earn`.
   - `GET /v5/position/list` para posiciones abiertas `linear`, `inverse` y `option`.
   - `GET /v5/market/tickers` para precios spot publicos.
-- En ambas integraciones, el `API Secret` se guarda cifrado en localStorage con WebCrypto AES-GCM y una contraseña maestra que no se persiste; tras recargar, hay que desbloquear el vault para firmar lecturas privadas.
+  - `GET /v5/market/time` para ajustar timestamps firmados.
+- El servidor local expone `/local-vault/credentials` y guarda API Key + Secret cifrados con Windows DPAPI en `.local/credentials.dpapi.json` (ignorado por git).
+- En `localStorage` solo se persiste la API Key; el Secret vive en memoria de sesion y se hidrata desde DPAPI al cargar o con `Cargar DPAPI`.
 - Las credenciales de exchanges no se cargan desde `.env.local`: las variables `PUBLIC_*` de Bun pueden quedar expuestas al bundle del navegador. Configuralas solo desde el modal local de la app.
-- Dashboard puede sumar saldos de Binance y Bybit a la vez. Las posiciones automatizadas incluyen Binance Dual Investment, Bybit Dual Asset y, solo si la key lo permite, posiciones derivadas abiertas de Bybit; el nocional derivado Bybit no se suma encima del wallet para evitar doble conteo.
+- Dashboard puede sumar saldos de Binance y Bybit a la vez. Las posiciones automatizadas incluyen Binance Dual Investment, Bybit Dual Asset, Bybit Discount Buy y, solo si la key lo permite, posiciones derivadas abiertas de Bybit; el nocional derivado Bybit no se suma encima del wallet para evitar doble conteo.
 
 ## Regla de facturacion (Dual Binance)
 
@@ -146,7 +156,7 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
 
 ## Backup de datos
 
-El modal de backup permite:
+La seccion `Respaldo` del modal de configuracion permite:
 
 - `Exportar JSON`
 - `Importar backup JSON`
@@ -158,10 +168,31 @@ Formato actual exportado:
   "version": 2,
   "exportedAt": "2026-02-23T00:00:00.000Z",
   "app": {
-    "portfolio": {},
-    "positions": []
+    "portfolio": {
+      "totalInvested": 0,
+      "currentBalance": 0,
+      "savings": 0,
+      "goalAmount": 0,
+      "lastUpdated": "2026-02-23",
+      "balanceHistory": []
+    },
+    "positions": [],
+    "manualPositions": [],
+    "autoPositions": [],
+    "positionsConfig": { "mode": "manual" }
   },
-  "calculadora": {}
+  "calculadora": {
+    "price": "",
+    "capital": "20000",
+    "trades": "200",
+    "sellPrice": "",
+    "sellPct": "2.30",
+    "rebuyPct": "1.70",
+    "feePreset": "spot",
+    "fdusdEnabled": false,
+    "sellSyncSource": null,
+    "purchases": []
+  }
 }
 ```
 
@@ -180,20 +211,24 @@ Compatibilidad de importacion:
 | `crypto-dashboard-view`      | Preferencia de leyenda BE/Meta del dashboard         |
 | `crypto-api-last-updated-at` | Timestamp de ultima actualizacion de mercado exitosa |
 | `crypto-theme`               | Preferencia de tema (`light`, `dark`, `system`)      |
-| `crypto-binance-api`         | API Key Binance y vault cifrado del Secret           |
-| `crypto-bybit-api`           | API Key Bybit y vault cifrado del Secret             |
+| `crypto-binance-api`         | API Key Binance; el Secret no se persiste aqui       |
+| `crypto-bybit-api`           | API Key Bybit; el Secret no se persiste aqui         |
+
+Vault local adicional:
+
+- `.local/credentials.dpapi.json`: credenciales Binance/Bybit cifradas con Windows DPAPI; el directorio esta ignorado por git.
 
 ## Tema y paleta
 
-La app soporta `light`, `dark` y `system`.  
+La app soporta `light`, `dark` y `system`.
 El tema se aplica al inicio para evitar FOUC y tambien actualiza `meta[name="theme-color"]`.
 
-Referencia de paleta:
+Referencia de paleta activa en `src/styles/variables.css`:
 
-| Modo  | Fondo     | Texto     | Borde ref | Focus     |
-| ----- | --------- | --------- | --------- | --------- |
-| Light | `#FAF9F5` | `#141413` | `#1F1E1D` | `#2C84DB` |
-| Dark  | `#262624` | `#FAF9F5` | `#DEDCD1` | `#2C84DB` |
+| Modo  | Fondo     | Texto     | Borde fuerte | Focus     |
+| ----- | --------- | --------- | ------------ | --------- |
+| Light | `#F8F8F6` | `#121212` | `#1F1F1E4D`  | `#2977D6` |
+| Dark  | `#1F1F1E` | `#F8F8F6` | `#E2E1DA4D`  | `#3886E5` |
 
 Los tokens semanticos activos cubren superficie, texto, borde, accent, success, danger, warning y focus.
 
@@ -207,7 +242,7 @@ Los tokens semanticos activos cubren superficie, texto, borde, accent, success, 
 
 ## Checklist de PR
 
-- Ejecutar `bun run check`.
+- Ejecutar `pnpm run check`.
 - Verificar estados `light` y `dark`.
 - Revisar shell en mobile y desktop.
 - Confirmar que no se introduzcan nuevos hardcodeos visuales en TypeScript.

@@ -1,25 +1,15 @@
-# Design Audit Findings
+# Riesgos de Diseno
 
-## Executive Summary
-- `High`: shell touch targets and responsive header behavior were below production expectations.
-- `High`: theme visuals still depended on scattered literals in TypeScript.
-- `High`: `simulator`, `calculadora` and `positions` mixed rendering, state and side effects in monolith files.
-- `Medium`: loading skeletons and several UI fragments depended on inline styles or repeated string markup.
-- `Medium`: CSS was heavily global, increasing regression risk across views.
+Seguimiento compacto de riesgos de diseno vigentes. La remediacion historica ya esta reflejada en el codigo y en `ENGINEERING_GUIDE.md`.
 
-## Implemented Remediation
-- Consolidated semantic theme/browser tokens and routed theme runtime through CSS variables with safe fallbacks.
-- Made the app shell mobile-first with wrap-safe navigation and 44px global touch targets for header actions.
-- Extracted `simulator` into `constants`, `template` and `dom` modules while keeping behavior and IDs stable.
-- Extracted `calculadora` into `constants` and `template` modules and centralized fee/copy configuration.
-- Extracted `positions` constants/template helpers for header, empty states, modal shell and spot-strip card rendering.
+## Riesgos Vigentes
 
-## Residual Risks
-- `positions.ts` still contains significant controller/event logic and is the next file with the highest structural debt.
-- `dashboard` is already partially modularized, but shared skeleton helpers still rely on width-specific inline styles in some paths.
-- Global CSS remains large; the current pass reduced risk but did not yet split styles by primitive/component layer.
+- `src/components/positions.ts` sigue concentrando coordinacion de estado, eventos y render auxiliar. Es la siguiente vista a desacoplar antes de agregar flujos nuevos.
+- `src/components/dashboard.ts` sigue siendo grande aunque ya tiene modulos de soporte; `src/components/dashboard.template.ts` conserva skeletons con anchos inline.
+- `src/styles/global.css` sigue siendo la hoja global mas grande; nuevos estilos deberian ir a hojas de vista o a primitivos compartidos cuando corresponda.
 
-## Acceptance Checks
-- Preserve routes, localStorage keys and Binance integration behavior.
-- Keep `bun run check` green.
-- Maintain keyboard navigation, focus visibility and current AA-oriented contrast baseline.
+## Guardas
+
+- Preservar rutas hash, keys de `localStorage`, semantica del vault DPAPI e integraciones Binance/Bybit.
+- Ejecutar `pnpm run check` cuando haya refactors de UI o flujo.
+- Mantener navegacion por teclado, foco visible y contraste actual.
