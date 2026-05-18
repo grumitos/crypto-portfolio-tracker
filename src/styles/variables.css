@@ -76,7 +76,6 @@
 
   /* ── Browser ── */
   --browser-theme-color: #f8f8f6;
-  --favicon-stroke-encoded: %23121212;
 
   /* ── Backwards-compatible aliases ── */
   --bg-primary: var(--surface-page);
@@ -230,7 +229,6 @@
   --warning-strong: #d4a017;
   --warning-soft: rgba(212, 160, 23, 0.18);
   --browser-theme-color: #1f1f1e;
-  --favicon-stroke-encoded: %23F8F8F6;
 
   --bg-primary: var(--surface-page);
   --bg-secondary: var(--surface-muted);

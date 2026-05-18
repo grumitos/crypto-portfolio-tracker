@@ -108,3 +108,14 @@ describe('public asset request guards', () => {
     expect(isAllowedPublicAssetPath('/assets/other/sol.svg')).toBe(false);
   });
 });
+
+describe('favicon asset', () => {
+  it('keeps a transparent SVG icon that adapts to browser color scheme', async () => {
+    const favicon = await Bun.file(new URL('../public/favicon.svg', import.meta.url)).text();
+
+    expect(favicon).toContain('prefers-color-scheme: dark');
+    expect(favicon).toContain('stroke: #121212');
+    expect(favicon).toContain('stroke: #f8f8f6');
+    expect(favicon).not.toContain('<rect');
+  });
+});

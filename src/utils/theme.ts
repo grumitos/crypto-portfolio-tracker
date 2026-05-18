@@ -1,12 +1,9 @@
 const STORAGE_KEY = 'crypto-theme';
 const THEME_COLOR_VAR = '--browser-theme-color';
-const FAVICON_STROKE_VAR = '--favicon-stroke-encoded';
 
 const CSS_FALLBACKS = {
   browserThemeColorLight: '#F8F8F6',
   browserThemeColorDark: '#1F1F1E',
-  faviconStrokeLight: '%23121212',
-  faviconStrokeDark: '%23F8F8F6',
 } as const;
 
 export type ThemePreference = 'light' | 'dark' | 'system';
@@ -61,6 +58,12 @@ export function initTheme(): void {
 function applyTheme(): void {
   const resolved = getResolvedTheme();
   const root = document.documentElement;
+  const browserThemeColor = readThemeVariable(
+    THEME_COLOR_VAR,
+    resolved === 'dark'
+      ? CSS_FALLBACKS.browserThemeColorDark
+      : CSS_FALLBACKS.browserThemeColorLight,
+  );
 
   if (resolved === 'dark') {
     root.dataset.theme = 'dark';
@@ -71,22 +74,7 @@ function applyTheme(): void {
   // Update meta theme-color
   const meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
   if (meta) {
-    meta.content = readThemeVariable(
-      THEME_COLOR_VAR,
-      resolved === 'dark'
-        ? CSS_FALLBACKS.browserThemeColorDark
-        : CSS_FALLBACKS.browserThemeColorLight,
-    );
-  }
-
-  // Update favicon stroke color
-  const faviconStroke = readThemeVariable(
-    FAVICON_STROKE_VAR,
-    resolved === 'dark' ? CSS_FALLBACKS.faviconStrokeDark : CSS_FALLBACKS.faviconStrokeLight,
-  );
-  const favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
-  if (favicon) {
-    favicon.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='${faviconStroke}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 7 13.5 15.5 8.5 10.5 2 17'/%3E%3Cpolyline points='16 7 22 7 22 13'/%3E%3C/svg%3E`;
+    meta.content = browserThemeColor;
   }
 
   // Notify listeners

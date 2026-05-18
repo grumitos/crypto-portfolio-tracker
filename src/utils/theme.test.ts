@@ -38,6 +38,7 @@ function addThemeMetaElements(): void {
 
   const favicon = document.createElement('link');
   favicon.rel = 'icon';
+  favicon.href = '/favicon.svg';
   document.head.appendChild(favicon);
 }
 
@@ -65,9 +66,11 @@ describe('theme utils', () => {
     expect(theme.getResolvedTheme()).toBe('light');
   });
 
-  it('updates root dataset, meta theme-color and favicon when applying theme', async () => {
+  it('updates root dataset and meta theme-color without rewriting the favicon', async () => {
     installMatchMedia(false);
     addThemeMetaElements();
+    const favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+    const faviconHref = favicon.href;
     const theme = await import('./theme');
 
     theme.setTheme('dark');
@@ -75,18 +78,14 @@ describe('theme utils', () => {
     expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
       '#1F1F1E',
     );
-    expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain(
-      '%23F8F8F6',
-    );
+    expect(favicon.href).toBe(faviconHref);
 
     theme.toggleTheme();
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
       '#F8F8F6',
     );
-    expect((document.querySelector('link[rel="icon"]') as HTMLLinkElement).href).toContain(
-      '%23121212',
-    );
+    expect(favicon.href).toBe(faviconHref);
   });
 
   it('notifies listeners on theme changes and reacts to system changes', async () => {
