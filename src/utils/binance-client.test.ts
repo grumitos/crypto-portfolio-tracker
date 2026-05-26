@@ -157,6 +157,80 @@ describe('binance client', () => {
     ]);
   });
 
+  it('includes funding and Simple Earn balances without double-counting LD wrappers', async () => {
+    await seedCredentials();
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/account/apiRestrictions')) {
+        return Promise.resolve(
+          jsonResponse({
+            enableReading: true,
+            enableWithdrawals: false,
+            enableInternalTransfer: false,
+            enableMargin: false,
+            enableFutures: false,
+            permitsUniversalTransfer: false,
+            enableVanillaOptions: false,
+            enableFixApiTrade: false,
+            enableSpotAndMarginTrading: false,
+            enablePortfolioMarginTrading: false,
+          }),
+        );
+      }
+      if (url.includes('/binance-api/v3/account')) {
+        return Promise.resolve(
+          jsonResponse({
+            balances: [
+              { asset: 'USDT', free: '5.00000000', locked: '0.00000000' },
+              { asset: 'LDUSDT', free: '1022.55825975', locked: '0.00000000' },
+              { asset: 'BTC', free: '0.01000000', locked: '0.00000000' },
+            ],
+          }),
+        );
+      }
+      if (url.includes('/asset/get-funding-asset')) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              asset: 'USDT',
+              free: '10.00000000',
+              locked: '1.00000000',
+              freeze: '2.00000000',
+              withdrawing: '3.00000000',
+            },
+          ]),
+        );
+      }
+      if (url.includes('/simple-earn/flexible/position')) {
+        return Promise.resolve(
+          jsonResponse({
+            rows: [{ asset: 'USDT', totalAmount: '1155.76825916' }],
+            total: 1,
+          }),
+        );
+      }
+      if (url.includes('/simple-earn/locked/position')) {
+        return Promise.resolve(
+          jsonResponse({
+            rows: [{ asset: 'ETH', amount: '0.25000000', status: 'HOLDING' }],
+            total: 1,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    const balances = await client.fetchAccountBalances(true);
+
+    expect(balances).toEqual([
+      { asset: 'USDT', free: 15, locked: 1161.76825916 },
+      { asset: 'BTC', free: 0.01, locked: 0 },
+      { asset: 'ETH', free: 0, locked: 0.25 },
+    ]);
+  });
+
   it('normalizes LD assets in dual positions to their underlying symbol', async () => {
     await seedCredentials();
     const fetchMock = vi.fn().mockResolvedValue(

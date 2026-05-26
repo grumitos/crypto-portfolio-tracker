@@ -12,10 +12,25 @@ const FETCH_TIMEOUT_MS = 10_000;
 const RECV_WINDOW = 5000;
 const READ_ONLY_CACHE_TTL_MS = 5 * 60 * 1000;
 const SERVER_TIME_CACHE_TTL_MS = 5 * 60 * 1000;
-const ALLOWED_SIGNED_GET_ENDPOINTS = new Set([
-  `${API_PROXY_BASE}/account`,
-  `${SAPI_PROXY_BASE}/account/apiRestrictions`,
-  `${SAPI_PROXY_BASE}/dci/product/positions`,
+type BinanceSignedMethod = 'GET' | 'POST';
+
+const ALLOWED_SIGNED_ENDPOINTS: Record<BinanceSignedMethod, Set<string>> = {
+  GET: new Set([
+    `${API_PROXY_BASE}/account`,
+    `${SAPI_PROXY_BASE}/account/apiRestrictions`,
+    `${SAPI_PROXY_BASE}/dci/product/positions`,
+    `${SAPI_PROXY_BASE}/simple-earn/flexible/position`,
+    `${SAPI_PROXY_BASE}/simple-earn/locked/position`,
+  ]),
+  POST: new Set([`${SAPI_PROXY_BASE}/asset/get-funding-asset`]),
+};
+
+const SIMPLE_EARN_PAGE_SIZE = 100;
+const CLOSED_SIMPLE_EARN_LOCKED_STATUSES = new Set([
+  'REDEEMED',
+  'REDEEMING',
+  'PURCHASE_FAILED',
+  'REFUND_SUCCESS',
 ]);
 
 // ── Cache ──
@@ -46,6 +61,15 @@ function normalizeBinanceAssetCode(asset: string): string {
   }
 
   return normalized;
+}
+
+function isBinanceEarnWrapperAsset(asset: string): boolean {
+  return /^LD[A-Z0-9]{3,}$/u.test(asset.toUpperCase().trim());
+}
+
+function parseFiniteNumber(value: unknown): number {
+  const parsed = Number.parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function mergeAccountBalances(rows: BinanceAccountBalance[]): BinanceAccountBalance[] {
@@ -195,10 +219,11 @@ async function fetchSigned<T>(
   path: string,
   params: Record<string, string | number> = {},
   credentials?: BinanceApiCredentials,
-  options: { skipReadOnlyCheck?: boolean } = {},
+  options: { method?: BinanceSignedMethod; skipReadOnlyCheck?: boolean } = {},
 ): Promise<T> {
-  if (!ALLOWED_SIGNED_GET_ENDPOINTS.has(`${baseUrl}${path}`)) {
-    throw new Error(`Blocked unsupported Binance signed endpoint: ${path}`);
+  const method = options.method ?? 'GET';
+  if (!ALLOWED_SIGNED_ENDPOINTS[method].has(`${baseUrl}${path}`)) {
+    throw new Error(`Blocked unsupported Binance signed ${method} endpoint: ${path}`);
   }
 
   const creds = credentials ?? loadApiCredentials();
@@ -218,7 +243,7 @@ async function fetchSigned<T>(
 
     try {
       const response = await fetch(url, {
-        method: 'GET',
+        method,
         headers: {
           'X-MBX-APIKEY': creds.apiKey,
         },
@@ -288,19 +313,193 @@ interface RawAccountInfo {
   balances: Array<{ asset: string; free: string; locked: string }>;
 }
 
+interface RawFundingBalance {
+  asset: string;
+  free: string;
+  locked: string;
+  freeze?: string;
+  withdrawing?: string;
+}
+
+interface RawSimpleEarnFlexiblePosition {
+  asset: string;
+  totalAmount: string;
+}
+
+interface RawSimpleEarnLockedPosition {
+  asset: string;
+  amount: string;
+  status?: string;
+}
+
+interface RawSimpleEarnFlexibleResponse {
+  rows?: RawSimpleEarnFlexiblePosition[];
+  total?: number;
+}
+
+interface RawSimpleEarnLockedResponse {
+  rows?: RawSimpleEarnLockedPosition[];
+  total?: number;
+}
+
+function mapRawAccountBalance(row: {
+  asset: string;
+  free: string;
+  locked: string;
+}): BinanceAccountBalance {
+  return {
+    asset: row.asset,
+    free: parseFiniteNumber(row.free),
+    locked: parseFiniteNumber(row.locked),
+  };
+}
+
+function hasPositiveBalance(row: BinanceAccountBalance): boolean {
+  return row.free > 0 || row.locked > 0;
+}
+
+function filterSpotBalancesAgainstEarn(
+  rows: BinanceAccountBalance[],
+  earnAssets: Set<string>,
+): BinanceAccountBalance[] {
+  return rows.filter((row) => {
+    if (!isBinanceEarnWrapperAsset(row.asset)) return true;
+    return !earnAssets.has(normalizeBinanceAssetCode(row.asset));
+  });
+}
+
+async function fetchFundingBalances(): Promise<BinanceAccountBalance[]> {
+  const raw = await fetchSigned<unknown>(
+    SAPI_PROXY_BASE,
+    '/asset/get-funding-asset',
+    { needBtcValuation: 'false' },
+    undefined,
+    { method: 'POST' },
+  );
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((row) => {
+      const balance = row as Partial<RawFundingBalance>;
+      return {
+        asset: String(balance.asset ?? ''),
+        free: parseFiniteNumber(balance.free),
+        locked:
+          parseFiniteNumber(balance.locked) +
+          parseFiniteNumber(balance.freeze) +
+          parseFiniteNumber(balance.withdrawing),
+      };
+    })
+    .filter((row) => row.asset && hasPositiveBalance(row));
+}
+
+async function fetchSimpleEarnFlexibleBalancePage(
+  current: number,
+): Promise<RawSimpleEarnFlexibleResponse> {
+  return fetchSigned<RawSimpleEarnFlexibleResponse>(
+    SAPI_PROXY_BASE,
+    '/simple-earn/flexible/position',
+    {
+      current,
+      size: SIMPLE_EARN_PAGE_SIZE,
+    },
+  );
+}
+
+async function fetchSimpleEarnLockedBalancePage(
+  current: number,
+): Promise<RawSimpleEarnLockedResponse> {
+  return fetchSigned<RawSimpleEarnLockedResponse>(
+    SAPI_PROXY_BASE,
+    '/simple-earn/locked/position',
+    {
+      current,
+      size: SIMPLE_EARN_PAGE_SIZE,
+    },
+  );
+}
+
+async function fetchSimpleEarnFlexibleBalances(): Promise<BinanceAccountBalance[]> {
+  const balances: BinanceAccountBalance[] = [];
+  for (let current = 1; ; current += 1) {
+    const page = await fetchSimpleEarnFlexibleBalancePage(current);
+    const rows = Array.isArray(page.rows) ? page.rows : [];
+    balances.push(
+      ...rows
+        .map((row) => ({
+          asset: row.asset,
+          free: 0,
+          locked: parseFiniteNumber(row.totalAmount),
+        }))
+        .filter((row) => row.asset && hasPositiveBalance(row)),
+    );
+
+    if (!Number.isFinite(page.total) || current * SIMPLE_EARN_PAGE_SIZE >= (page.total ?? 0)) {
+      break;
+    }
+  }
+  return balances;
+}
+
+async function fetchSimpleEarnLockedBalances(): Promise<BinanceAccountBalance[]> {
+  const balances: BinanceAccountBalance[] = [];
+  for (let current = 1; ; current += 1) {
+    const page = await fetchSimpleEarnLockedBalancePage(current);
+    const rows = Array.isArray(page.rows) ? page.rows : [];
+    balances.push(
+      ...rows
+        .filter((row) => !CLOSED_SIMPLE_EARN_LOCKED_STATUSES.has(row.status ?? ''))
+        .map((row) => ({
+          asset: row.asset,
+          free: 0,
+          locked: parseFiniteNumber(row.amount),
+        }))
+        .filter((row) => row.asset && hasPositiveBalance(row)),
+    );
+
+    if (!Number.isFinite(page.total) || current * SIMPLE_EARN_PAGE_SIZE >= (page.total ?? 0)) {
+      break;
+    }
+  }
+  return balances;
+}
+
+async function fetchSimpleEarnBalances(): Promise<BinanceAccountBalance[]> {
+  const [flexible, locked] = await Promise.all([
+    fetchSimpleEarnFlexibleBalances(),
+    fetchSimpleEarnLockedBalances(),
+  ]);
+  return [...flexible, ...locked];
+}
+
+async function fetchOptionalAccountBalances(
+  request: Promise<BinanceAccountBalance[]>,
+): Promise<BinanceAccountBalance[]> {
+  try {
+    return await request;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchAccountBalances(forceRefresh = false): Promise<BinanceAccountBalance[]> {
   if (!forceRefresh && balanceCache && Date.now() - balanceCache.ts < BALANCE_CACHE_TTL_MS) {
     return balanceCache.data;
   }
 
   const raw = await fetchSigned<RawAccountInfo>(API_PROXY_BASE, '/account');
-  const balances = mergeAccountBalances(
-    raw.balances.map((b) => ({
-      asset: b.asset,
-      free: parseFloat(b.free),
-      locked: parseFloat(b.locked),
-    })),
-  );
+  const spotBalances = (raw.balances ?? []).map(mapRawAccountBalance);
+  const [fundingBalances, earnBalances] = await Promise.all([
+    fetchOptionalAccountBalances(fetchFundingBalances()),
+    fetchOptionalAccountBalances(fetchSimpleEarnBalances()),
+  ]);
+  const earnAssets = new Set(earnBalances.map((row) => normalizeBinanceAssetCode(row.asset)));
+  const balances = mergeAccountBalances([
+    ...filterSpotBalancesAgainstEarn(spotBalances, earnAssets),
+    ...fundingBalances,
+    ...earnBalances,
+  ]);
 
   balanceCache = { data: balances, ts: Date.now() };
   return balances;

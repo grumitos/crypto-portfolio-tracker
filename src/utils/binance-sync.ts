@@ -12,6 +12,7 @@ import { fetchDualPositions, fetchAccountBalances } from './binance-client';
 import { hasBybitApiCredentials } from './bybit-auth';
 import {
   fetchBybitAssetBalances,
+  fetchBybitAssetOverviewBalances,
   fetchBybitDiscountBuyPositions,
   fetchBybitDualAssetPositions,
   fetchBybitOpenPositions,
@@ -240,6 +241,72 @@ function mapBybitBalance(
   };
 }
 
+type BybitBalanceRow = Awaited<ReturnType<typeof fetchBybitWalletBalances>>[number];
+
+function mergeBybitBalanceRows(rows: BybitBalanceRow[]): BybitBalanceRow[] {
+  const merged = new Map<string, BybitBalanceRow & { hasUnpricedBalance: boolean }>();
+
+  rows.forEach((row) => {
+    const asset = row.asset.trim().toUpperCase();
+    if (!asset) return;
+
+    const hasUnpricedBalance =
+      row.walletBalance > 0 && (!Number.isFinite(row.usdValue) || row.usdValue <= 0);
+    const current = merged.get(asset);
+    if (current) {
+      current.walletBalance += row.walletBalance;
+      current.locked += row.locked;
+      current.hasUnpricedBalance = current.hasUnpricedBalance || hasUnpricedBalance;
+      current.usdValue = current.hasUnpricedBalance ? 0 : current.usdValue + row.usdValue;
+      return;
+    }
+
+    merged.set(asset, {
+      ...row,
+      asset,
+      usdValue: hasUnpricedBalance ? 0 : row.usdValue,
+      hasUnpricedBalance,
+    });
+  });
+
+  return [...merged.values()]
+    .map(({ hasUnpricedBalance: _hasUnpricedBalance, ...row }) => row)
+    .filter((row) => row.walletBalance > 0 || row.locked > 0 || row.usdValue > 0);
+}
+
+async function fetchOptionalBybitBalanceRows(request: Promise<BybitBalanceRow[]>): Promise<{
+  balances: BybitBalanceRow[];
+  fulfilled: boolean;
+}> {
+  try {
+    return { balances: await request, fulfilled: true };
+  } catch {
+    return { balances: [], fulfilled: false };
+  }
+}
+
+async function fetchBybitBalanceRows(): Promise<BybitBalanceRow[]> {
+  const [walletBalances, fundingBalances, supplementalBalances] = await Promise.all([
+    fetchOptionalBybitBalanceRows(fetchBybitWalletBalances()),
+    fetchOptionalBybitBalanceRows(fetchBybitAssetBalances()),
+    fetchOptionalBybitBalanceRows(fetchBybitAssetOverviewBalances()),
+  ]);
+
+  if (
+    !walletBalances.fulfilled &&
+    !fundingBalances.fulfilled &&
+    !supplementalBalances.fulfilled
+  ) {
+    throw new Error('Bybit balances unavailable');
+  }
+
+  return mergeBybitBalanceRows([
+    ...walletBalances.balances,
+    ...fundingBalances.balances,
+    ...supplementalBalances.balances,
+  ]);
+}
+
 async function fetchExchangeBalances(forceRefresh: boolean): Promise<{
   balances: BinanceAccountBalance[];
   knownUsdByAsset: Record<string, number>;
@@ -262,10 +329,7 @@ async function fetchExchangeBalances(forceRefresh: boolean): Promise<{
 
   if (hasBybitApiCredentials()) {
     requests.push(
-      withExchangeTimeout(
-        fetchBybitWalletBalances().catch(() => fetchBybitAssetBalances()),
-        'Bybit balances',
-      ).then((balances) => ({
+      withExchangeTimeout(fetchBybitBalanceRows(), 'Bybit balances').then((balances) => ({
         balances: balances.map(mapBybitBalance),
         knownUsdByAsset: Object.fromEntries(
           balances

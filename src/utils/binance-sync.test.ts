@@ -7,6 +7,7 @@ vi.mock('./binance-client', () => ({
 
 vi.mock('./bybit-client', () => ({
   fetchBybitAssetBalances: vi.fn(),
+  fetchBybitAssetOverviewBalances: vi.fn(),
   fetchBybitDiscountBuyPositions: vi.fn(),
   fetchBybitDualAssetPositions: vi.fn(),
   fetchBybitOpenPositions: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('./market', () => ({
 import { fetchAccountBalances, fetchDualPositions } from './binance-client';
 import {
   fetchBybitAssetBalances,
+  fetchBybitAssetOverviewBalances,
   fetchBybitDiscountBuyPositions,
   fetchBybitDualAssetPositions,
   fetchBybitOpenPositions,
@@ -79,6 +81,7 @@ describe('binance sync cache', () => {
       },
     ]);
     vi.mocked(fetchBybitAssetBalances).mockResolvedValue([]);
+    vi.mocked(fetchBybitAssetOverviewBalances).mockResolvedValue([]);
     vi.mocked(fetchBybitWalletBalances).mockResolvedValue([]);
     vi.mocked(fetchBybitOpenPositions).mockResolvedValue([]);
     vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([]);
@@ -108,6 +111,47 @@ describe('binance sync cache', () => {
       { asset: 'USDT', free: 100, locked: 0, source: 'Binance' },
       { asset: 'ETH', free: 1, locked: 0, source: 'Binance' },
       { asset: 'BTC', free: 0.08, locked: 0.02, source: 'Bybit' },
+    ]);
+  });
+
+  it('adds permitted Bybit supplemental product balances to the account summary', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitWalletBalances).mockResolvedValue([
+      { asset: 'USDT', walletBalance: 50, locked: 0, usdValue: 50 },
+    ]);
+    vi.mocked(fetchBybitAssetOverviewBalances).mockResolvedValue([
+      { asset: 'USDT', walletBalance: 25, locked: 25, usdValue: 0 },
+      { asset: 'USDC', walletBalance: 40, locked: 40, usdValue: 0 },
+    ]);
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(summary.totalUsdEstimate).toBe(2215);
+    expect(summary.balances).toEqual([
+      { asset: 'USDT', free: 100, locked: 0, source: 'Binance' },
+      { asset: 'ETH', free: 1, locked: 0, source: 'Binance' },
+      { asset: 'USDT', free: 50, locked: 25, source: 'Bybit' },
+      { asset: 'USDC', free: 0, locked: 40, source: 'Bybit' },
+    ]);
+  });
+
+  it('adds Bybit funding balances even when wallet balances are allowed', async () => {
+    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
+    vi.mocked(fetchBybitWalletBalances).mockResolvedValue([
+      { asset: 'USDT', walletBalance: 50, locked: 0, usdValue: 50 },
+    ]);
+    vi.mocked(fetchBybitAssetBalances).mockResolvedValue([
+      { asset: 'USDT', walletBalance: 25, locked: 5, usdValue: 0 },
+    ]);
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(fetchBybitAssetBalances).toHaveBeenCalledTimes(1);
+    expect(summary.totalUsdEstimate).toBe(2175);
+    expect(summary.balances).toEqual([
+      { asset: 'USDT', free: 100, locked: 0, source: 'Binance' },
+      { asset: 'ETH', free: 1, locked: 0, source: 'Binance' },
+      { asset: 'USDT', free: 70, locked: 5, source: 'Bybit' },
     ]);
   });
 

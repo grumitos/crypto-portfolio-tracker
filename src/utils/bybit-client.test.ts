@@ -323,6 +323,82 @@ describe('bybit client', () => {
     );
   });
 
+  it('fetches supplemental product balances from Bybit asset overview', async () => {
+    await seedCredentials();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          retCode: 0,
+          retMsg: 'OK',
+          result: {
+            readOnly: 1,
+            permissions: { Wallet: ['AccountTransfer'], Earn: ['Earn'] },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          retCode: 0,
+          retMsg: 'Success',
+          result: {
+            totalEquity: '1200',
+            list: [
+              {
+                accountType: 'UnifiedTradingAccount',
+                totalEquity: '500',
+                coinDetail: [{ coin: 'USDT', equity: '500' }],
+              },
+              {
+                accountType: 'FundingAccount',
+                totalEquity: '25',
+                coinDetail: [{ coin: 'USDT', equity: '25' }],
+              },
+              {
+                accountType: 'Earn',
+                totalEquity: '175',
+                categories: [
+                  {
+                    category: 'Easy Earn',
+                    equity: '125',
+                    coinDetail: [{ coin: 'USDT', equity: '125' }],
+                  },
+                  {
+                    category: 'Dual Asset',
+                    equity: '50',
+                    coinDetail: [{ coin: 'USDT', equity: '50' }],
+                  },
+                ],
+              },
+              {
+                accountType: 'TradingBot',
+                totalEquity: '40',
+                categories: [
+                  {
+                    category: 'Futures Grid Bot',
+                    equity: '40',
+                    coinDetail: [{ coin: 'USDC', equity: '40' }],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./bybit-client');
+    const balances = await client.fetchBybitAssetOverviewBalances();
+
+    expect(balances).toEqual([
+      { asset: 'USDT', walletBalance: 125, locked: 125, usdValue: 0 },
+      { asset: 'USDC', walletBalance: 40, locked: 40, usdValue: 0 },
+    ]);
+    expect((fetchMock.mock.calls[1] as [string, RequestInit])[0]).toBe(
+      '/bybit-api/v5/asset/asset-overview?valuationCurrency=USD',
+    );
+  });
+
   it('reuses the Bybit read-only permission cache for repeated asset reads', async () => {
     await seedCredentials();
     const assetPayload = jsonResponse({

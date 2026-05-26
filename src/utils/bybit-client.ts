@@ -18,9 +18,12 @@ const ALLOWED_SIGNED_GET_PATHS = new Set([
   '/user/query-api',
   '/account/wallet-balance',
   '/asset/transfer/query-account-coins-balance',
+  '/asset/asset-overview',
   '/position/list',
   '/earn/advance/position',
 ]);
+
+const ASSET_OVERVIEW_EXCLUDED_CATEGORY_RE = /dual|discount/i;
 
 const ALLOWED_PUBLIC_GET_PATHS = new Set(['/market/tickers', '/market/time']);
 
@@ -270,6 +273,26 @@ interface BybitAllCoinsBalanceResponse {
     walletBalance: string;
     transferBalance?: string;
     bonus?: string;
+  }>;
+}
+
+interface BybitAssetOverviewResponse {
+  totalEquity?: string;
+  list: Array<{
+    accountType?: string;
+    totalEquity?: string;
+    coinDetail?: Array<{
+      coin?: string;
+      equity?: string;
+    }>;
+    categories?: Array<{
+      category?: string;
+      equity?: string;
+      coinDetail?: Array<{
+        coin?: string;
+        equity?: string;
+      }>;
+    }>;
   }>;
 }
 
@@ -627,6 +650,63 @@ export async function fetchBybitAssetBalances(): Promise<BybitAccountBalance[]> 
       };
     })
     .filter((row) => row.walletBalance > 0 || row.locked > 0);
+}
+
+function mapBybitAssetOverviewCoin(
+  row: { coin?: string; equity?: string },
+): BybitAccountBalance | null {
+  const asset = row.coin?.toUpperCase().trim();
+  const equity = parseFiniteNumber(row.equity);
+  if (!asset || equity <= 0) return null;
+  return {
+    asset,
+    walletBalance: equity,
+    locked: equity,
+    usdValue: 0,
+  };
+}
+
+function mergeBybitAccountBalances(rows: BybitAccountBalance[]): BybitAccountBalance[] {
+  const merged = new Map<string, BybitAccountBalance>();
+  rows.forEach((row) => {
+    const asset = row.asset.toUpperCase().trim();
+    if (!asset) return;
+    const current = merged.get(asset);
+    if (current) {
+      current.walletBalance += row.walletBalance;
+      current.locked += row.locked;
+      current.usdValue += row.usdValue;
+      return;
+    }
+    merged.set(asset, { ...row, asset });
+  });
+  return [...merged.values()].filter(
+    (row) => row.walletBalance > 0 || row.locked > 0 || row.usdValue > 0,
+  );
+}
+
+export async function fetchBybitAssetOverviewBalances(): Promise<BybitAccountBalance[]> {
+  const creds = await assertCurrentBybitCredentialsReadOnly();
+  const payload = await fetchBybitSignedGet<BybitEnvelope<BybitAssetOverviewResponse>>(
+    '/asset/asset-overview',
+    { valuationCurrency: 'USD' },
+    creds,
+  );
+  const result = assertBybitOk(payload);
+  const balances: BybitAccountBalance[] = [];
+
+  for (const account of result.list ?? []) {
+    for (const category of account.categories ?? []) {
+      if (ASSET_OVERVIEW_EXCLUDED_CATEGORY_RE.test(String(category.category ?? ''))) continue;
+      balances.push(
+        ...((category.coinDetail ?? [])
+          .map(mapBybitAssetOverviewCoin)
+          .filter((row): row is BybitAccountBalance => row !== null)),
+      );
+    }
+  }
+
+  return mergeBybitAccountBalances(balances);
 }
 
 export async function fetchBybitOpenPositions(): Promise<BybitPosition[]> {
