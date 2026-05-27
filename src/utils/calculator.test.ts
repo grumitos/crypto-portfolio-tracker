@@ -110,6 +110,27 @@ describe('calculator utils', () => {
     expect(monthOne!.balance).toBeCloseTo(1085.54, 2);
   });
 
+  it('compounds only the earning capital when the rest of the balance is idle', () => {
+    const { rows } = generateProjection({
+      capital: 41055,
+      earningCapital: 1055,
+      apr: 120,
+      frequency: 'daily',
+      goal: 1000000,
+      invested: 40000,
+    });
+
+    const monthOne = rows.find((r) => r.month === 1);
+    const expectedActiveBalance = 1055 * Math.pow(1 + 1.2 / 365, 30);
+    const expectedTotalBalance = Math.round((40000 + expectedActiveBalance) * 100) / 100;
+    const incorrectlyCompoundedFullBalance =
+      Math.round(41055 * Math.pow(1 + 1.2 / 365, 30) * 100) / 100;
+
+    expect(monthOne).toBeDefined();
+    expect(monthOne!.balance).toBeCloseTo(expectedTotalBalance, 2);
+    expect(monthOne!.balance).toBeLessThan(incorrectlyCompoundedFullBalance - 3000);
+  });
+
   it('always includes at least 12 projected months', () => {
     const { rows } = generateProjection({
       capital: 1000,

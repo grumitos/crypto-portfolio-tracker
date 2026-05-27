@@ -28,6 +28,8 @@ vi.mock('../utils/notifications', () => ({
 interface SeedSimulatorOptions {
   totalInvested?: number;
   goalAmount?: number;
+  currentBalance?: number;
+  savings?: number;
   positions?: AppState['positions'];
 }
 
@@ -86,11 +88,11 @@ function seedState(options: SeedSimulatorOptions = {}): void {
   const state: AppState = {
     portfolio: {
       totalInvested: options.totalInvested ?? 1200,
-      currentBalance: 1000,
-      savings: 1000,
+      currentBalance: options.currentBalance ?? 1000,
+      savings: options.savings ?? 1000,
       goalAmount: options.goalAmount ?? 1500,
       lastUpdated: '2026-02-21',
-      balanceHistory: [{ date: '2026-02-21', balance: 1000 }],
+      balanceHistory: [{ date: '2026-02-21', balance: options.currentBalance ?? 1000 }],
     },
     positions: options.positions ?? [DEFAULT_POSITION],
     manualPositions: options.positions ?? [DEFAULT_POSITION],
@@ -152,7 +154,7 @@ describe('simulator dual milestones', () => {
   });
 
   it('marks milestone rows in the projection table', async () => {
-    seedState({ totalInvested: 410, goalAmount: 430 });
+    seedState({ currentBalance: 400, savings: 0, totalInvested: 410, goalAmount: 430 });
     mockAutoMetrics({ totalUsd: 400, weightedApr: 35 });
 
     const container = document.createElement('div');
@@ -354,6 +356,85 @@ describe('simulator dual milestones', () => {
     expect(beTime.textContent).not.toBe('---');
     expect(goalDate.textContent).not.toBe('---');
     expect(goalTime.textContent).not.toBe('---');
+
+    dispose();
+    container.remove();
+  });
+
+  it('uses active position capital for AUTO values', async () => {
+    seedState({
+      currentBalance: 41055,
+      savings: 40000,
+      totalInvested: 40000,
+      goalAmount: 45000,
+    });
+    mockAutoMetrics({ totalUsd: 1055, weightedApr: 123.61 });
+    const projectionSpy = vi.spyOn(calculator, 'generateProjection');
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+
+    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('1055.00');
+    expect((container.querySelector('#sim-apr') as HTMLInputElement).value).toBe('123.61');
+    expect((container.querySelector('#sim-out-daily') as HTMLElement).textContent).toContain(
+      '$3.57',
+    );
+    expect(projectionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capital: 1055,
+        apr: 123.61,
+        goal: 45000,
+        invested: 40000,
+      }),
+    );
+
+    dispose();
+    container.remove();
+  });
+
+  it('uses edited capital and APR as a manual calculator after AUTO values hydrate', async () => {
+    seedState({
+      currentBalance: 41055,
+      savings: 40000,
+      totalInvested: 40000,
+      goalAmount: 45000,
+    });
+    mockAutoMetrics({ totalUsd: 1055, weightedApr: 123.61 });
+    const projectionSpy = vi.spyOn(calculator, 'generateProjection');
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+    projectionSpy.mockClear();
+
+    const capitalInput = container.querySelector('#sim-capital') as HTMLInputElement;
+    const aprInput = container.querySelector('#sim-apr') as HTMLInputElement;
+    capitalInput.value = '2000';
+    capitalInput.dispatchEvent(new Event('input', { bubbles: true }));
+    aprInput.value = '50';
+    aprInput.dispatchEvent(new Event('input', { bubbles: true }));
+    (container.querySelector('#btn-simulate') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect((container.querySelector('#sim-capital-tag') as HTMLElement).textContent).toBe('MANUAL');
+    expect((container.querySelector('#sim-apr-tag') as HTMLElement).textContent).toBe('MANUAL');
+    expect((container.querySelector('#sim-out-daily') as HTMLElement).textContent).toContain(
+      '$2.74',
+    );
+
+    const lastCall = projectionSpy.mock.calls[projectionSpy.mock.calls.length - 1]?.[0];
+    expect(lastCall).toEqual(
+      expect.objectContaining({
+        capital: 2000,
+        apr: 50,
+        goal: 45000,
+        invested: 40000,
+      }),
+    );
+    expect(lastCall).not.toHaveProperty('earningCapital');
 
     dispose();
     container.remove();

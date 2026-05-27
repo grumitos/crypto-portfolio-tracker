@@ -42,6 +42,13 @@ export function generateProjection(params: SimulatorParams): {
   const n = periodsPerYear(frequency);
   const ratePerPeriod = apr / 100 / n;
   const dpPeriod = daysPerPeriod(frequency);
+  const earningCapitalInput = params.earningCapital ?? capital;
+  const earningCapital = Math.min(
+    Math.max(0, Number.isFinite(earningCapitalInput) ? earningCapitalInput : 0),
+    Math.max(0, capital),
+  );
+  const idleCapital = Math.max(0, capital - earningCapital);
+  let activeCapital = earningCapital;
 
   const startDate = new Date();
   const rows: ProjectionRow[] = [];
@@ -66,8 +73,9 @@ export function generateProjection(params: SimulatorParams): {
 
     const startBalance = balance;
     for (let p = 0; p < periodsInMonth; p++) {
-      balance += balance * ratePerPeriod;
+      activeCapital += activeCapital * ratePerPeriod;
     }
+    balance = idleCapital + activeCapital;
 
     const monthDate = new Date(startDate);
     monthDate.setMonth(monthDate.getMonth() + month);

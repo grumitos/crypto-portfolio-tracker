@@ -75,6 +75,7 @@ interface DashboardUiState {
   invested: number;
   goal: number;
   apr: number | null;
+  earningCapital: number | null;
   frequency: CompoundFrequency;
 }
 
@@ -184,6 +185,7 @@ function readSimulatorFrequency(fallback: CompoundFrequency): CompoundFrequency 
 
 function estimateDaysToTargetWithProjectionSnapshot(
   capital: number,
+  earningCapital: number,
   apr: number,
   target: number,
   invested: number,
@@ -191,15 +193,23 @@ function estimateDaysToTargetWithProjectionSnapshot(
 ): number | null {
   if (
     !Number.isFinite(capital) ||
+    !Number.isFinite(earningCapital) ||
     !Number.isFinite(apr) ||
     !Number.isFinite(target) ||
     !Number.isFinite(invested)
   ) {
     return null;
   }
-  if (capital <= 0 || apr <= 0 || target <= 0) return null;
+  if (capital <= 0 || earningCapital <= 0 || apr <= 0 || target <= 0) return null;
 
-  const snapshot = buildProjectionSnapshot({ capital, apr, frequency, goal: target, invested });
+  const snapshot = buildProjectionSnapshot({
+    capital,
+    earningCapital,
+    apr,
+    frequency,
+    goal: target,
+    invested,
+  });
   return snapshot.goal.days;
 }
 
@@ -386,9 +396,15 @@ function updateGoalProgressVisual(
       true,
       animateText,
     );
-  } else if (uiState.apr && uiState.apr > 0) {
+  } else if (
+    uiState.apr &&
+    uiState.apr > 0 &&
+    uiState.earningCapital &&
+    uiState.earningCapital > 0
+  ) {
     const daysRemaining = estimateDaysToTargetWithProjectionSnapshot(
       uiState.balance,
+      uiState.earningCapital,
       uiState.apr,
       details.targetAmount,
       uiState.invested,
@@ -558,6 +574,7 @@ function createInitialUiState(state: AppState): DashboardUiState {
     invested: state.portfolio.totalInvested,
     goal: state.portfolio.goalAmount,
     apr: null,
+    earningCapital: null,
     frequency: readSimulatorFrequency('daily'),
   };
 }
@@ -757,6 +774,7 @@ async function hydrateDashboardMarketStats(
     setTextResult(capital, '---', true);
     setTextResult(daily, '---', true);
     uiState.apr = null;
+    uiState.earningCapital = null;
     updateGoalProgressVisual(container, uiState, {
       animateNumbers: animateDynamicValues,
       animateText: animateDynamicValues,
@@ -823,6 +841,7 @@ async function hydrateDashboardMarketStats(
     uiState.invested = currentState.portfolio.totalInvested;
     uiState.goal = currentState.portfolio.goalAmount;
     uiState.apr = metrics.weightedApr > 0 ? metrics.weightedApr : null;
+    uiState.earningCapital = metrics.totalUsd > 0 ? metrics.totalUsd : null;
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
     updateGoalProgressVisual(container, uiState, {
@@ -835,6 +854,7 @@ async function hydrateDashboardMarketStats(
     registerApiFailure();
     showApiErrorBanner('No se pudo actualizar precios de mercado.');
     uiState.apr = null;
+    uiState.earningCapital = null;
     updateGoalProgressVisual(container, uiState, {
       animateNumbers: false,
       animateText: animateDynamicValues,

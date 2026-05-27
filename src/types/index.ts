@@ -67,6 +67,7 @@ export type CompoundFrequency = 'daily' | 'weekly' | 'biweekly';
 
 export interface SimulatorParams {
   capital: number;
+  earningCapital?: number;
   apr: number;
   frequency: CompoundFrequency;
   goal: number;

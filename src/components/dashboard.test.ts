@@ -299,6 +299,57 @@ describe('dashboard legends', () => {
     container.remove();
   });
 
+  it('estimates ETA with active position capital instead of applying APR to the full balance', async () => {
+    vi.mocked(getSharedMarketData).mockResolvedValue({
+      positionsKey: 'p1',
+      snapshot: {
+        priceByAsset: { USDT: 1 },
+        sourceByAsset: { USDT: 'stable' },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        changePercent24hByAsset: { USDT: 0 },
+      },
+      metrics: {
+        totalUsd: 1055,
+        weightedApr: 123.61,
+        dailyEarningsUsd: 3.57,
+        usdByPositionId: { p1: 1055 },
+        aprByPositionId: { p1: 123.61 },
+        priceByAsset: { USDT: 1 },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        priceSourceByAsset: { USDT: 'stable' },
+      },
+    });
+    seedState({
+      currentBalance: 41055,
+      savings: 40000,
+      totalInvested: 40000,
+      goalAmount: 45000,
+    });
+
+    const snapshotSpy = vi.spyOn(projectionMilestones, 'buildProjectionSnapshot');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect(snapshotSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capital: 41055,
+        earningCapital: 1055,
+        apr: 123.61,
+        goal: 45000,
+        invested: 40000,
+      }),
+    );
+
+    dispose();
+    container.remove();
+  });
+
   it('avoids provisional ETA before first market hydration', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
