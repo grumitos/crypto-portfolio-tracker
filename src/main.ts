@@ -1,6 +1,7 @@
 import './styles/global.css';
 import { renderDashboard } from './components/dashboard';
 import { renderPositions } from './components/positions';
+import { renderCapital } from './components/capital';
 import { renderSimulator } from './components/simulator';
 import { renderCalculadora } from './components/calculadora';
 import { initTheme, toggleTheme, getResolvedTheme } from './utils/theme';
@@ -14,6 +15,7 @@ import {
   iconRefreshCw,
   iconSun,
   iconMoon,
+  iconWallet,
 } from './utils/icons';
 import type { View } from './types';
 import { enhanceNumberSteppers } from './utils/number-stepper';
@@ -69,10 +71,12 @@ async function init(): Promise<void> {
   if (!app) return;
 
   initTheme();
+  await hydrateLocalVaultSession();
 
   const navItems: AppShellNavItem[] = [
     { view: 'dashboard', label: 'Dashboard', icon: iconDashboard(15), active: true },
     { view: 'positions', label: 'Posiciones', icon: iconLayers(15), active: false },
+    { view: 'capital', label: 'Capital', icon: iconWallet(15), active: false },
     { view: 'simulator', label: 'Simulador', icon: iconTrendingUp(15), active: false },
     { view: 'calculadora', label: 'Calculadora', icon: iconCalculator(15), active: false },
   ];
@@ -144,12 +148,6 @@ async function init(): Promise<void> {
   initRouter((view) => renderView(app, view));
   renderView(app, getCurrentView());
 
-  void hydrateLocalVaultSession().then(() => {
-    if (!app.isConnected) return;
-    updatePositionsSyncButton(app);
-    renderView(app, getCurrentView());
-  });
-
   requestAnimationFrame(() => {
     window.setTimeout(() => applyTypographyConfig(), 0);
   });
@@ -161,8 +159,9 @@ async function init(): Promise<void> {
   const viewKeys: Record<string, View> = {
     '1': 'dashboard',
     '2': 'positions',
-    '3': 'simulator',
-    '4': 'calculadora',
+    '3': 'capital',
+    '4': 'simulator',
+    '5': 'calculadora',
   };
 
   document.addEventListener('keydown', (e) => {
@@ -221,6 +220,9 @@ function renderView(app: HTMLElement, view: View): void {
       break;
     case 'positions':
       disposeActiveView = renderPositions(viewContainer, onStateChange);
+      break;
+    case 'capital':
+      disposeActiveView = renderCapital(viewContainer);
       break;
     case 'simulator':
       disposeActiveView = renderSimulator(viewContainer);

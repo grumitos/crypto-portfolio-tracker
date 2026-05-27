@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from '#test';
 import { renderSimulator } from './simulator';
-import { SIMULATOR_VIEW_KEY, saveState } from '../utils/storage';
+import { SIMULATOR_VIEW_KEY, getDefaultCapitalLedgerState, saveState } from '../utils/storage';
 import type { AppState } from '../types';
 import * as calculator from '../utils/calculator';
 import * as animation from '../utils/animation';
@@ -31,6 +31,7 @@ interface SeedSimulatorOptions {
   currentBalance?: number;
   savings?: number;
   positions?: AppState['positions'];
+  capitalLedger?: AppState['capitalLedger'];
 }
 
 const DEFAULT_POSITION: AppState['positions'][number] = {
@@ -98,6 +99,7 @@ function seedState(options: SeedSimulatorOptions = {}): void {
     manualPositions: options.positions ?? [DEFAULT_POSITION],
     autoPositions: [],
     positionsConfig: { mode: 'manual' },
+    capitalLedger: options.capitalLedger ?? getDefaultCapitalLedgerState(),
   };
 
   saveState(state);
@@ -287,16 +289,16 @@ describe('simulator dual milestones', () => {
     const initialCapitalHint = capitalHint.textContent?.trim();
     const initialAprHint = aprHint.textContent?.trim();
 
-    expect(initialCapitalHint).toBe('Capital en posiciones');
+    expect(initialCapitalHint).toBe('Balance combinado; APR sobre capital activo');
     expect(initialAprHint).toBe('Promedio ponderado (USD): N/D');
     expect(capitalInput.value).toBe('');
     expect(aprInput.value).toBe('');
 
     await flushMicrotasks();
 
-    expect(capitalHint.textContent?.trim()).toBe('Capital en posiciones');
+    expect(capitalHint.textContent?.trim()).toBe('Balance combinado; APR sobre capital activo');
     expect(aprHint.textContent?.trim()).toBe('Promedio ponderado (USD): 35.00%');
-    expect(capitalInput.value).toBe('400.00');
+    expect(capitalInput.value).toBe('1000.00');
     expect(aprInput.value).toBe('35.00');
 
     dispose();
@@ -331,7 +333,7 @@ describe('simulator dual milestones', () => {
 
     await flushMicrotasks();
 
-    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('400.00');
+    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('1000.00');
     expect((container.querySelector('#sim-apr') as HTMLInputElement).value).toBe('35.00');
     expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent?.trim()).toBe(
       'Promedio ponderado (USD): 35.00%',
@@ -361,7 +363,7 @@ describe('simulator dual milestones', () => {
     container.remove();
   });
 
-  it('uses active position capital for AUTO values', async () => {
+  it('uses combined balance with active earning capital for AUTO values', async () => {
     seedState({
       currentBalance: 41055,
       savings: 40000,
@@ -376,17 +378,58 @@ describe('simulator dual milestones', () => {
     const dispose = renderSimulator(container);
     await flushMicrotasks();
 
-    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('1055.00');
+    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('41055.00');
     expect((container.querySelector('#sim-apr') as HTMLInputElement).value).toBe('123.61');
     expect((container.querySelector('#sim-out-daily') as HTMLElement).textContent).toContain(
       '$3.57',
     );
     expect(projectionSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        capital: 1055,
+        capital: 41055,
+        earningCapital: 1055,
         apr: 123.61,
         goal: 45000,
         invested: 40000,
+      }),
+    );
+
+    dispose();
+    container.remove();
+  });
+
+  it('includes capital ledger values in AUTO capital, APR and BE target', async () => {
+    const capitalLedger = getDefaultCapitalLedgerState();
+    capitalLedger.vault = {
+      activeValue: '110',
+      activeValueAt: '2026-05-02T00:00:00.000Z',
+      pnlTotal: '10',
+    };
+    capitalLedger.transactions = [
+      { at: '2026-05-01T00:00:00.000Z', type: 'deposit', amount: '100' },
+    ];
+    seedState({
+      currentBalance: 41055,
+      savings: 40000,
+      totalInvested: 40000,
+      goalAmount: 45000,
+      capitalLedger,
+    });
+    mockAutoMetrics({ totalUsd: 1055, weightedApr: 123.61 });
+    const projectionSpy = vi.spyOn(calculator, 'generateProjection');
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+
+    expect((container.querySelector('#sim-capital') as HTMLInputElement).value).toBe('41165.00');
+
+    expect(projectionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capital: 41165,
+        earningCapital: 1165,
+        goal: 45000,
+        invested: 40100,
       }),
     );
 
@@ -571,7 +614,7 @@ describe('simulator dual milestones', () => {
     expect((container.querySelector('#sim-goal-tag') as HTMLElement).textContent).toBe('AUTO');
     expect((container.querySelector('#sim-goal') as HTMLInputElement).value).toBe('2500.00');
     expect((container.querySelector('#sim-capital-hint') as HTMLElement).textContent).toContain(
-      'Capital en posiciones',
+      'Balance combinado; APR sobre capital activo',
     );
     expect((container.querySelector('#sim-apr-hint') as HTMLElement).textContent).toContain(
       'Promedio ponderado (USD):',

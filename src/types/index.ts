@@ -135,10 +135,11 @@ export interface AppState {
   manualPositions: DualPosition[];
   autoPositions: DualPosition[];
   positionsConfig: PositionsConfig;
+  capitalLedger: CapitalLedgerState;
 }
 
 // ── Navigation ──
-export type View = 'dashboard' | 'positions' | 'simulator' | 'calculadora';
+export type View = 'dashboard' | 'positions' | 'capital' | 'simulator' | 'calculadora';
 
 // ── Dashboard Goal Selection ──
 export interface DashboardLegendState {
@@ -265,4 +266,114 @@ export interface BybitDiscountBuyPosition {
   expectReceiveAt?: number;
   yieldStartAt?: number;
   projectedProfit?: number;
+}
+
+// ── Capital ledger / Hyperliquid vaults ──
+export type CapitalLedgerTransactionType = 'deposit' | 'withdrawal';
+
+export interface CapitalLedgerTransaction {
+  id?: string;
+  at: string;
+  type: CapitalLedgerTransactionType;
+  amount: string;
+  url?: string;
+  vaultAddress?: string;
+  hash?: string;
+  time?: number;
+}
+
+export interface CapitalLedgerVaultConfig {
+  vaultAddress: string;
+  userAddress: string;
+}
+
+export interface CapitalLedgerVaultSummary {
+  activeValue: string;
+  pnlTotal: string;
+  vaultCount?: number;
+  movementCount?: number;
+}
+
+export interface CapitalLedgerDiscoveredVault {
+  vaultAddress: string;
+  equity: string;
+  lockedUntilTimestamp: number | null;
+}
+
+export interface CapitalLedgerVaultUser {
+  userAddress: string;
+  vaultEquity: string;
+  pnl: string;
+  allTimePnl: string;
+  daysFollowing: number | null;
+  vaultEntryTime: number | null;
+  lockupUntil: number | null;
+}
+
+export interface CapitalLedgerVault {
+  vaultAddress: string;
+  url: string;
+  name: string;
+  apr: number | null;
+  user: CapitalLedgerVaultUser | null;
+  maxWithdrawable?: string;
+  isClosed?: boolean;
+  allowDeposits?: boolean | null;
+}
+
+export interface CapitalLedgerSyncSnapshot {
+  ok: boolean;
+  fetchedAt: string;
+  config: CapitalLedgerVaultConfig;
+  summary: CapitalLedgerVaultSummary;
+  discoveredVaults: CapitalLedgerDiscoveredVault[];
+  vaults: CapitalLedgerVault[];
+  movements: CapitalLedgerTransaction[];
+}
+
+export interface CapitalLedgerState {
+  schemaVersion: 2;
+  vault: {
+    activeValue: string;
+    activeValueAt: string;
+    pnlTotal: string;
+  };
+  hyperliquid: {
+    vaultAddress: string;
+    userAddress: string;
+    lastSyncAt: string;
+  };
+  lastSync: CapitalLedgerSyncSnapshot | null;
+  transactions: CapitalLedgerTransaction[];
+}
+
+export interface CapitalLedgerSummary {
+  totalDeposited: number;
+  totalWithdrawn: number;
+  activeValue: number;
+  pnlTotal: number;
+  ledgerPnl: number;
+  netCapital: number;
+  activeCapital: number | null;
+  activePnl: number | null;
+  displayPnl: number;
+  displayCapital: number;
+  validTransactions: number;
+  invalidTransactions: number;
+  elapsedDays: number;
+  xirrApr: number | null;
+  apr: number | null;
+}
+
+export interface CapitalLedgerPortfolioContribution {
+  investedCapital: number;
+  balanceValue: number;
+  pnl: number;
+  activeValue: number;
+  earningCapital: number;
+  apr: number | null;
+  dailyEarningsUsd: number;
+  vaultCount: number;
+  movementCount: number;
+  lastSyncAt: string;
 }

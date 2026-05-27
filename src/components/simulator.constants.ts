@@ -14,7 +14,7 @@ export const SIMULATOR_COPY = {
   aprLabel: 'APR esperado (%)',
   frequencyLabel: 'Capitalización',
   goalLabel: 'Meta (USD)',
-  autoCapitalHint: 'Capital en posiciones',
+  autoCapitalHint: 'Balance combinado; APR sobre capital activo',
   autoAprHintPrefix: 'Promedio ponderado (USD):',
   autoGoalHint: 'Meta del dashboard',
   manualHint: 'Valor personalizado',

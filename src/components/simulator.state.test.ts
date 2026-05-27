@@ -98,7 +98,12 @@ describe('simulator view state', () => {
       <input id="sim-goal" value="4567.8" />
     `;
 
-    persistSimulatorViewState(container, { capital: false, apr: true, goal: false });
+    persistSimulatorViewState(container, {
+      capital: false,
+      apr: true,
+      goal: false,
+      earningCapital: null,
+    });
     const raw = localStorage.getItem(SIMULATOR_VIEW_KEY);
     expect(raw).not.toBeNull();
 

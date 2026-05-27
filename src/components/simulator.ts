@@ -17,6 +17,10 @@ import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-statu
 import { showApiErrorBanner } from '../utils/notifications';
 import { getSharedMarketData } from '../utils/api-runtime-cache';
 import {
+  combinePortfolioYieldMetrics,
+  getAggregatedPortfolioMetrics,
+} from '../utils/portfolio-aggregation';
+import {
   getDefaultViewState,
   loadSimulatorViewState,
   persistSimulatorViewState,
@@ -292,9 +296,14 @@ export function renderSimulator(container: HTMLElement): () => void {
     capital: viewState.autoCapital,
     apr: viewState.autoApr,
     goal: viewState.autoGoal,
+    earningCapital: null,
   };
 
-  container.innerHTML = renderSimulatorTemplate(viewState, autoState, state.portfolio.goalAmount);
+  container.innerHTML = renderSimulatorTemplate(
+    viewState,
+    autoState,
+    getAggregatedPortfolioMetrics(state).goal,
+  );
 
   renderProjectionLoadingState(container);
 
@@ -315,7 +324,7 @@ export function renderSimulator(container: HTMLElement): () => void {
     const { goalInput, goalHint } = getSimulatorElements(container);
     if (!goalInput) return false;
 
-    const nextGoal = state.portfolio.goalAmount.toFixed(2);
+    const nextGoal = getAggregatedPortfolioMetrics(state).goal.toFixed(2);
     let changed = false;
     if (goalInput.value !== nextGoal) {
       goalInput.value = nextGoal;
@@ -379,12 +388,36 @@ async function hydrateAutoValues(
   let changed = false;
 
   if (positions.length === 0) {
+    const aggregate = getAggregatedPortfolioMetrics(loadState());
+    const yieldMetrics = combinePortfolioYieldMetrics(
+      { totalUsd: 0, weightedApr: 0, dailyEarningsUsd: 0 },
+      aggregate.capital,
+    );
     if (autoState.capital) {
-      capitalInput.value = '0.00';
+      const nextCapital = aggregate.balance.toFixed(2);
+      if (capitalInput.value !== nextCapital) {
+        capitalInput.value = nextCapital;
+        changed = true;
+      }
       capitalHint.textContent = SIMULATOR_COPY.autoCapitalHint;
     }
-    if (autoState.apr) aprHint.textContent = formatAutoAprHint(null);
-    return false;
+    if (autoState.apr) {
+      const nextApr =
+        yieldMetrics.earningCapital > 0 && yieldMetrics.weightedApr !== 0
+          ? yieldMetrics.weightedApr.toFixed(2)
+          : '';
+      if (nextApr && aprInput.value !== nextApr) {
+        aprInput.value = nextApr;
+        changed = true;
+      }
+      aprHint.textContent = formatAutoAprHint(
+        yieldMetrics.earningCapital > 0 && yieldMetrics.weightedApr !== 0
+          ? yieldMetrics.weightedApr
+          : null,
+      );
+    }
+    autoState.earningCapital = yieldMetrics.earningCapital > 0 ? yieldMetrics.earningCapital : null;
+    return changed;
   }
 
   try {
@@ -395,9 +428,12 @@ async function hydrateAutoValues(
       showApiErrorBanner('No se pudo actualizar precios de mercado.');
     }
 
+    const aggregate = getAggregatedPortfolioMetrics(loadState());
+    const yieldMetrics = combinePortfolioYieldMetrics(metrics, aggregate.capital);
+
     if (autoState.capital) {
-      if (metrics.totalUsd > 0) {
-        const nextCapital = metrics.totalUsd.toFixed(2);
+      if (aggregate.balance > 0) {
+        const nextCapital = aggregate.balance.toFixed(2);
         if (capitalInput.value !== nextCapital) {
           capitalInput.value = nextCapital;
           changed = true;
@@ -407,15 +443,20 @@ async function hydrateAutoValues(
     }
 
     if (autoState.apr) {
-      if (metrics.weightedApr > 0) {
-        const nextApr = metrics.weightedApr.toFixed(2);
+      if (yieldMetrics.earningCapital > 0 && yieldMetrics.weightedApr !== 0) {
+        const nextApr = yieldMetrics.weightedApr.toFixed(2);
         if (aprInput.value !== nextApr) {
           aprInput.value = nextApr;
           changed = true;
         }
       }
-      aprHint.textContent = formatAutoAprHint(metrics.weightedApr > 0 ? metrics.weightedApr : null);
+      aprHint.textContent = formatAutoAprHint(
+        yieldMetrics.earningCapital > 0 && yieldMetrics.weightedApr !== 0
+          ? yieldMetrics.weightedApr
+          : null,
+      );
     }
+    autoState.earningCapital = yieldMetrics.earningCapital > 0 ? yieldMetrics.earningCapital : null;
   } catch (err) {
     if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true)
       console.warn('[Simulator] market hydration failed:', err);
@@ -460,6 +501,7 @@ function bindSimulatorEvents(
 
   capitalInput.addEventListener('input', () => {
     autoState.capital = false;
+    autoState.earningCapital = null;
     setTagMode(capitalTag, false);
     capitalHint.textContent = SIMULATOR_COPY.manualHint;
     persistSimulatorViewState(container, autoState);
@@ -467,6 +509,7 @@ function bindSimulatorEvents(
 
   aprInput.addEventListener('input', () => {
     autoState.apr = false;
+    autoState.earningCapital = null;
     setTagMode(aprTag, false);
     aprHint.textContent = SIMULATOR_COPY.manualHint;
     persistSimulatorViewState(container, autoState);
@@ -493,6 +536,7 @@ function bindSimulatorEvents(
 
     const state = loadState();
     capitalInput.value = '';
+    autoState.earningCapital = null;
     capitalHint.textContent = SIMULATOR_COPY.autoCapitalHint;
 
     aprInput.value = '';
@@ -530,19 +574,27 @@ function runSimulation(
   const apr = parseFloat(elements.aprInput?.value ?? '');
   const frequency = (elements.frequencyInput?.value ?? 'daily') as CompoundFrequency;
   const state = loadState();
+  const aggregate = getAggregatedPortfolioMetrics(state);
   const { goalInput, goalHint } = elements;
 
   if (goalInput && autoState.goal) {
-    goalInput.value = state.portfolio.goalAmount.toFixed(2);
+    goalInput.value = aggregate.goal.toFixed(2);
   }
   if (goalHint) {
     goalHint.textContent = autoState.goal ? SIMULATOR_COPY.autoGoalHint : SIMULATOR_COPY.manualHint;
   }
 
-  const rawGoal = autoState.goal ? state.portfolio.goalAmount : parseFloat(goalInput?.value ?? '');
+  const rawGoal = autoState.goal ? aggregate.goal : parseFloat(goalInput?.value ?? '');
   const goalIsValid = Number.isFinite(rawGoal) && rawGoal > 0;
   const goal = goalIsValid ? rawGoal : 0;
-  const invested = state.portfolio.totalInvested;
+  const invested = aggregate.invested;
+  const earningCapital =
+    autoState.capital &&
+    autoState.apr &&
+    autoState.earningCapital !== null &&
+    autoState.earningCapital > 0
+      ? autoState.earningCapital
+      : undefined;
 
   const hasInvalidCore =
     !Number.isFinite(capital) || !Number.isFinite(apr) || capital <= 0 || apr <= 0;
@@ -555,6 +607,7 @@ function runSimulation(
 
   const snapshot = buildProjectionSnapshot({
     capital,
+    ...(earningCapital !== undefined ? { earningCapital } : {}),
     apr,
     frequency,
     goal,
@@ -578,8 +631,9 @@ function runSimulation(
     goalIsValid,
   );
 
-  const dailyRunRate = calcDailyEarnings(capital, apr);
-  const monthlyRunRate = calcMonthlyEarnings(capital, apr);
+  const runRateCapital = earningCapital ?? capital;
+  const dailyRunRate = calcDailyEarnings(runRateCapital, apr);
+  const monthlyRunRate = calcMonthlyEarnings(runRateCapital, apr);
   const { dailyCompoundedPct, apyPct } = compoundedRateMetrics(apr, frequency);
 
   setCurrencyOutput(elements.daily, dailyRunRate, animate, ' /dia');

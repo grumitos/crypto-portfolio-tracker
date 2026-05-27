@@ -9,6 +9,14 @@ import type {
   PositionsConfig,
   PositionEntryTimeSource,
   PositionSettlementTimeSource,
+  CapitalLedgerDiscoveredVault,
+  CapitalLedgerState,
+  CapitalLedgerSyncSnapshot,
+  CapitalLedgerTransaction,
+  CapitalLedgerVault,
+  CapitalLedgerVaultConfig,
+  CapitalLedgerVaultSummary,
+  CapitalLedgerVaultUser,
 } from '../types';
 import { sanitizeISODate, todayISODateLocal } from './date';
 import { parseLooseNumber } from './parse-number';
@@ -65,11 +73,30 @@ function getDefaultState(): AppState {
     manualPositions: getDefaultPositions(),
     autoPositions: getDefaultPositions(),
     positionsConfig: getDefaultPositionsConfig(),
+    capitalLedger: getDefaultCapitalLedgerState(),
   };
 }
 
 function getDefaultPositionsConfig(): PositionsConfig {
   return { mode: 'manual' };
+}
+
+export function getDefaultCapitalLedgerState(): CapitalLedgerState {
+  return {
+    schemaVersion: 2,
+    vault: {
+      activeValue: '',
+      activeValueAt: '',
+      pnlTotal: '',
+    },
+    hyperliquid: {
+      vaultAddress: '',
+      userAddress: '',
+      lastSyncAt: '',
+    },
+    lastSync: null,
+    transactions: [],
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -124,6 +151,42 @@ function sanitizeTime(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const clean = value.trim();
   return HHMM_PATTERN.test(clean) ? clean : undefined;
+}
+
+function sanitizeLedgerText(value: unknown, maxLength = 240): string {
+  if (value === undefined || value === null) return '';
+  const clean = String(value).trim();
+  return clean.length > maxLength ? clean.slice(0, maxLength) : clean;
+}
+
+function sanitizeLedgerAddress(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const clean = value.trim().toLowerCase();
+  return /^0x[a-f0-9]{40}$/.test(clean) ? clean : '';
+}
+
+function sanitizeLedgerUrl(value: unknown): string {
+  const clean = sanitizeLedgerText(value, 500);
+  if (!clean) return '';
+  try {
+    const url = new URL(clean);
+    return url.protocol === 'https:' ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function sanitizeLedgerDateTime(value: unknown): string {
+  const clean = sanitizeLedgerText(value, 80);
+  if (!clean) return '';
+  const parsed = new Date(clean);
+  return Number.isNaN(parsed.getTime()) ? clean : parsed.toISOString();
+}
+
+function sanitizeLedgerNullableNumber(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function sanitizeEntryTimeSource(value: unknown): PositionEntryTimeSource | undefined {
@@ -312,6 +375,155 @@ function sanitizePositions(rawPositions: unknown): DualPosition[] {
   return rawPositions.map((position, index) => sanitizePosition(position, index));
 }
 
+function sanitizeCapitalLedgerConfig(rawConfig: unknown): CapitalLedgerVaultConfig {
+  const record = isRecord(rawConfig) ? rawConfig : {};
+  return {
+    vaultAddress: sanitizeLedgerAddress(record.vaultAddress),
+    userAddress: sanitizeLedgerAddress(record.userAddress),
+  };
+}
+
+function sanitizeCapitalLedgerSummary(rawSummary: unknown): CapitalLedgerVaultSummary {
+  const record = isRecord(rawSummary) ? rawSummary : {};
+  const vaultCount = sanitizeLedgerNullableNumber(record.vaultCount);
+  const movementCount = sanitizeLedgerNullableNumber(record.movementCount);
+  return {
+    activeValue: sanitizeNumericText(record.activeValue, ''),
+    pnlTotal: sanitizeNumericText(record.pnlTotal, ''),
+    ...(vaultCount !== null ? { vaultCount } : {}),
+    ...(movementCount !== null ? { movementCount } : {}),
+  };
+}
+
+function sanitizeCapitalLedgerVaultUser(rawUser: unknown): CapitalLedgerVaultUser | null {
+  if (!isRecord(rawUser)) return null;
+  return {
+    userAddress: sanitizeLedgerAddress(rawUser.userAddress),
+    vaultEquity: sanitizeNumericText(rawUser.vaultEquity, ''),
+    pnl: sanitizeNumericText(rawUser.pnl, ''),
+    allTimePnl: sanitizeNumericText(rawUser.allTimePnl, ''),
+    daysFollowing: sanitizeLedgerNullableNumber(rawUser.daysFollowing),
+    vaultEntryTime: sanitizeLedgerNullableNumber(rawUser.vaultEntryTime),
+    lockupUntil: sanitizeLedgerNullableNumber(rawUser.lockupUntil),
+  };
+}
+
+function sanitizeCapitalLedgerVault(rawVault: unknown): CapitalLedgerVault | null {
+  if (!isRecord(rawVault)) return null;
+  const vaultAddress = sanitizeLedgerAddress(rawVault.vaultAddress);
+  if (!vaultAddress) return null;
+  return {
+    vaultAddress,
+    url: sanitizeLedgerUrl(rawVault.url),
+    name: sanitizeLedgerText(rawVault.name, 120),
+    apr: sanitizeLedgerNullableNumber(rawVault.apr),
+    user: sanitizeCapitalLedgerVaultUser(rawVault.user),
+    maxWithdrawable: sanitizeNumericText(rawVault.maxWithdrawable, ''),
+    isClosed: rawVault.isClosed === true,
+    allowDeposits: typeof rawVault.allowDeposits === 'boolean' ? rawVault.allowDeposits : null,
+  };
+}
+
+function sanitizeCapitalLedgerDiscoveredVault(
+  rawVault: unknown,
+): CapitalLedgerDiscoveredVault | null {
+  if (!isRecord(rawVault)) return null;
+  const vaultAddress = sanitizeLedgerAddress(rawVault.vaultAddress);
+  if (!vaultAddress) return null;
+  return {
+    vaultAddress,
+    equity: sanitizeNumericText(rawVault.equity, ''),
+    lockedUntilTimestamp: sanitizeLedgerNullableNumber(rawVault.lockedUntilTimestamp),
+  };
+}
+
+function sanitizeCapitalLedgerTransaction(
+  rawTransaction: unknown,
+): CapitalLedgerTransaction | null {
+  if (!isRecord(rawTransaction)) return null;
+  const at = sanitizeLedgerText(rawTransaction.at, 80);
+  const amount = sanitizeNumericText(rawTransaction.amount, '');
+  if (!at && !amount) return null;
+  const time = sanitizeLedgerNullableNumber(rawTransaction.time);
+  return {
+    id: sanitizeLedgerText(rawTransaction.id, 140),
+    at,
+    type: rawTransaction.type === 'withdrawal' ? 'withdrawal' : 'deposit',
+    amount,
+    url: sanitizeLedgerUrl(rawTransaction.url),
+    vaultAddress: sanitizeLedgerAddress(rawTransaction.vaultAddress),
+    hash: sanitizeLedgerText(rawTransaction.hash, 120),
+    ...(time !== null ? { time } : {}),
+  };
+}
+
+function sanitizeCapitalLedgerSyncSnapshot(rawSnapshot: unknown): CapitalLedgerSyncSnapshot | null {
+  if (!isRecord(rawSnapshot)) return null;
+  const config = sanitizeCapitalLedgerConfig(rawSnapshot.config);
+  const vaults = Array.isArray(rawSnapshot.vaults)
+    ? rawSnapshot.vaults
+        .map(sanitizeCapitalLedgerVault)
+        .filter((vault): vault is CapitalLedgerVault => Boolean(vault))
+    : [];
+  const movements = Array.isArray(rawSnapshot.movements)
+    ? rawSnapshot.movements
+        .map(sanitizeCapitalLedgerTransaction)
+        .filter((movement): movement is CapitalLedgerTransaction => Boolean(movement))
+    : [];
+  const discoveredVaults = Array.isArray(rawSnapshot.discoveredVaults)
+    ? rawSnapshot.discoveredVaults
+        .map(sanitizeCapitalLedgerDiscoveredVault)
+        .filter((vault): vault is CapitalLedgerDiscoveredVault => Boolean(vault))
+    : [];
+  const hasSnapshot =
+    rawSnapshot.ok === true ||
+    Boolean(rawSnapshot.fetchedAt || config.vaultAddress || config.userAddress) ||
+    vaults.length > 0 ||
+    movements.length > 0 ||
+    discoveredVaults.length > 0;
+
+  if (!hasSnapshot) return null;
+
+  return {
+    ok: rawSnapshot.ok !== false,
+    fetchedAt: sanitizeLedgerDateTime(rawSnapshot.fetchedAt),
+    config,
+    summary: sanitizeCapitalLedgerSummary(rawSnapshot.summary),
+    discoveredVaults,
+    vaults,
+    movements,
+  };
+}
+
+function sanitizeCapitalLedger(rawCapitalLedger: unknown): CapitalLedgerState {
+  const defaults = getDefaultCapitalLedgerState();
+  const record = isRecord(rawCapitalLedger) ? rawCapitalLedger : {};
+  const vault = isRecord(record.vault) ? record.vault : {};
+  const hyperliquid = isRecord(record.hyperliquid) ? record.hyperliquid : {};
+  const lastSync = sanitizeCapitalLedgerSyncSnapshot(record.lastSync);
+  const transactions = Array.isArray(record.transactions)
+    ? record.transactions
+        .map(sanitizeCapitalLedgerTransaction)
+        .filter((transaction): transaction is CapitalLedgerTransaction => Boolean(transaction))
+    : [];
+
+  return {
+    schemaVersion: 2,
+    vault: {
+      activeValue: sanitizeNumericText(vault.activeValue, defaults.vault.activeValue),
+      activeValueAt: sanitizeLedgerDateTime(vault.activeValueAt),
+      pnlTotal: sanitizeNumericText(vault.pnlTotal, defaults.vault.pnlTotal),
+    },
+    hyperliquid: {
+      vaultAddress: sanitizeLedgerAddress(hyperliquid.vaultAddress),
+      userAddress: sanitizeLedgerAddress(hyperliquid.userAddress),
+      lastSyncAt: sanitizeLedgerDateTime(hyperliquid.lastSyncAt),
+    },
+    lastSync,
+    transactions: lastSync ? lastSync.movements : transactions,
+  };
+}
+
 function isBinancePositionId(value: string): boolean {
   return value.startsWith('binance_');
 }
@@ -348,6 +560,7 @@ function sanitizeAppState(raw: Partial<AppState> | null | undefined): AppState {
         : positions,
     autoPositions: inferredAutoPositions,
     positionsConfig: sanitizePositionsConfig(state.positionsConfig),
+    capitalLedger: sanitizeCapitalLedger(state.capitalLedger),
   };
 }
 
@@ -494,6 +707,13 @@ export function replaceAutoPositions(positions: DualPosition[]): AppState {
   const next = state.positionsConfig.mode === 'auto' ? syncActivePositionsForMode(state) : state;
   saveState(next);
   return next;
+}
+
+export function saveCapitalLedgerState(capitalLedger: CapitalLedgerState): AppState {
+  const state = loadState();
+  state.capitalLedger = sanitizeCapitalLedger(capitalLedger);
+  saveState(state);
+  return state;
 }
 
 // ── Portfolio updates ──

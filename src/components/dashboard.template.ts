@@ -26,6 +26,7 @@ export interface DashboardTemplateInput {
   firstMilestonePct: number;
   secondMilestonePct: number;
   progressFill: number;
+  isLoading?: boolean;
 }
 
 export function formatBalanceAmount(amount: number): string {
@@ -141,6 +142,16 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
   const loss = input.balance - input.invested;
   const lossPct = input.invested > 0 ? (loss / input.invested) * 100 : 0;
   const remaining = Math.max(0, input.goalAmount - input.balance);
+  const isLoading = input.isLoading === true;
+  const investedValue = isLoading ? skeletonSpan('110px') : formatUSD(input.invested);
+  const balanceValue = isLoading ? skeletonSpan('110px') : formatUSD(input.balance);
+  const balanceDateValue = isLoading ? skeletonSpan('82px') : formatDateLatin(input.lastUpdatedIso);
+  const pnlValue = isLoading ? skeletonSpan('110px') : formatUSD(loss);
+  const pnlPctValue = isLoading ? skeletonSpan('66px') : formatPct(lossPct);
+  const progressCurrentValue = isLoading ? skeletonSpan('98px') : formatUSD(input.balance);
+  const progressTargetValue = isLoading ? skeletonSpan('98px') : formatUSD(input.goalAmount);
+  const progressRemainingValue = isLoading ? skeletonSpan('98px') : formatUSD(remaining);
+  const positionsValue = isLoading ? skeletonSpan('34px') : String(input.positionsCount);
 
   return `
     <section class="section dashboard-section" aria-labelledby="dashboard-heading">
@@ -149,27 +160,27 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
       <div class="grid-3 dashboard-summary-grid">
         <article class="card dashboard-card" aria-labelledby="dash-invested-title">
           <div class="card-title" id="dash-invested-title">${DASHBOARD_COPY.investedTitle}</div>
-          <output class="big-number" id="dash-invested" aria-live="polite">${formatUSD(input.invested)}</output>
+          <output class="big-number" id="dash-invested" aria-live="polite">${investedValue}</output>
         </article>
         <article class="card dashboard-card" aria-labelledby="dash-balance-title">
           <div class="card-title" id="dash-balance-title">${DASHBOARD_COPY.balanceTitle}</div>
-          <output class="big-number accent" id="dash-balance" aria-live="polite">${formatUSD(input.balance)}</output>
-          <div class="mono text-muted sub-text" id="dash-balance-date">${formatDateLatin(input.lastUpdatedIso)}</div>
+          <output class="big-number accent" id="dash-balance" aria-live="polite">${balanceValue}</output>
+          <div class="mono text-muted sub-text" id="dash-balance-date">${balanceDateValue}</div>
         </article>
         <article class="card dashboard-card" aria-labelledby="dash-pnl-title">
           <div class="card-title" id="dash-pnl-title">${DASHBOARD_COPY.pnlTitle}</div>
-          <output class="big-number ${loss >= 0 ? 'gain' : 'loss'}" id="dash-pnl" aria-live="polite">${formatUSD(loss)}</output>
-          <div id="dash-pnl-pct" class="mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}">${formatPct(lossPct)}</div>
+          <output class="big-number ${loss >= 0 ? 'gain' : 'loss'}" id="dash-pnl" aria-live="polite">${pnlValue}</output>
+          <div id="dash-pnl-pct" class="mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}">${pnlPctValue}</div>
         </article>
       </div>
 
       <article class="card dashboard-card dashboard-goal-card" aria-labelledby="dashboard-goal-title">
         <div class="card-title" id="dashboard-goal-title">${DASHBOARD_COPY.goalTitle}</div>
         <div class="goal-progress-head">
-          <output class="mono goal-progress-value" id="dash-prog-current" aria-live="polite">${formatUSD(input.balance)}</output>
+          <output class="mono goal-progress-value" id="dash-prog-current" aria-live="polite">${progressCurrentValue}</output>
           <span class="text-secondary goal-progress-value goal-progress-target" id="dash-prog-target">
             <span class="goal-progress-target-label" id="dash-prog-target-label">${DASHBOARD_COPY.defaultGoalLabel}</span>
-            <output class="mono goal-progress-target-amount" id="dash-prog-target-amount" aria-live="polite">${formatUSD(input.goalAmount)}</output>
+            <output class="mono goal-progress-target-amount" id="dash-prog-target-amount" aria-live="polite">${progressTargetValue}</output>
           </span>
         </div>
         <div
@@ -189,7 +200,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
         <div class="goal-progress-foot">
           <div class="text-secondary goal-progress-remaining" id="dash-prog-remaining" aria-live="polite">
             <span id="dash-prog-remaining-text">${DASHBOARD_COPY.remainingText}</span>
-            <output class="mono" id="dash-prog-remaining-amount">${formatUSD(remaining)}</output>
+            <output class="mono" id="dash-prog-remaining-amount">${progressRemainingValue}</output>
             <span id="dash-prog-remaining-prefix">${DASHBOARD_COPY.remainingPrefix}</span>
             <span id="dash-prog-remaining-target">${DASHBOARD_COPY.goalTargetText}</span>
           </div>
@@ -221,7 +232,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
         </article>
         <article class="stat-card dashboard-stat-card" data-shared-card="positions">
           <div class="card-title">${DASHBOARD_COPY.activePositionsTitle}</div>
-          <output class="stat-value">${input.positionsCount}</output>
+          <output class="stat-value">${positionsValue}</output>
         </article>
       </div>
 

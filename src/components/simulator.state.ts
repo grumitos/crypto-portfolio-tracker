@@ -1,5 +1,6 @@
 import { loadState, SIMULATOR_VIEW_KEY } from '../utils/storage';
 import { weightedAverageAPR } from '../utils/calculator';
+import { getAggregatedPortfolioMetrics } from '../utils/portfolio-aggregation';
 import type { CompoundFrequency } from '../types';
 
 export const DEFAULT_APR_FALLBACK = 30;
@@ -8,6 +9,7 @@ export interface AutoState {
   capital: boolean;
   apr: boolean;
   goal: boolean;
+  earningCapital: number | null;
 }
 
 export interface SimulatorViewState {
@@ -34,9 +36,10 @@ export function sanitizeFrequency(value: unknown, fallback: CompoundFrequency): 
 
 export function getDefaultViewState(): SimulatorViewState {
   const state = loadState();
+  const aggregate = getAggregatedPortfolioMetrics(state);
   const avgAPR = weightedAverageAPR(state.positions);
   return {
-    capital: state.portfolio.currentBalance,
+    capital: aggregate.balance,
     apr: avgAPR > 0 ? avgAPR : DEFAULT_APR_FALLBACK,
     frequency: 'daily',
     goal: state.portfolio.goalAmount,

@@ -1,4 +1,6 @@
 import index from './index.html';
+import { HyperliquidSyncError, syncHyperliquidVaults } from './utils/hyperliquid-sync';
+import type { HyperliquidSyncInput } from './utils/hyperliquid-sync';
 
 interface LocalVaultExchangeCredentials {
   apiKey: string;
@@ -288,6 +290,43 @@ async function handleLocalVaultCredentials(req: Request): Promise<Response> {
   }
 }
 
+function hyperliquidErrorPayload(error: unknown): { error: { code: string; message: string } } {
+  if (error instanceof HyperliquidSyncError) {
+    return {
+      error: {
+        code: error.code,
+        message: error.publicMessage,
+      },
+    };
+  }
+
+  return {
+    error: {
+      code: 'HYPERLIQUID_SYNC_FAILED',
+      message: 'No se pudo sincronizar Hyperliquid.',
+    },
+  };
+}
+
+async function handleHyperliquidSync(req: Request): Promise<Response> {
+  if (req.method !== 'POST') {
+    return sendJson(405, {
+      error: {
+        code: 'METHOD_NOT_ALLOWED',
+        message: 'Metodo no permitido.',
+      },
+    });
+  }
+
+  try {
+    const body = (await req.json()) as unknown;
+    return sendJson(200, await syncHyperliquidVaults(body as HyperliquidSyncInput));
+  } catch (error) {
+    const status = error instanceof HyperliquidSyncError ? error.status : 502;
+    return sendJson(status, hyperliquidErrorPayload(error));
+  }
+}
+
 function publicFile(path: string, contentType: string): Response {
   return new Response(Bun.file(new URL(path, PUBLIC_DIR_URL)), {
     headers: {
@@ -401,6 +440,7 @@ export function createServerOptions(): Bun.ServeOptions {
       '/assets/*': publicAssetFile,
       '/public/assets/*': publicAssetFile,
       '/local-vault/credentials': handleLocalVaultCredentials,
+      '/api/hyperliquid/sync': handleHyperliquidSync,
       '/binance-api/*': (req: Request) =>
         proxyRequest(req, '/binance-api', 'https://api.binance.com/api'),
       '/binance-sapi/*': (req: Request) =>

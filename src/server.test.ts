@@ -1,5 +1,6 @@
-import { describe, expect, it } from '#test';
+import { describe, expect, it, vi } from '#test';
 import {
+  createServerOptions,
   copyProxyHeaders,
   copyProxyResponseHeaders,
   isAllowedPublicAssetPath,
@@ -106,6 +107,66 @@ describe('public asset request guards', () => {
     expect(isAllowedPublicAssetPath('/assets/crypto/../favicon.svg')).toBe(false);
     expect(isAllowedPublicAssetPath('/assets/crypto/sol.html')).toBe(false);
     expect(isAllowedPublicAssetPath('/assets/other/sol.svg')).toBe(false);
+  });
+});
+
+describe('hyperliquid sync route', () => {
+  const user = '0x1111111111111111111111111111111111111111';
+  const vault = '0x2222222222222222222222222222222222222222';
+
+  it('normalizes Hyperliquid data through the tracker API route', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+
+        if (body.type === 'vaultDetails') {
+          return Response.json({
+            name: 'Main vault',
+            followerState: {
+              user,
+              vaultEquity: '105',
+              pnl: '5',
+              allTimePnl: '6',
+            },
+          });
+        }
+
+        if (body.type === 'userNonFundingLedgerUpdates') {
+          return Response.json([
+            {
+              time: Date.UTC(2026, 4, 1),
+              hash: '0xabc',
+              delta: {
+                type: 'vaultDeposit',
+                vault,
+                usdc: '100',
+              },
+            },
+          ]);
+        }
+
+        return Response.json([]);
+      },
+    );
+
+    const routes = createServerOptions().routes as Record<string, unknown>;
+    const route = routes['/api/hyperliquid/sync'];
+    expect(typeof route).toBe('function');
+
+    const response = await (route as (req: Request) => Response | Promise<Response>)(
+      new Request('http://localhost:5176/api/hyperliquid/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress: user, vaultAddress: vault }),
+      }),
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.summary.activeValue).toBe('105');
+    expect(data.summary.pnlTotal).toBe('6');
+    expect(data.movements[0].amount).toBe('100');
   });
 });
 

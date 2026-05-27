@@ -26,7 +26,7 @@ export function initRouter(onNavigate: (view: View) => void): void {
 
   hashChangeHandler = () => {
     const hash = window.location.hash.slice(1) as View;
-    if (['dashboard', 'positions', 'simulator', 'calculadora'].includes(hash)) {
+    if (['dashboard', 'positions', 'capital', 'simulator', 'calculadora'].includes(hash)) {
       navigateTo(hash, onNavigate);
     }
   };
@@ -34,7 +34,7 @@ export function initRouter(onNavigate: (view: View) => void): void {
   window.addEventListener('hashchange', hashChangeHandler);
 
   const hash = window.location.hash.slice(1) as View;
-  if (['dashboard', 'positions', 'simulator', 'calculadora'].includes(hash)) {
+  if (['dashboard', 'positions', 'capital', 'simulator', 'calculadora'].includes(hash)) {
     currentView = hash;
   }
 }

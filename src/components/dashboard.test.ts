@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from '#test';
 import { renderDashboard, resetDashboardLegendStateForTests } from './dashboard';
-import { DASHBOARD_VIEW_KEY, loadState, saveState } from '../utils/storage';
+import {
+  DASHBOARD_VIEW_KEY,
+  getDefaultCapitalLedgerState,
+  loadState,
+  saveState,
+} from '../utils/storage';
 import type { AppState } from '../types';
 import * as projectionMilestones from '../utils/projection-milestones';
 import * as animation from '../utils/animation';
@@ -48,6 +53,7 @@ interface SeedDashboardOptions {
   savings?: number;
   goalAmount?: number;
   mode?: 'manual' | 'auto';
+  capitalLedger?: AppState['capitalLedger'];
 }
 
 function seedState(options: SeedDashboardOptions = {}): void {
@@ -78,6 +84,7 @@ function seedState(options: SeedDashboardOptions = {}): void {
     manualPositions: options.positions ?? defaultPositions,
     autoPositions: [],
     positionsConfig: { mode: options.mode ?? 'manual' },
+    capitalLedger: options.capitalLedger ?? getDefaultCapitalLedgerState(),
   };
 
   saveState(state);
@@ -343,6 +350,122 @@ describe('dashboard legends', () => {
         apr: 123.61,
         goal: 45000,
         invested: 40000,
+      }),
+    );
+
+    dispose();
+    container.remove();
+  });
+
+  it('keeps dashboard values skeletonized until initial market hydration finishes', async () => {
+    let resolveMarketData!: (value: Awaited<ReturnType<typeof getSharedMarketData>>) => void;
+    vi.mocked(getSharedMarketData).mockReturnValue(
+      new Promise((resolve) => {
+        resolveMarketData = resolve;
+      }),
+    );
+    seedState({
+      currentBalance: 41055,
+      savings: 40000,
+      totalInvested: 40000,
+      goalAmount: 45000,
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+
+    expect((container.querySelector('#dash-balance') as HTMLElement).textContent).not.toContain(
+      '$41,055.00',
+    );
+    expect(container.querySelector('#dash-balance .skeleton')).not.toBeNull();
+
+    resolveMarketData({
+      positionsKey: 'p1',
+      snapshot: {
+        priceByAsset: { USDT: 1 },
+        sourceByAsset: { USDT: 'stable' },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        changePercent24hByAsset: { USDT: 0 },
+      },
+      metrics: {
+        totalUsd: 1055,
+        weightedApr: 123.61,
+        dailyEarningsUsd: 3.57,
+        usdByPositionId: { p1: 1055 },
+        aprByPositionId: { p1: 123.61 },
+        priceByAsset: { USDT: 1 },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        priceSourceByAsset: { USDT: 'stable' },
+      },
+    });
+    await flushMicrotasks();
+
+    expect((container.querySelector('#dash-balance') as HTMLElement).textContent).toContain(
+      '$41,055.00',
+    );
+
+    dispose();
+    container.remove();
+  });
+
+  it('adds capital ledger balance, BE target and APR into dashboard projections', async () => {
+    vi.mocked(getSharedMarketData).mockResolvedValue({
+      positionsKey: 'p1',
+      snapshot: {
+        priceByAsset: { USDT: 1 },
+        sourceByAsset: { USDT: 'stable' },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        changePercent24hByAsset: { USDT: 0 },
+      },
+      metrics: {
+        totalUsd: 1055,
+        weightedApr: 123.61,
+        dailyEarningsUsd: 3.57,
+        usdByPositionId: { p1: 1055 },
+        aprByPositionId: { p1: 123.61 },
+        priceByAsset: { USDT: 1 },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        priceSourceByAsset: { USDT: 'stable' },
+      },
+    });
+    const capitalLedger = getDefaultCapitalLedgerState();
+    capitalLedger.vault = {
+      activeValue: '110',
+      activeValueAt: '2026-05-02T00:00:00.000Z',
+      pnlTotal: '10',
+    };
+    capitalLedger.transactions = [
+      { at: '2026-05-01T00:00:00.000Z', type: 'deposit', amount: '100' },
+    ];
+    seedState({
+      currentBalance: 41055,
+      savings: 40000,
+      totalInvested: 40000,
+      goalAmount: 45000,
+      capitalLedger,
+    });
+
+    const snapshotSpy = vi.spyOn(projectionMilestones, 'buildProjectionSnapshot');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect(snapshotSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capital: 41165,
+        earningCapital: 1165,
+        goal: 45000,
+        invested: 40100,
       }),
     );
 

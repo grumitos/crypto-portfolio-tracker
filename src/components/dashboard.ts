@@ -23,6 +23,11 @@ import {
   toggleDashboardLegend,
 } from '../utils/dashboard-goal';
 import { buildProjectionSnapshot } from '../utils/projection-milestones';
+import {
+  combinePortfolioYieldMetrics,
+  getAggregatedPortfolioMetrics,
+  type CombinedPortfolioYieldMetrics,
+} from '../utils/portfolio-aggregation';
 import { subscribeToMarketTicks } from '../utils/market-poller';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
 import { sanitizeFrequency } from './simulator.state';
@@ -449,6 +454,48 @@ function updateDashboardSummaryVisual(
   }
 }
 
+function updateDashboardYieldStats(
+  apr: HTMLElement,
+  capital: HTMLElement,
+  daily: HTMLElement,
+  yieldMetrics: CombinedPortfolioYieldMetrics,
+  animate: boolean,
+): void {
+  const hasApr =
+    yieldMetrics.earningCapital > 0 &&
+    Number.isFinite(yieldMetrics.weightedApr) &&
+    yieldMetrics.weightedApr !== 0;
+  apr.style.color =
+    yieldMetrics.weightedApr < 0
+      ? 'var(--color-loss)'
+      : hasApr
+        ? 'var(--text-primary)'
+        : 'var(--text-muted)';
+  if (hasApr) {
+    setPercentOutput(apr, yieldMetrics.weightedApr, animate, false);
+  } else {
+    setTextResult(apr, '---', animate);
+  }
+
+  if (yieldMetrics.capitalDisplayUsd > 0) {
+    setCurrencyOutput(capital, yieldMetrics.capitalDisplayUsd, animate);
+  } else {
+    setTextResult(capital, '---', animate);
+  }
+
+  daily.style.color =
+    yieldMetrics.dailyEarningsUsd < 0
+      ? 'var(--color-loss)'
+      : yieldMetrics.dailyEarningsUsd > 0
+        ? 'var(--color-gain)'
+        : 'var(--text-muted)';
+  if (yieldMetrics.dailyEarningsUsd !== 0) {
+    setCurrencyOutput(daily, yieldMetrics.dailyEarningsUsd, animate);
+  } else {
+    setTextResult(daily, '---', animate);
+  }
+}
+
 function renderBalanceDetail(
   container: HTMLElement,
   balances: BinanceAccountBalance[] | null,
@@ -567,12 +614,13 @@ function updateBalanceDetailCards(container: HTMLElement, balances: BinanceAccou
 }
 
 function createInitialUiState(state: AppState): DashboardUiState {
-  const displayBalance =
+  const baseDisplayBalance =
     state.positions.length === 0 ? state.portfolio.savings : state.portfolio.currentBalance;
+  const aggregate = getAggregatedPortfolioMetrics(state, baseDisplayBalance);
   return {
-    balance: displayBalance,
-    invested: state.portfolio.totalInvested,
-    goal: state.portfolio.goalAmount,
+    balance: aggregate.balance,
+    invested: aggregate.invested,
+    goal: aggregate.goal,
     apr: null,
     earningCapital: null,
     frequency: readSimulatorFrequency('daily'),
@@ -581,10 +629,6 @@ function createInitialUiState(state: AppState): DashboardUiState {
 
 function renderInitialDashboard(container: HTMLElement, state: AppState): DashboardUiState {
   const uiState = createInitialUiState(state);
-  const progressScale = progressScaleTarget(uiState.invested, uiState.goal);
-  const progressFill = clampProgress(progressPct(uiState.balance, progressScale));
-  const firstMilestonePct = progressMarkerPct(uiState.invested, progressScale);
-  const secondMilestonePct = progressMarkerPct(uiState.goal, progressScale);
   const autoModeEnabled = isAutoMode();
 
   container.innerHTML = renderDashboardTemplate({
@@ -595,9 +639,10 @@ function renderInitialDashboard(container: HTMLElement, state: AppState): Dashbo
     positionsCount: state.positions.length,
     autoModeEnabled,
     hasApiCredentials: hasAnyExchangeApiCredentials(),
-    firstMilestonePct,
-    secondMilestonePct,
-    progressFill,
+    firstMilestonePct: 0,
+    secondMilestonePct: 0,
+    progressFill: 0,
+    isLoading: true,
   });
 
   return uiState;
@@ -617,9 +662,10 @@ export function renderDashboard(
 
   const unsubConfig = onApiConfigChange(() => {
     const updatedState = loadState();
-    uiState.balance = updatedState.portfolio.currentBalance;
-    uiState.invested = updatedState.portfolio.totalInvested;
-    uiState.goal = updatedState.portfolio.goalAmount;
+    const aggregate = getAggregatedPortfolioMetrics(updatedState);
+    uiState.balance = aggregate.balance;
+    uiState.invested = aggregate.invested;
+    uiState.goal = aggregate.goal;
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
     updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
     updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
@@ -635,11 +681,6 @@ export function renderDashboard(
   });
 
   bindGoalLegendEvents(container, uiState);
-  updateGoalProgressVisual(container, uiState, { animateNumbers: false, animateText: false });
-
-  requestAnimationFrame(() => {
-    updateDashboardSummaryVisual(container, uiState, state.portfolio.lastUpdated, true);
-  });
 
   void hydrateDashboardMarketStats(
     container,
@@ -673,16 +714,17 @@ export function renderDashboard(
 
 function updateBalanceInPlace(
   container: HTMLElement,
-  newBalance: number,
+  newBaseBalance: number,
   uiState: DashboardUiState,
-  portfolio: AppState['portfolio'],
+  state: AppState,
   animateGoalSection = true,
 ): void {
-  uiState.balance = newBalance;
-  uiState.invested = portfolio.totalInvested;
-  uiState.goal = portfolio.goalAmount;
+  const aggregate = getAggregatedPortfolioMetrics(state, newBaseBalance);
+  uiState.balance = aggregate.balance;
+  uiState.invested = aggregate.invested;
+  uiState.goal = aggregate.goal;
   uiState.frequency = readSimulatorFrequency(uiState.frequency);
-  updateDashboardSummaryVisual(container, uiState, portfolio.lastUpdated, animateGoalSection);
+  updateDashboardSummaryVisual(container, uiState, state.portfolio.lastUpdated, animateGoalSection);
 }
 
 function sumBalanceContributingPositionUsd(
@@ -765,16 +807,28 @@ async function hydrateDashboardMarketStats(
         container,
         savingsOnlyBalance,
         uiState,
-        updatedState.portfolio,
+        updatedState,
         animateDynamicValues,
       );
     }
 
-    setTextResult(apr, '---', true);
-    setTextResult(capital, '---', true);
-    setTextResult(daily, '---', true);
-    uiState.apr = null;
-    uiState.earningCapital = null;
+    const aggregate = getAggregatedPortfolioMetrics(loadState(), savingsOnlyBalance);
+    const yieldMetrics = combinePortfolioYieldMetrics(
+      { totalUsd: 0, weightedApr: 0, dailyEarningsUsd: 0 },
+      aggregate.capital,
+    );
+    updateDashboardYieldStats(apr, capital, daily, yieldMetrics, true);
+    uiState.balance = aggregate.balance;
+    uiState.invested = aggregate.invested;
+    uiState.goal = aggregate.goal;
+    uiState.apr = yieldMetrics.weightedApr !== 0 ? yieldMetrics.weightedApr : null;
+    uiState.earningCapital = yieldMetrics.earningCapital > 0 ? yieldMetrics.earningCapital : null;
+    updateDashboardSummaryVisual(
+      container,
+      uiState,
+      loadState().portfolio.lastUpdated,
+      animateDynamicValues,
+    );
     updateGoalProgressVisual(container, uiState, {
       animateNumbers: animateDynamicValues,
       animateText: animateDynamicValues,
@@ -803,46 +857,33 @@ async function hydrateDashboardMarketStats(
     if (shouldSyncBalance) {
       lastAutoBalanceSyncAt = now;
       const updatedState = updateBalance(totalBalance);
-      updateBalanceInPlace(
-        container,
-        totalBalance,
-        uiState,
-        updatedState.portfolio,
-        animateDynamicValues,
-      );
+      updateBalanceInPlace(container, totalBalance, uiState, updatedState, animateDynamicValues);
     }
 
-    apr.style.color = metrics.weightedApr > 0 ? 'var(--text-primary)' : 'var(--text-muted)';
-    if (metrics.weightedApr > 0) {
-      setPercentOutput(apr, metrics.weightedApr, true, false);
-    } else {
-      setTextResult(apr, '---', true);
-    }
-
-    if (metrics.totalUsd > 0) {
-      setCurrencyOutput(capital, metrics.totalUsd, true);
-    } else {
-      setTextResult(capital, '---', true);
-    }
-
-    daily.style.color = metrics.dailyEarningsUsd > 0 ? 'var(--color-gain)' : 'var(--text-muted)';
-    if (metrics.dailyEarningsUsd > 0) {
-      setCurrencyOutput(daily, metrics.dailyEarningsUsd, true);
-    } else {
-      setTextResult(daily, '---', true);
-    }
+    const aggregate = getAggregatedPortfolioMetrics(
+      currentState,
+      shouldSyncBalance ? totalBalance : currentState.portfolio.currentBalance,
+    );
+    const yieldMetrics = combinePortfolioYieldMetrics(metrics, aggregate.capital);
+    updateDashboardYieldStats(apr, capital, daily, yieldMetrics, true);
 
     if (metrics.hasStalePrices || metrics.hasUnavailablePrices) {
       registerApiFailure();
       showApiErrorBanner('No se pudo actualizar precios de mercado.');
     }
 
-    uiState.balance = shouldSyncBalance ? totalBalance : currentState.portfolio.currentBalance;
-    uiState.invested = currentState.portfolio.totalInvested;
-    uiState.goal = currentState.portfolio.goalAmount;
-    uiState.apr = metrics.weightedApr > 0 ? metrics.weightedApr : null;
-    uiState.earningCapital = metrics.totalUsd > 0 ? metrics.totalUsd : null;
+    uiState.balance = aggregate.balance;
+    uiState.invested = aggregate.invested;
+    uiState.goal = aggregate.goal;
+    uiState.apr = yieldMetrics.weightedApr !== 0 ? yieldMetrics.weightedApr : null;
+    uiState.earningCapital = yieldMetrics.earningCapital > 0 ? yieldMetrics.earningCapital : null;
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
+    updateDashboardSummaryVisual(
+      container,
+      uiState,
+      currentState.portfolio.lastUpdated,
+      animateDynamicValues,
+    );
 
     updateGoalProgressVisual(container, uiState, {
       animateNumbers: animateDynamicValues,
