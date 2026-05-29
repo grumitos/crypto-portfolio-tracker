@@ -25,7 +25,7 @@ function baseState(): AppState {
 }
 
 describe('portfolio aggregation', () => {
-  it('adds capital ledger capital and PnL to dashboard balance and BE target', () => {
+  it('adds capital ledger balance while keeping invested capital user-defined', () => {
     const state = baseState();
     state.capitalLedger.vault = {
       activeValue: '110',
@@ -39,8 +39,8 @@ describe('portfolio aggregation', () => {
     const aggregate = getAggregatedPortfolioMetrics(state);
 
     expect(aggregate.balance).toBe(41165);
-    expect(aggregate.invested).toBe(40100);
-    expect(aggregate.pnl).toBe(1065);
+    expect(aggregate.invested).toBe(40000);
+    expect(aggregate.pnl).toBe(1165);
     expect(aggregate.capital.balanceValue).toBe(110);
   });
 

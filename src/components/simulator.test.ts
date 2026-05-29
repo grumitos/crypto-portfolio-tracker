@@ -397,7 +397,7 @@ describe('simulator dual milestones', () => {
     container.remove();
   });
 
-  it('includes capital ledger values in AUTO capital, APR and BE target', async () => {
+  it('includes capital ledger AUTO capital and APR while keeping BE target user-defined', async () => {
     const capitalLedger = getDefaultCapitalLedgerState();
     capitalLedger.vault = {
       activeValue: '110',
@@ -429,7 +429,7 @@ describe('simulator dual milestones', () => {
         capital: 41165,
         earningCapital: 1165,
         goal: 45000,
-        invested: 40100,
+        invested: 40000,
       }),
     );
 

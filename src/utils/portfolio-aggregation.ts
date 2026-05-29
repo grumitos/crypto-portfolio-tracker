@@ -32,7 +32,7 @@ export function getAggregatedPortfolioMetrics(
   const baseBalance = roundCurrency(baseBalanceOverride ?? state.portfolio.currentBalance);
   const baseInvested = roundCurrency(state.portfolio.totalInvested);
   const balance = roundCurrency(baseBalance + capital.balanceValue);
-  const invested = roundCurrency(baseInvested + capital.investedCapital);
+  const invested = baseInvested;
 
   return {
     baseBalance,

@@ -413,7 +413,7 @@ describe('dashboard legends', () => {
     container.remove();
   });
 
-  it('adds capital ledger balance, BE target and APR into dashboard projections', async () => {
+  it('adds capital ledger balance and APR while keeping BE target user-defined', async () => {
     vi.mocked(getSharedMarketData).mockResolvedValue({
       positionsKey: 'p1',
       snapshot: {
@@ -465,7 +465,7 @@ describe('dashboard legends', () => {
         capital: 41165,
         earningCapital: 1165,
         goal: 45000,
-        invested: 40100,
+        invested: 40000,
       }),
     );
 
