@@ -41,6 +41,7 @@ import {
   rememberAutoPortfolioSnapshot,
   rememberBalanceSummary,
 } from './utils/api-runtime-cache';
+import { showApiErrorBanner } from './utils/notifications';
 
 let disposeActiveView: (() => void) | null = null;
 let forceRefreshNextDashboardRender = false;
@@ -134,6 +135,11 @@ async function init(): Promise<void> {
       });
       forceRefreshNextDashboardRender = true;
       renderView(app, getCurrentView());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      showApiErrorBanner(
+        `No se pudieron sincronizar las posiciones desde exchanges configurados: ${message}`,
+      );
     } finally {
       syncBtn.disabled = false;
       syncBtn.classList.remove('syncing');

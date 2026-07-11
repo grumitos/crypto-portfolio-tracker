@@ -23,6 +23,7 @@ export interface DashboardElements {
   apr: HTMLElement | null;
   capital: HTMLElement | null;
   daily: HTMLElement | null;
+  positionsCount: HTMLElement | null;
   balanceStrip: HTMLElement | null;
   balanceStripItems: HTMLElement | null;
 }
@@ -57,6 +58,7 @@ export function getDashboardElements(container: HTMLElement): DashboardElements 
     apr: query(container, '#dashboard-apr'),
     capital: query(container, '#dashboard-capital'),
     daily: query(container, '#dashboard-daily'),
+    positionsCount: query(container, '#dashboard-positions-count'),
     balanceStrip: query(container, '#dashboard-balance-strip'),
     balanceStripItems: query(container, '#dashboard-balance-strip-items'),
   };

@@ -795,6 +795,11 @@ async function hydrateDashboardMarketStats(
     renderBalanceDetail(container, null);
   }
 
+  setStaticTextOutput(
+    getDashboardElements(container).positionsCount,
+    String(effectivePositions.length),
+  );
+
   if (effectivePositions.length === 0) {
     const savingsOnlyBalance =
       Math.round((autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.savings) * 100) /

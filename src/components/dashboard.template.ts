@@ -232,7 +232,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
         </article>
         <article class="stat-card dashboard-stat-card" data-shared-card="positions">
           <div class="card-title">${DASHBOARD_COPY.activePositionsTitle}</div>
-          <output class="stat-value">${positionsValue}</output>
+          <output class="stat-value" id="dashboard-positions-count" aria-live="polite">${positionsValue}</output>
         </article>
       </div>
 

@@ -292,11 +292,7 @@ async function fetchBybitBalanceRows(): Promise<BybitBalanceRow[]> {
     fetchOptionalBybitBalanceRows(fetchBybitAssetOverviewBalances()),
   ]);
 
-  if (
-    !walletBalances.fulfilled &&
-    !fundingBalances.fulfilled &&
-    !supplementalBalances.fulfilled
-  ) {
+  if (!walletBalances.fulfilled && !fundingBalances.fulfilled && !supplementalBalances.fulfilled) {
     throw new Error('Bybit balances unavailable');
   }
 

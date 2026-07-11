@@ -919,6 +919,8 @@ describe('dashboard legends', () => {
 
     expect(registerApiFailure).toHaveBeenCalled();
     expect(showApiErrorBanner).toHaveBeenCalled();
+    expect(container.querySelector('#dashboard-positions-count')?.textContent?.trim()).toBe('1');
+    expect(container.querySelector('#dashboard-positions-count .skeleton')).toBeNull();
 
     dispose();
     container.remove();

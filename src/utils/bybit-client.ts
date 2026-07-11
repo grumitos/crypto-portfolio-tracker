@@ -652,9 +652,10 @@ export async function fetchBybitAssetBalances(): Promise<BybitAccountBalance[]> 
     .filter((row) => row.walletBalance > 0 || row.locked > 0);
 }
 
-function mapBybitAssetOverviewCoin(
-  row: { coin?: string; equity?: string },
-): BybitAccountBalance | null {
+function mapBybitAssetOverviewCoin(row: {
+  coin?: string;
+  equity?: string;
+}): BybitAccountBalance | null {
   const asset = row.coin?.toUpperCase().trim();
   const equity = parseFiniteNumber(row.equity);
   if (!asset || equity <= 0) return null;
@@ -699,9 +700,9 @@ export async function fetchBybitAssetOverviewBalances(): Promise<BybitAccountBal
     for (const category of account.categories ?? []) {
       if (ASSET_OVERVIEW_EXCLUDED_CATEGORY_RE.test(String(category.category ?? ''))) continue;
       balances.push(
-        ...((category.coinDetail ?? [])
+        ...(category.coinDetail ?? [])
           .map(mapBybitAssetOverviewCoin)
-          .filter((row): row is BybitAccountBalance => row !== null)),
+          .filter((row): row is BybitAccountBalance => row !== null),
       );
     }
   }

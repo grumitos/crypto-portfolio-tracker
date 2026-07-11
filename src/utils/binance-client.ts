@@ -410,14 +410,10 @@ async function fetchSimpleEarnFlexibleBalancePage(
 async function fetchSimpleEarnLockedBalancePage(
   current: number,
 ): Promise<RawSimpleEarnLockedResponse> {
-  return fetchSigned<RawSimpleEarnLockedResponse>(
-    SAPI_PROXY_BASE,
-    '/simple-earn/locked/position',
-    {
-      current,
-      size: SIMPLE_EARN_PAGE_SIZE,
-    },
-  );
+  return fetchSigned<RawSimpleEarnLockedResponse>(SAPI_PROXY_BASE, '/simple-earn/locked/position', {
+    current,
+    size: SIMPLE_EARN_PAGE_SIZE,
+  });
 }
 
 async function fetchSimpleEarnFlexibleBalances(): Promise<BinanceAccountBalance[]> {
