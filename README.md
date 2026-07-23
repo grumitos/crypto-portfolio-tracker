@@ -1,6 +1,12 @@
 # Crypto Portfolio Tracker
 
+> **Estado:** en desarrollo activo. La aplicacion local, el build y la suite automatizada son funcionales; las integraciones de exchange permanecen deliberadamente en modo de solo lectura.
+
 App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual Investment, proyectar recuperacion por compound y calcular rendimiento de swing trade.
+
+![Dashboard local sin datos financieros cargados](./docs/screenshots/dashboard.png)
+
+La captura muestra el estado inicial de una instalacion limpia. El repositorio no incluye credenciales ni datos de cartera.
 
 ## Alcance
 
