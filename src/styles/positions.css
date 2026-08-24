@@ -10,9 +10,10 @@
 }
 
 /* ── Celda de resultado ──
-   Los dos desenlaces son datos pares: misma escala tipografica en ambas filas
-   y una rejilla de tres columnas (etiqueta / importe / unidad) que deja las
-   cifras a plomo aunque los tickers midan distinto. */
+   Los dos desenlaces son hipotesis excluyentes de un futuro que aun no ocurrio:
+   ninguna pesa mas que la otra, asi que comparten color, cuerpo y familia y solo
+   las separa su etiqueta. La rejilla de tres columnas (etiqueta / importe /
+   unidad) deja las cifras a plomo aunque los tickers midan distinto. */
 .pos-outcome {
   display: grid;
   grid-template-columns: auto auto auto;
@@ -34,13 +35,8 @@
 }
 
 .pos-outcome-amount {
-  color: var(--ink-2);
-  text-align: right;
-}
-
-/* Unico rasgo que separa el desenlace ejecutado del no ejecutado: el color. */
-.pos-outcome-row.is-converted .pos-outcome-amount {
   color: var(--ink);
+  text-align: right;
 }
 
 .pos-outcome-asset {

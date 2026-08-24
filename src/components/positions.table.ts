@@ -5,6 +5,7 @@ import {
   calculateDualProjectedProfit,
   isDualSettlementReached,
   normalizeTime,
+  resolveDualEntryAt,
   resolveDualSettlementAt,
 } from '../utils/dual-yield';
 import { ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from '../utils/constants';
@@ -46,8 +47,6 @@ interface OutcomeRow {
   label: string;
   amount: number;
   asset: string;
-  /** El desenlace convierte el activo suscrito: se enfatiza en color, no en tamano. */
-  changed: boolean;
 }
 
 interface PositionField {
@@ -374,16 +373,16 @@ function renderDiscountBuyOutcomeCell(position: DualPosition): string {
   const purchaseAmount = position.targetPrice > 0 ? position.amount / position.targetPrice : 0;
 
   return renderOutcomeRows([
-    { label: 'Compra', amount: purchaseAmount, asset: position.asset, changed: true },
+    { label: 'Compra', amount: purchaseAmount, asset: position.asset },
   ]);
 }
 
 /**
  * Los desenlaces de una posicion (ejecutado / no ejecutado) son datos pares:
- * comparten tamano, familia mono y cifras tabulares. La rejilla reparte
- * etiqueta, importe y unidad en columnas propias para que las cifras queden a
- * plomo aunque los tickers midan distinto; el desenlace convertido solo se
- * distingue por color.
+ * dos hipotesis excluyentes, ninguna mas cierta que la otra. Comparten color,
+ * cuerpo y familia mono; lo unico que las separa es su etiqueta. La rejilla
+ * reparte etiqueta, importe y unidad en columnas propias para que las cifras
+ * queden a plomo aunque los tickers midan distinto.
  */
 function renderOutcomeRows(rows: OutcomeRow[]): string {
   return `
@@ -392,7 +391,7 @@ function renderOutcomeRows(rows: OutcomeRow[]): string {
         .map((row) => {
           const amount = formatAmountParts(row.amount, row.asset);
           return `
-            <span class="pos-outcome-row${row.changed ? ' is-converted' : ''}">
+            <span class="pos-outcome-row">
               <span class="muted pos-outcome-label">${escapeHtml(row.label)}</span>
               <span class="num pos-outcome-amount">${amount.value}</span>
               <span class="pos-outcome-asset">${amount.asset}</span>
@@ -411,12 +410,11 @@ function resolveOutcomeRows(position: DualPosition): OutcomeRow[] {
     const executedAmount =
       position.targetPrice > 0 ? (position.amount + projectedProfit) / position.targetPrice : 0;
     return applyExpectedSettlementRow(position, [
-      { label: 'Ejec.', amount: executedAmount, asset: position.asset, changed: true },
+      { label: 'Ejec.', amount: executedAmount, asset: position.asset },
       {
         label: 'No ej.',
         amount: position.amount + projectedProfit,
         asset: position.subscriptionAsset,
-        changed: false,
       },
     ]);
   }
@@ -430,13 +428,11 @@ function resolveOutcomeRows(position: DualPosition): OutcomeRow[] {
       label: 'Ejec.',
       amount: executedAmount,
       asset: quoteAsset,
-      changed: true,
     },
     {
       label: 'No ej.',
       amount: position.amount + projectedProfit,
       asset: position.subscriptionAsset,
-      changed: false,
     },
   ]);
 }
@@ -454,23 +450,27 @@ function applyExpectedSettlementRow(position: DualPosition, rows: OutcomeRow[]):
   return rows.map((row) => {
     if (replaced || row.asset !== position.expectedSettlementAsset) return row;
     replaced = true;
-    return {
-      ...row,
-      amount: position.expectedSettlementAmount as number,
-      changed: position.expectedSettlementAsset !== position.subscriptionAsset,
-    };
+    return { ...row, amount: position.expectedSettlementAmount as number };
   });
 }
 
 /**
- * Fraccion de la ventana ya transcurrida (0-100). Reutiliza el calculo de dias
- * facturados que ya alimenta la ganancia proyectada.
+ * Fraccion de la ventana ya transcurrida (0-100), en tiempo de reloj.
+ *
+ * No sirven aqui los dias facturados que alimentan la ganancia: Binance los
+ * cuenta enteros y solo pasan de largo al cruzar el corte diario, asi que en una
+ * posicion de un dia el contador vale 0 durante toda la espera y salta a 1 de
+ * golpe. La barra mide cuanto falta, no cuanto se cobra.
  */
 function elapsedWindowPct(position: DualPosition): number {
-  const total = calculateDualProjectedBilledDays(position);
+  const entryAt = resolveDualEntryAt(position);
+  const settlementAt = resolveDualSettlementAt(position);
+  if (!entryAt || !settlementAt) return 0;
+
+  const total = settlementAt.getTime() - entryAt.getTime();
   if (!Number.isFinite(total) || total <= 0) return 0;
-  const elapsed = calculateDualElapsedBilledDays(position);
-  if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
+
+  const elapsed = Date.now() - entryAt.getTime();
   return Math.max(0, Math.min(100, (elapsed / total) * 100));
 }
 

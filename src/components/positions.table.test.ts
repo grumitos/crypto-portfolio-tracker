@@ -91,8 +91,9 @@ describe('positions table rendering', () => {
         row.querySelector('.pos-outcome-amount')?.classList.contains('num'),
       ),
     ).toBe(true);
-    // La unica diferencia entre desenlaces es el enfasis de color.
-    expect(outcomeRows.filter((row) => row.classList.contains('is-converted'))).toHaveLength(1);
+    // Lo unico que separa un desenlace del otro es su etiqueta: ninguna clase
+    // ni estilo distingue la fila ejecutada de la no ejecutada.
+    expect(outcomeRows.map((row) => row.className)).toEqual(['pos-outcome-row', 'pos-outcome-row']);
 
     const windowCell = host.querySelector('td[data-field="window"]') as HTMLElement;
     expect(windowCell.querySelector('.cell-sub')?.textContent).toContain('08:45');
@@ -134,7 +135,7 @@ describe('positions table rendering', () => {
     expect(group).not.toContain('10.00%');
     expect(group).toContain('Compra');
     // Comparte el patron de la celda de resultado dual.
-    expect(group).toContain('pos-outcome-row is-converted');
+    expect(group).toContain('pos-outcome-row');
     expect(textOf(group)).not.toContain('+0.27 USDT');
     expect(group).not.toContain('Sin KO');
     expect(textOf(group)).not.toContain('1,000.27 USDT');
