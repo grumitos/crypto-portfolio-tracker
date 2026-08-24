@@ -69,6 +69,38 @@ describe('hyperliquid sync normalization', () => {
     );
   });
 
+  // Regression test for a real bug: numberOrNull() used Number(value), and
+  // Number(null) === 0, so vaults that report no lockup/entry time produced 0 and
+  // the capital vault table rendered epoch 0 ("31/12/1969") instead of "-".
+  it('keeps absent numeric vault fields null instead of coercing them to zero', async () => {
+    const snapshot = await syncHyperliquidVaults(
+      { userAddress: USER, vaultAddress: VAULT },
+      async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        if (body.type !== 'vaultDetails') return Response.json([]);
+        return Response.json({
+          name: 'Main vault',
+          apr: null,
+          followerState: {
+            user: USER,
+            vaultEquity: '105',
+            pnl: '5',
+            daysFollowing: null,
+            vaultEntryTime: null,
+            lockupUntil: null,
+          },
+        });
+      },
+    );
+
+    expect(snapshot.vaults[0].apr).toBeNull();
+    expect(snapshot.vaults[0].user).toMatchObject({
+      daysFollowing: null,
+      vaultEntryTime: null,
+      lockupUntil: null,
+    });
+  });
+
   it('rejects invalid sync requests before calling Hyperliquid', async () => {
     let called = false;
     await expect(

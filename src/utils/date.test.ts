@@ -36,9 +36,10 @@ describe('date utils', () => {
   });
 
   it('resolves Binance settlement into local date/time parts', () => {
+    // TZ is pinned to America/Bogota (UTC-5) in src/test/setup.ts: 08:00 UTC => 03:00.
     expect(resolveBinanceDualSettlementLocal('2026-02-19')).toEqual({
-      date: formatISODateLocal(new Date('2026-02-19T08:00:00.000Z')),
-      time: formatTimeHHMMLocal(new Date('2026-02-19T08:00:00.000Z')),
+      date: '2026-02-19',
+      time: '03:00',
     });
   });
 

@@ -74,10 +74,11 @@ describe('capital tab', () => {
   });
 
   it('syncs Hyperliquid data and persists the ledger in app state', async () => {
+    const requestBodies: string[] = [];
     vi.stubGlobal(
       'fetch',
       async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-        expect(String(init?.body)).toContain(USER);
+        requestBodies.push(String(init?.body));
         return Response.json({
           ok: true,
           fetchedAt: '2026-05-02T00:00:00.000Z',
@@ -119,6 +120,10 @@ describe('capital tab', () => {
     (container.querySelector('#capital-sync') as HTMLButtonElement).click();
     await flushMicrotasks();
     await flushMicrotasks();
+
+    // Asserted outside the stub: a failing expectation inside it would be swallowed
+    // by the component's error handling and silently turn into a passing test.
+    expect(requestBodies).toEqual([JSON.stringify({ userAddress: USER, vaultAddress: VAULT })]);
 
     const saved = loadState().capitalLedger;
     expect(saved.hyperliquid.userAddress).toBe(USER);

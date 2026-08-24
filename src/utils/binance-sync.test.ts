@@ -29,7 +29,6 @@ import {
 } from './bybit-client';
 import { saveApiCredentials, clearApiCredentials } from './binance-auth';
 import { saveBybitApiCredentials, clearBybitApiCredentials } from './bybit-auth';
-import { formatISODateLocal, formatTimeHHMMLocal, resolveBinanceDualSettlementLocal } from './date';
 import { getAssetPriceSnapshot } from './market';
 import { createMemoryStorage } from '../test/test-utils';
 import {
@@ -114,28 +113,7 @@ describe('binance sync cache', () => {
     ]);
   });
 
-  it('adds permitted Bybit supplemental product balances to the account summary', async () => {
-    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
-    vi.mocked(fetchBybitWalletBalances).mockResolvedValue([
-      { asset: 'USDT', walletBalance: 50, locked: 0, usdValue: 50 },
-    ]);
-    vi.mocked(fetchBybitAssetOverviewBalances).mockResolvedValue([
-      { asset: 'USDT', walletBalance: 25, locked: 25, usdValue: 0 },
-      { asset: 'USDC', walletBalance: 40, locked: 40, usdValue: 0 },
-    ]);
-
-    const summary = await fetchBalanceSummary(true);
-
-    expect(summary.totalUsdEstimate).toBe(2215);
-    expect(summary.balances).toEqual([
-      { asset: 'USDT', free: 100, locked: 0, source: 'Binance' },
-      { asset: 'ETH', free: 1, locked: 0, source: 'Binance' },
-      { asset: 'USDT', free: 50, locked: 25, source: 'Bybit' },
-      { asset: 'USDC', free: 0, locked: 40, source: 'Bybit' },
-    ]);
-  });
-
-  it('adds Bybit funding balances even when wallet balances are allowed', async () => {
+  it('merges Bybit wallet, funding and supplemental product balances into the summary', async () => {
     saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
     vi.mocked(fetchBybitWalletBalances).mockResolvedValue([
       { asset: 'USDT', walletBalance: 50, locked: 0, usdValue: 50 },
@@ -143,15 +121,19 @@ describe('binance sync cache', () => {
     vi.mocked(fetchBybitAssetBalances).mockResolvedValue([
       { asset: 'USDT', walletBalance: 25, locked: 5, usdValue: 0 },
     ]);
+    vi.mocked(fetchBybitAssetOverviewBalances).mockResolvedValue([
+      { asset: 'USDC', walletBalance: 40, locked: 40, usdValue: 0 },
+    ]);
 
     const summary = await fetchBalanceSummary(true);
 
     expect(fetchBybitAssetBalances).toHaveBeenCalledTimes(1);
-    expect(summary.totalUsdEstimate).toBe(2175);
+    expect(summary.totalUsdEstimate).toBe(2215);
     expect(summary.balances).toEqual([
       { asset: 'USDT', free: 100, locked: 0, source: 'Binance' },
       { asset: 'ETH', free: 1, locked: 0, source: 'Binance' },
       { asset: 'USDT', free: 70, locked: 5, source: 'Bybit' },
+      { asset: 'USDC', free: 0, locked: 40, source: 'Bybit' },
     ]);
   });
 
@@ -295,32 +277,6 @@ describe('binance sync cache', () => {
         yieldStartAt: Date.parse('2026-03-14T00:00:00.000Z'),
         projectedProfit: 1.25,
       },
-    ]);
-
-    const snapshot = await fetchBinancePortfolioSnapshot(true);
-
-    expect(snapshot.positions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'bybit_dual_19035',
-          source: 'Bybit',
-          positionKind: 'dual',
-          displaySymbol: 'ETHUSDT',
-          direction: 'buy-low',
-          subscriptionAsset: 'USDT',
-          quoteAsset: 'USDT',
-          amount: 20,
-          targetPrice: 2325,
-          apr: 902.7,
-          projectedProfit: 1.25,
-        }),
-      ]),
-    );
-  });
-
-  it('preserves Bybit Dual Asset quote coin for crypto-cross positions', async () => {
-    saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
-    vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([
       {
         id: 'bybit_dual_eth_btc',
         productId: '36399',
@@ -341,6 +297,20 @@ describe('binance sync cache', () => {
 
     expect(snapshot.positions).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          id: 'bybit_dual_19035',
+          source: 'Bybit',
+          positionKind: 'dual',
+          displaySymbol: 'ETHUSDT',
+          direction: 'buy-low',
+          subscriptionAsset: 'USDT',
+          quoteAsset: 'USDT',
+          amount: 20,
+          targetPrice: 2325,
+          apr: 902.7,
+          projectedProfit: 1.25,
+        }),
+        // Crypto-cross products keep their own quote coin instead of defaulting to USDT.
         expect.objectContaining({
           id: 'bybit_dual_eth_btc',
           displaySymbol: 'ETHBTC',
@@ -413,16 +383,12 @@ describe('binance sync cache', () => {
     ]);
 
     const snapshot = await fetchBinancePortfolioSnapshot(true);
-    const expected = new Date('2026-03-12T14:30:00.000Z');
 
-    expect(snapshot.positions[0]?.entryDate).toBe(formatISODateLocal(expected));
-    expect(snapshot.positions[0]?.entryTime).toBe(
-      `${String(expected.getHours()).padStart(2, '0')}:${String(expected.getMinutes()).padStart(2, '0')}`,
-    );
+    // purchaseTime 14:30 UTC is 09:30 local (UTC-5); purchaseEndTime would be 15/03 18:59.
+    expect(snapshot.positions[0]?.entryDate).toBe('2026-03-12');
+    expect(snapshot.positions[0]?.entryTime).toBe('09:30');
     expect(snapshot.positions[0]?.entryTimeSource).toBe('binance_purchase_time');
-    expect(snapshot.positions[0]?.settlementTime).toBe(
-      formatTimeHHMMLocal(new Date('2026-03-16T08:00:00.000Z')),
-    );
+    expect(snapshot.positions[0]?.settlementTime).toBe('03:00');
     expect(snapshot.positions[0]?.settlementTimeSource).toBe('binance_settle_date_rule');
   });
 
@@ -444,12 +410,10 @@ describe('binance sync cache', () => {
     ]);
 
     const snapshot = await fetchBinancePortfolioSnapshot(true);
-    const expected = new Date(Date.UTC(2026, 2, 15, 8, 0, 0, 0));
 
-    expect(snapshot.positions[0]?.entryDate).toBe(formatISODateLocal(expected));
-    expect(snapshot.positions[0]?.entryTime).toBe(
-      `${String(expected.getHours()).padStart(2, '0')}:${String(expected.getMinutes()).padStart(2, '0')}`,
-    );
+    // 2026-03-20 settles at 08:00 UTC; minus 5 days => 2026-03-15T08:00Z => 03:00 local.
+    expect(snapshot.positions[0]?.entryDate).toBe('2026-03-15');
+    expect(snapshot.positions[0]?.entryTime).toBe('03:00');
     expect(snapshot.positions[0]?.entryTimeSource).toBe('derived_settle_minus_duration');
   });
 
@@ -470,9 +434,8 @@ describe('binance sync cache', () => {
     ]);
 
     const snapshot = await fetchBinancePortfolioSnapshot(true);
-    const expectedSettlement = resolveBinanceDualSettlementLocal('2026-03-20');
 
-    expect(snapshot.positions[0]?.settlementDate).toBe(expectedSettlement!.date);
-    expect(snapshot.positions[0]?.settlementTime).toBe(expectedSettlement!.time);
+    expect(snapshot.positions[0]?.settlementDate).toBe('2026-03-20');
+    expect(snapshot.positions[0]?.settlementTime).toBe('03:00');
   });
 });

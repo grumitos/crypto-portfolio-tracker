@@ -104,6 +104,18 @@ describe('binance client', () => {
             apr: '0.10',
             optionType: 'PUT',
           },
+          {
+            id: '4',
+            investCoin: 'LDUSDC',
+            exercisedCoin: 'BTC',
+            subscriptionAmount: '250',
+            strikePrice: '45000',
+            duration: 2,
+            settleDate: 1708416000000,
+            purchaseStatus: 'PURCHASE_SUCCESS',
+            apr: '0.12',
+            optionType: 'PUT',
+          },
         ],
       }),
     );
@@ -113,7 +125,8 @@ describe('binance client', () => {
     const client = await import('./binance-client');
     const positions = await client.fetchDualPositions(true);
 
-    expect(positions).toHaveLength(2);
+    // Settled positions are dropped; LD wrappers map to their underlying asset.
+    expect(positions).toHaveLength(3);
     expect(positions[0]).toMatchObject({
       id: '1',
       amount: 0.5,
@@ -129,6 +142,11 @@ describe('binance client', () => {
       status: 'SETTLING',
       orderId: '8259117597',
       optionType: 'CALL',
+    });
+    expect(positions[2]).toMatchObject({
+      id: '4',
+      investCoin: 'USDC',
+      exercisedCoin: 'BTC',
     });
   });
 
@@ -229,41 +247,6 @@ describe('binance client', () => {
       { asset: 'BTC', free: 0.01, locked: 0 },
       { asset: 'ETH', free: 0, locked: 0.25 },
     ]);
-  });
-
-  it('normalizes LD assets in dual positions to their underlying symbol', async () => {
-    await seedCredentials();
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({
-        total: 1,
-        list: [
-          {
-            id: '1',
-            investCoin: 'LDUSDC',
-            exercisedCoin: 'BTC',
-            subscriptionAmount: '250',
-            strikePrice: '45000',
-            duration: 2,
-            settleDate: 1708416000000,
-            purchaseStatus: 'PURCHASE_SUCCESS',
-            apr: '0.12',
-            orderId: 7973677530,
-            purchaseEndTime: 1708329600000,
-            optionType: 'PUT',
-          },
-        ],
-      }),
-    );
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    const client = await import('./binance-client');
-    const positions = await client.fetchDualPositions(true);
-
-    expect(positions[0]).toMatchObject({
-      investCoin: 'USDC',
-      exercisedCoin: 'BTC',
-    });
   });
 
   it('tests explicit credentials without reading persisted credentials', async () => {

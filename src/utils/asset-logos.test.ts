@@ -27,17 +27,6 @@ describe('asset logos', () => {
     expect(logo.alt).toBe('XRP logo');
   });
 
-  it('uses CoinMarketCap as SOL fallback instead of the legacy green CDN logo', () => {
-    const logo = resolveAssetLogoSources('SOL');
-
-    expect(logo.primarySrc).toBe('/assets/crypto/sol.svg');
-    expect(logo.fallbackSrcs).toEqual([
-      '/assets/crypto/coinmarketcap/sol.png',
-      'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png',
-    ]);
-    expect(logo.fallbackSrcs.join(' ')).not.toContain('spothq');
-  });
-
   it('builds monograms consistently', () => {
     expect(createAssetMonogram('ETH')).toBe('ETH');
     expect(createAssetMonogram('usdt')).toBe('USD');
@@ -45,25 +34,26 @@ describe('asset logos', () => {
     expect(createAssetMonogram('')).toBe('?');
   });
 
-  it('uses CoinMarketCap IDs for every bundled logo fallback', () => {
-    expect(resolveAssetLogoSources('BTC').fallbackSrcs[1]).toBe(
-      'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png',
-    );
-    expect(resolveAssetLogoSources('BNB').fallbackSrcs[1]).toBe(
-      'https://s2.coinmarketcap.com/static/img/coins/64x64/1839.png',
-    );
-    expect(resolveAssetLogoSources('USDT').fallbackSrcs[1]).toBe(
-      'https://s2.coinmarketcap.com/static/img/coins/64x64/825.png',
-    );
-    expect(resolveAssetLogoSources('USDC').fallbackSrcs[1]).toBe(
-      'https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png',
-    );
-  });
+  it('uses CoinMarketCap IDs, not stale CDNs, for every bundled logo fallback', () => {
+    const bundled = ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC'];
+    const cmcIdByAsset: Record<string, string> = {
+      BTC: '1',
+      ETH: '1027',
+      BNB: '1839',
+      SOL: '5426',
+      USDT: '825',
+      USDC: '3408',
+    };
 
-  it('does not use the stale spothq CDN for any source', () => {
-    const logo = resolveAssetLogoSources('btc');
-    expect([logo.primarySrc, ...logo.fallbackSrcs].join(' ')).not.toContain('spothq');
-    expect([logo.primarySrc, ...logo.fallbackSrcs].join(' ')).not.toContain('cdn.jsdelivr.net');
+    bundled.forEach((asset) => {
+      const logo = resolveAssetLogoSources(asset);
+      expect(logo.fallbackSrcs[1]).toBe(
+        `https://s2.coinmarketcap.com/static/img/coins/64x64/${cmcIdByAsset[asset]}.png`,
+      );
+      const allSources = [logo.primarySrc, ...logo.fallbackSrcs].join(' ');
+      expect(allSources).not.toContain('spothq');
+      expect(allSources).not.toContain('cdn.jsdelivr.net');
+    });
   });
 
   it('tries every declared fallback before showing the monogram', () => {

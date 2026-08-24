@@ -1,3 +1,10 @@
+// Pin the timezone before anything reads `Date`. Large parts of the app convert
+// exchange UTC timestamps into local date/time parts (Binance dual settlement at
+// 08:00 UTC, capital ledger legacy dates at UTC-5, ...), so an unpinned host
+// timezone makes those assertions machine dependent. `TEST_TZ` allows opting into
+// a different zone to check timezone robustness explicitly.
+process.env.TZ = process.env.TEST_TZ ?? 'America/Bogota';
+
 import { afterEach, setSystemTime, vi } from 'bun:test';
 import { JSDOM } from 'jsdom';
 

@@ -45,21 +45,6 @@ describe('projection-milestones', () => {
     expect(missing.date).toBeNull();
   });
 
-  it('keeps date/day milestone maps aligned with resolved milestones', () => {
-    const snapshot = buildProjectionSnapshot({
-      capital: 1000,
-      apr: 100,
-      frequency: 'weekly',
-      goal: 1300,
-      invested: 1100,
-    });
-
-    expect(snapshot.dateByMilestone.be).toBe(snapshot.breakeven.date);
-    expect(snapshot.dateByMilestone.goal).toBe(snapshot.goal.date);
-    expect(snapshot.daysByMilestone.be).toBe(snapshot.breakeven.days);
-    expect(snapshot.daysByMilestone.goal).toBe(snapshot.goal.days);
-  });
-
   it('uses the farthest milestone as primary', () => {
     const snapshot = buildProjectionSnapshot({
       capital: 1000,

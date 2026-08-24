@@ -622,7 +622,7 @@ describe('bybit client', () => {
     );
   });
 
-  it('adjusts Bybit Dual Asset APR when actual locked time exceeds the advertised duration', async () => {
+  it('rescales Bybit Dual Asset APR to the actual locked time', async () => {
     await seedCredentials();
     const fetchMock = vi
       .fn()
@@ -644,6 +644,7 @@ describe('bybit client', () => {
             category: 'DualAssets',
             nextPageCursor: '',
             list: [
+              // Advertised 3d but locked for 4 days => 100% APR scales down to 75%.
               {
                 positionId: '19038',
                 productId: '36323',
@@ -660,40 +661,7 @@ describe('bybit client', () => {
                 yieldStartAt: String(Date.parse('2026-03-14T00:00:00.000Z')),
                 yieldEndAt: String(Date.parse('2026-03-18T00:00:00.000Z')),
               },
-            ],
-          },
-        }),
-      );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const client = await import('./bybit-client');
-    const positions = await client.fetchBybitDualAssetPositions();
-
-    expect(positions[0]?.apr).toBeCloseTo(75, 8);
-  });
-
-  it('adjusts Bybit Dual Asset APR for hourly products locked through the next day', async () => {
-    await seedCredentials();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          retCode: 0,
-          retMsg: 'OK',
-          result: {
-            readOnly: 1,
-            permissions: { Earn: ['Earn'] },
-          },
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          retCode: 0,
-          retMsg: 'OK',
-          result: {
-            category: 'DualAssets',
-            nextPageCursor: '',
-            list: [
+              // Hourly product locked through the next day, with an exact expected return.
               {
                 positionId: '19039',
                 productId: '36324',
@@ -720,10 +688,11 @@ describe('bybit client', () => {
     const client = await import('./bybit-client');
     const positions = await client.fetchBybitDualAssetPositions();
 
-    expect(positions[0]?.apr).toBeCloseTo(144.2881276772, 8);
-    expect(positions[0]?.expectedSettlementAsset).toBe('ETH');
-    expect(positions[0]?.expectedSettlementAmount).toBe(18.42300215);
-    expect(positions[0]?.projectedProfit).toBeCloseTo(168.041680475, 8);
+    expect(positions[0]?.apr).toBeCloseTo(75, 8);
+    expect(positions[1]?.apr).toBeCloseTo(144.2881276772, 8);
+    expect(positions[1]?.expectedSettlementAsset).toBe('ETH');
+    expect(positions[1]?.expectedSettlementAmount).toBe(18.42300215);
+    expect(positions[1]?.projectedProfit).toBeCloseTo(168.041680475, 8);
   });
 
   it('fetches active Discount Buy positions through the Earn read endpoint', async () => {

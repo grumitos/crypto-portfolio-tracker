@@ -365,39 +365,16 @@ describe('positions integration', () => {
     ];
 
     expect(strip.style.display).toBe('flex');
-    expect(skeletonCards[0]?.id).toBe('positions-spot-BTC');
+    // Fixed BTC -> ETH -> BNB -> SOL order, regardless of which assets are held.
+    expect(skeletonCards.map((card) => card.id)).toEqual([
+      'positions-spot-BTC',
+      'positions-spot-ETH',
+      'positions-spot-BNB',
+      'positions-spot-SOL',
+    ]);
     expect(value.querySelector('.skeleton')).not.toBeNull();
     expect(change.querySelector('.skeleton')).not.toBeNull();
     expect(missingPositionAsset.querySelector('.skeleton')).not.toBeNull();
-
-    dispose();
-    container.remove();
-  });
-
-  it('uses fixed BTC→ETH→BNB→SOL order for skeleton cards', () => {
-    seedState([
-      {
-        id: 'p1',
-        asset: 'ETH',
-        direction: 'buy-low',
-        subscriptionAsset: 'USDT',
-        amount: 1,
-        targetPrice: 2100,
-        entryDate: '2026-02-20',
-        settlementDate: '2026-02-23',
-        apr: 40,
-      },
-    ]);
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const dispose = renderPositions(container, vi.fn());
-
-    const cards = [...container.querySelectorAll('#positions-spot-strip .positions-spot-card')];
-    expect(cards[0]?.id).toBe('positions-spot-BTC');
-    expect(cards[1]?.id).toBe('positions-spot-ETH');
-    expect(cards[2]?.id).toBe('positions-spot-BNB');
-    expect(cards[3]?.id).toBe('positions-spot-SOL');
 
     dispose();
     container.remove();

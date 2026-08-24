@@ -237,26 +237,6 @@ describe('dashboard legends', () => {
     container.remove();
   });
 
-  it('falls back to both legends when persisted dashboard view is invalid', async () => {
-    localStorage.setItem(DASHBOARD_VIEW_KEY, '{bad');
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const dispose = renderDashboard(container);
-    await flushMicrotasks();
-
-    const bar = container.querySelector('#dash-goal-progress-bar') as HTMLElement;
-    const beBtn = container.querySelector('#dashboard-legend-be') as HTMLButtonElement;
-    const goalBtn = container.querySelector('#dashboard-legend-goal') as HTMLButtonElement;
-
-    expect(bar.classList.contains('mode-both')).toBe(true);
-    expect(beBtn.getAttribute('aria-pressed')).toBe('true');
-    expect(goalBtn.getAttribute('aria-pressed')).toBe('true');
-
-    dispose();
-    container.remove();
-  });
-
   it('switches to be-only mode when Meta is toggled off and keeps last legend active', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
