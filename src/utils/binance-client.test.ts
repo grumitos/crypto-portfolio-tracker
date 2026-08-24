@@ -167,7 +167,7 @@ describe('binance client', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const client = await import('./binance-client');
-    const balances = await client.fetchAccountBalances(true);
+    const { balances } = await client.fetchAccountBalances(true);
 
     expect(balances).toEqual([
       { asset: 'USDC', free: 19.75, locked: 1.25 },
@@ -240,13 +240,49 @@ describe('binance client', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const client = await import('./binance-client');
-    const balances = await client.fetchAccountBalances(true);
+    const { balances } = await client.fetchAccountBalances(true);
 
+    // Flexible (1155.76825916) suma a libre; solo funding aporta bloqueado
+    // (locked 1 + freeze 2 + withdrawing 3), y Locked Earn mantiene su plazo.
     expect(balances).toEqual([
-      { asset: 'USDT', free: 15, locked: 1161.76825916 },
+      { asset: 'USDT', free: 1170.76825916, locked: 6 },
       { asset: 'BTC', free: 0.01, locked: 0 },
       { asset: 'ETH', free: 0, locked: 0.25 },
     ]);
+  });
+
+  it('distinguishes a missing API-key permission from an unavailable wallet', async () => {
+    await seedCredentials();
+    const buildMock = (fundingStatus: number, fundingCode: number | null) =>
+      vi.fn((url: string) => {
+        if (url.includes('/account/apiRestrictions')) {
+          return Promise.resolve(jsonResponse({ enableReading: true }));
+        }
+        if (url.includes('/binance-api/v3/account')) {
+          return Promise.resolve(
+            jsonResponse({ balances: [{ asset: 'USDC', free: '5', locked: '0' }] }),
+          );
+        }
+        if (url.includes('/asset/get-funding-asset')) {
+          return Promise.resolve(
+            errorResponse(fundingStatus, fundingCode === null ? {} : { code: fundingCode }),
+          );
+        }
+        return Promise.resolve(jsonResponse({ rows: [], total: 0 }));
+      });
+
+    const client = await import('./binance-client');
+
+    // -2015 es el codigo con el que Binance rechaza por clave, IP o permiso.
+    vi.stubGlobal('fetch', buildMock(401, -2015));
+    const denied = await client.fetchAccountBalances(true);
+    expect(denied.issues).toEqual([{ wallet: 'funding', reason: 'permission' }]);
+    // El saldo que si se pudo leer sigue llegando: el aviso no lo reemplaza.
+    expect(denied.balances).toEqual([{ asset: 'USDC', free: 5, locked: 0 }]);
+
+    vi.stubGlobal('fetch', buildMock(503, null));
+    const down = await client.fetchAccountBalances(true);
+    expect(down.issues).toEqual([{ wallet: 'funding', reason: 'unavailable' }]);
   });
 
   it('tests explicit credentials without reading persisted credentials', async () => {
@@ -330,7 +366,7 @@ describe('binance client', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const client = await import('./binance-client');
-    const balances = await client.fetchAccountBalances(true);
+    const { balances } = await client.fetchAccountBalances(true);
 
     expect(balances).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith(

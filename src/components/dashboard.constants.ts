@@ -45,6 +45,11 @@ export const DASHBOARD_COPY = {
   activePositionsSub: 'suscripciones abiertas',
   accountBalanceTitle: 'Saldo en cuenta',
   accountBalanceCopy: 'Disponible y comprometido por activo',
+  walletNames: { funding: 'Funding', earn: 'Simple Earn' } as const,
+  // Un monedero que no se lee deja su saldo fuera del desglose. Decir cual y por
+  // que evita que se lea como "no tienes nada ahi", que es lo que parecia antes.
+  walletPermissionNote: 'no se leyó: la API key no tiene permiso para ese monedero',
+  walletUnavailableNote: 'no se leyó: el endpoint no respondió',
   emptyBalancesTitle: 'Sin activos disponibles',
   emptyBalancesCopy: 'No hay saldos reportados por los exchanges configurados.',
   assetLabel: 'Activo',

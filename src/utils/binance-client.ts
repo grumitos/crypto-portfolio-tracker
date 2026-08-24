@@ -45,7 +45,7 @@ const BALANCE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 min
 const CLOSED_DUAL_POSITION_STATUSES = new Set(['SETTLED', 'PURCHASE_FAIL', 'REFUND_SUCCESS']);
 
 let positionsCache: CacheEntry<BinanceDualPosition[]> | null = null;
-let balanceCache: CacheEntry<BinanceAccountBalance[]> | null = null;
+let balanceCache: CacheEntry<AccountBalancesResult> | null = null;
 let readOnlyCheckCache: { apiKey: string; ts: number } | null = null;
 let readOnlyCheckInFlight: { apiKey: string; request: Promise<void> } | null = null;
 let serverTimeOffsetCache: { offsetMs: number; ts: number } | null = null;
@@ -212,6 +212,58 @@ function isTimestampOutsideRecvWindowError(status: number, errorBody: string): b
   return errorBody.includes('-1021') && errorBody.toLowerCase().includes('timestamp');
 }
 
+/**
+ * Error de una llamada firmada, con el estado HTTP y el codigo numerico que
+ * devuelve Binance en el cuerpo. Sin ese codigo no hay forma de separar "la API
+ * key no tiene este permiso" de "este monedero no aplica a esta cuenta", que es
+ * justo lo que el usuario necesita saber cuando falta saldo.
+ */
+export class BinanceRequestError extends Error {
+  readonly status: number;
+  readonly code: number | null;
+
+  constructor(status: number, body: string) {
+    super(`Binance API error ${status}: ${body}`);
+    this.name = 'BinanceRequestError';
+    this.status = status;
+    this.code = parseBinanceErrorCode(body);
+  }
+}
+
+function parseBinanceErrorCode(body: string): number | null {
+  try {
+    const parsed = JSON.parse(body) as { code?: unknown };
+    return typeof parsed.code === 'number' ? parsed.code : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Codigos con los que Binance rechaza una llamada por credenciales: clave
+ * invalida, IP no autorizada o permiso ausente para ese endpoint.
+ * https://developers.binance.com/docs/binance-spot-api-docs/errors
+ */
+const BINANCE_PERMISSION_ERROR_CODES = new Set([-2015, -2014, -1002, -1099]);
+
+/** Motivo por el que un monedero opcional no pudo leerse. */
+export type WalletIssueReason = 'permission' | 'unavailable';
+
+export type WalletScope = 'funding' | 'earn';
+
+export interface WalletIssue {
+  wallet: WalletScope;
+  reason: WalletIssueReason;
+}
+
+function classifyWalletFailure(error: unknown): WalletIssueReason {
+  if (!(error instanceof BinanceRequestError)) return 'unavailable';
+  if (error.status === 401 || error.status === 403) return 'permission';
+  return error.code !== null && BINANCE_PERMISSION_ERROR_CODES.has(error.code)
+    ? 'permission'
+    : 'unavailable';
+}
+
 // ── Generic fetch with timeout + auth ──
 
 async function fetchSigned<T>(
@@ -257,7 +309,7 @@ async function fetchSigned<T>(
           clearServerTimeOffset();
           continue;
         }
-        throw new Error(`Binance API error ${response.status}: ${errorBody}`);
+        throw new BinanceRequestError(response.status, errorBody);
       }
 
       return (await response.json()) as T;
@@ -425,8 +477,11 @@ async function fetchSimpleEarnFlexibleBalances(): Promise<BinanceAccountBalance[
       ...rows
         .map((row) => ({
           asset: row.asset,
-          free: 0,
-          locked: parseFiniteNumber(row.totalAmount),
+          // Flexible admite redencion inmediata: es saldo disponible, no
+          // bloqueado. Contarlo como bloqueado dejaba la columna "Libre" en cero
+          // y escondia todo el margen de una cuenta que tiene su saldo en Earn.
+          free: parseFiniteNumber(row.totalAmount),
+          locked: 0,
         }))
         .filter((row) => row.asset && hasPositiveBalance(row)),
     );
@@ -469,36 +524,51 @@ async function fetchSimpleEarnBalances(): Promise<BinanceAccountBalance[]> {
   return [...flexible, ...locked];
 }
 
+/**
+ * Un monedero opcional que falla no debe tumbar la lectura de saldos, pero
+ * tampoco desaparecer en silencio: devolver [] sin mas hace que un permiso que
+ * falta se lea como "no tienes saldo".
+ */
 async function fetchOptionalAccountBalances(
   request: Promise<BinanceAccountBalance[]>,
-): Promise<BinanceAccountBalance[]> {
+  wallet: WalletScope,
+): Promise<{ balances: BinanceAccountBalance[]; issue: WalletIssue | null }> {
   try {
-    return await request;
-  } catch {
-    return [];
+    return { balances: await request, issue: null };
+  } catch (error) {
+    return { balances: [], issue: { wallet, reason: classifyWalletFailure(error) } };
   }
 }
 
-export async function fetchAccountBalances(forceRefresh = false): Promise<BinanceAccountBalance[]> {
+export interface AccountBalancesResult {
+  balances: BinanceAccountBalance[];
+  /** Monederos que no se pudieron leer, con el motivo. Vacio si todo respondio. */
+  issues: WalletIssue[];
+}
+
+export async function fetchAccountBalances(forceRefresh = false): Promise<AccountBalancesResult> {
   if (!forceRefresh && balanceCache && Date.now() - balanceCache.ts < BALANCE_CACHE_TTL_MS) {
     return balanceCache.data;
   }
 
   const raw = await fetchSigned<RawAccountInfo>(API_PROXY_BASE, '/account');
   const spotBalances = (raw.balances ?? []).map(mapRawAccountBalance);
-  const [fundingBalances, earnBalances] = await Promise.all([
-    fetchOptionalAccountBalances(fetchFundingBalances()),
-    fetchOptionalAccountBalances(fetchSimpleEarnBalances()),
+  const [funding, earn] = await Promise.all([
+    fetchOptionalAccountBalances(fetchFundingBalances(), 'funding'),
+    fetchOptionalAccountBalances(fetchSimpleEarnBalances(), 'earn'),
   ]);
-  const earnAssets = new Set(earnBalances.map((row) => normalizeBinanceAssetCode(row.asset)));
-  const balances = mergeAccountBalances([
-    ...filterSpotBalancesAgainstEarn(spotBalances, earnAssets),
-    ...fundingBalances,
-    ...earnBalances,
-  ]);
+  const earnAssets = new Set(earn.balances.map((row) => normalizeBinanceAssetCode(row.asset)));
+  const result: AccountBalancesResult = {
+    balances: mergeAccountBalances([
+      ...filterSpotBalancesAgainstEarn(spotBalances, earnAssets),
+      ...funding.balances,
+      ...earn.balances,
+    ]),
+    issues: [funding.issue, earn.issue].filter((issue): issue is WalletIssue => issue !== null),
+  };
 
-  balanceCache = { data: balances, ts: Date.now() };
-  return balances;
+  balanceCache = { data: result, ts: Date.now() };
+  return result;
 }
 
 // ── Dual Investment active positions (READ) ──

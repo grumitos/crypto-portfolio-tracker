@@ -10,6 +10,7 @@ import type {
 } from '../types';
 import { hasApiCredentials } from './binance-auth';
 import { fetchDualPositions, fetchAccountBalances } from './binance-client';
+import type { WalletIssue } from './binance-client';
 import { hasBybitApiCredentials } from './bybit-auth';
 import {
   fetchBybitAssetBalances,
@@ -192,6 +193,12 @@ export async function syncPositionsFromBinance(
 export interface BalanceSummary {
   balances: BinanceAccountBalance[];
   totalUsdEstimate: number;
+  /**
+   * Monederos que no se pudieron leer. Sin esto un permiso ausente se muestra
+   * como saldo cero, que es indistinguible de no tener nada. Opcional porque los
+   * resumenes cacheados de versiones anteriores no lo traen: ausente es "ninguno".
+   */
+  walletIssues?: WalletIssue[];
 }
 
 export interface BinancePortfolioSnapshot extends BalanceSummary {
@@ -315,21 +322,22 @@ async function fetchBybitBalanceRows(): Promise<BybitBalanceRow[]> {
   ]);
 }
 
-async function fetchExchangeBalances(forceRefresh: boolean): Promise<{
+interface ExchangeBalancesResult {
   balances: BinanceAccountBalance[];
   knownUsdByAsset: Record<string, number>;
-}> {
-  const requests: Promise<{
-    balances: BinanceAccountBalance[];
-    knownUsdByAsset: Record<string, number>;
-  }>[] = [];
+  walletIssues: WalletIssue[];
+}
+
+async function fetchExchangeBalances(forceRefresh: boolean): Promise<ExchangeBalancesResult> {
+  const requests: Promise<ExchangeBalancesResult>[] = [];
 
   if (hasApiCredentials()) {
     requests.push(
       withExchangeTimeout(fetchAccountBalances(forceRefresh), 'Binance balances').then(
-        (balances) => ({
+        ({ balances, issues }) => ({
           balances: balances.map((balance) => ({ ...balance, source: 'Binance' as const })),
           knownUsdByAsset: {},
+          walletIssues: issues,
         }),
       ),
     );
@@ -344,6 +352,7 @@ async function fetchExchangeBalances(forceRefresh: boolean): Promise<{
             .filter((balance) => Number.isFinite(balance.usdValue) && balance.usdValue > 0)
             .map((balance) => [`Bybit:${balance.asset}`, balance.usdValue]),
         ),
+        walletIssues: [],
       })),
     );
   }
@@ -351,18 +360,20 @@ async function fetchExchangeBalances(forceRefresh: boolean): Promise<{
   const settled = await Promise.allSettled(requests);
   const balances: BinanceAccountBalance[] = [];
   const knownUsdByAsset: Record<string, number> = {};
+  const walletIssues: WalletIssue[] = [];
 
   for (const result of settled) {
     if (result.status !== 'fulfilled') continue;
     balances.push(...result.value.balances);
     Object.assign(knownUsdByAsset, result.value.knownUsdByAsset);
+    walletIssues.push(...result.value.walletIssues);
   }
 
   if (balances.length === 0 && settled.some((result) => result.status === 'rejected')) {
     throw new Error('No se pudieron leer saldos de exchanges configurados.');
   }
 
-  return { balances, knownUsdByAsset };
+  return { balances, knownUsdByAsset, walletIssues };
 }
 
 export async function fetchBalanceSummary(forceRefresh = false): Promise<BalanceSummary> {
@@ -379,7 +390,7 @@ export async function fetchBalanceSummary(forceRefresh = false): Promise<Balance
   }
 
   const request = (async (): Promise<BalanceSummary> => {
-    const { balances, knownUsdByAsset } = await fetchExchangeBalances(forceRefresh);
+    const { balances, knownUsdByAsset, walletIssues } = await fetchExchangeBalances(forceRefresh);
 
     // Price all assets: stablecoins at face value, others via market prices
     const nonStableAssets = balances
@@ -416,7 +427,7 @@ export async function fetchBalanceSummary(forceRefresh = false): Promise<Balance
       }
     }
 
-    const summary = { balances, totalUsdEstimate };
+    const summary = { balances, totalUsdEstimate, walletIssues };
     balanceSummaryCache = { value: summary, ts: Date.now() };
     return summary;
   })();

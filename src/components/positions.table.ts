@@ -372,9 +372,7 @@ function renderOutcomeCell(position: DualPosition): string {
 function renderDiscountBuyOutcomeCell(position: DualPosition): string {
   const purchaseAmount = position.targetPrice > 0 ? position.amount / position.targetPrice : 0;
 
-  return renderOutcomeRows([
-    { label: 'Compra', amount: purchaseAmount, asset: position.asset },
-  ]);
+  return renderOutcomeRows([{ label: 'Compra', amount: purchaseAmount, asset: position.asset }]);
 }
 
 /**

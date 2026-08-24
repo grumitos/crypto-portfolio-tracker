@@ -28,6 +28,7 @@ export interface DashboardElements {
   positionsCount: HTMLElement | null;
   balanceStrip: HTMLElement | null;
   balanceStripItems: HTMLElement | null;
+  balanceStripNote: HTMLElement | null;
 }
 
 function query<T extends Element>(container: HTMLElement, selector: string): T | null {
@@ -65,5 +66,6 @@ export function getDashboardElements(container: HTMLElement): DashboardElements 
     positionsCount: query(container, '#dashboard-positions-count'),
     balanceStrip: query(container, '#dashboard-balance-strip'),
     balanceStripItems: query(container, '#dashboard-balance-strip-items'),
+    balanceStripNote: query(container, '#dashboard-balance-strip-note'),
   };
 }

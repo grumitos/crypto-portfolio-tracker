@@ -1204,6 +1204,11 @@ input[type='number']::-webkit-inner-spin-button {
   color: var(--ink-3);
 }
 
+/* La nota deja de describir el bloque y pasa a avisar de que falta saldo. */
+.block-note.is-warn {
+  color: var(--warn);
+}
+
 .rule {
   height: 1px;
   background: var(--line);

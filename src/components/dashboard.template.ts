@@ -6,6 +6,7 @@ import {
   resolveAssetLogoSources,
 } from '../utils/asset-logos';
 import type { BinanceAccountBalance, DashboardGoalMode, ExchangeSource } from '../types';
+import type { WalletIssue } from '../utils/binance-client';
 import {
   DASHBOARD_BALANCE_DECIMALS_LARGE,
   DASHBOARD_BALANCE_DECIMALS_MEDIUM,
@@ -224,6 +225,26 @@ function renderContextMeta(connectedExchanges: ExchangeSource[]): string {
   return `
           <span class="context-sep"></span>
           <span class="context-meta">${escapeHtml(connectedExchanges.join(' · '))}</span>`;
+}
+
+/**
+ * Nota del bloque de saldos. Con todo leido describe el contenido; si algun
+ * monedero se quedo fuera, lo nombra y dice si fue por permiso de la API key o
+ * porque el endpoint no respondio: son dos arreglos distintos.
+ */
+export function formatBalanceNote(issues: WalletIssue[]): string {
+  if (issues.length === 0) return DASHBOARD_COPY.accountBalanceCopy;
+
+  return issues
+    .map((issue) => {
+      const name = DASHBOARD_COPY.walletNames[issue.wallet];
+      const reason =
+        issue.reason === 'permission'
+          ? DASHBOARD_COPY.walletPermissionNote
+          : DASHBOARD_COPY.walletUnavailableNote;
+      return `${name} ${reason}`;
+    })
+    .join(' · ');
 }
 
 function renderBalanceRow(balance: BinanceAccountBalance): string {
@@ -445,7 +466,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
           <span class="table-title" id="dashboard-balance-strip-title">
             ${DASHBOARD_COPY.accountBalanceTitle}
           </span>
-          <span class="block-note">${DASHBOARD_COPY.accountBalanceCopy}</span>
+          <span class="block-note" id="dashboard-balance-strip-note">${DASHBOARD_COPY.accountBalanceCopy}</span>
         </div>
         <div class="table-scroll">
           <table class="tbl">

@@ -1,4 +1,5 @@
 import { loadState, updateBalance, SIMULATOR_VIEW_KEY } from '../utils/storage';
+import type { WalletIssue } from '../utils/binance-client';
 import { formatUSD, formatPct, formatDateLatin } from '../utils/calculator';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
@@ -48,6 +49,7 @@ import {
   formatBalanceAmount,
   getDashboardBalanceKey,
   renderBalanceDetailRows,
+  formatBalanceNote,
   renderBalanceEmptyState,
   renderDashboardTemplate,
   resolveProgressTickLayout,
@@ -526,9 +528,15 @@ function renderBalanceDetail(
   container: HTMLElement,
   balances: BinanceAccountBalance[] | null,
   positions: AppState['positions'] = [],
+  walletIssues: WalletIssue[] = [],
 ): void {
-  const { balanceStrip, balanceStripItems } = getDashboardElements(container);
+  const { balanceStrip, balanceStripItems, balanceStripNote } = getDashboardElements(container);
   if (!balanceStrip || !balanceStripItems) return;
+
+  if (balanceStripNote) {
+    balanceStripNote.textContent = formatBalanceNote(walletIssues);
+    balanceStripNote.classList.toggle('is-warn', walletIssues.length > 0);
+  }
 
   const mergedByAsset = new Map<string, BinanceAccountBalance>();
 
@@ -798,7 +806,12 @@ async function hydrateDashboardMarketStats(
         autoBalanceSummary = await fetchBalanceSummary(forceRefresh);
         rememberBalanceSummary(autoBalanceSummary);
       }
-      renderBalanceDetail(container, autoBalanceSummary.balances, effectivePositions);
+      renderBalanceDetail(
+        container,
+        autoBalanceSummary.balances,
+        effectivePositions,
+        autoBalanceSummary.walletIssues ?? [],
+      );
     } catch {
       renderBalanceDetail(container, null);
     }

@@ -52,10 +52,13 @@ describe('binance sync cache', () => {
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     clearBinanceSyncCaches();
 
-    vi.mocked(fetchAccountBalances).mockResolvedValue([
-      { asset: 'USDT', free: 100, locked: 0 },
-      { asset: 'ETH', free: 1, locked: 0 },
-    ]);
+    vi.mocked(fetchAccountBalances).mockResolvedValue({
+      balances: [
+        { asset: 'USDT', free: 100, locked: 0 },
+        { asset: 'ETH', free: 1, locked: 0 },
+      ],
+      issues: [],
+    });
 
     vi.mocked(getAssetPriceSnapshot).mockResolvedValue({
       priceByAsset: { ETH: 2000 },
@@ -195,7 +198,7 @@ describe('binance sync cache', () => {
 
     const summary = await fetchBalanceSummary(true);
 
-    expect(summary).toEqual({ balances: [], totalUsdEstimate: 0 });
+    expect(summary).toEqual({ balances: [], totalUsdEstimate: 0, walletIssues: [] });
     expect(fetchAccountBalances).not.toHaveBeenCalled();
     expect(fetchBybitWalletBalances).not.toHaveBeenCalled();
   });
