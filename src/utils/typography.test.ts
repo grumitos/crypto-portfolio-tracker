@@ -15,6 +15,7 @@ describe('typography config', () => {
       stylesheetHref: 'https://example.test/fonts.css',
       preconnectHosts: ['https://fonts.example.test', 'https://static.example.test'],
       fontSans: 'Inter, sans-serif',
+      fontSerif: 'Times, serif',
       fontMono: 'Mono, monospace',
     });
 
@@ -30,12 +31,9 @@ describe('typography config', () => {
 
     const stylesheet = document.getElementById('app-font-stylesheet') as HTMLLinkElement | null;
     expect(stylesheet?.href).toBe('https://example.test/fonts.css');
-    expect(document.documentElement.style.getPropertyValue('--font-family-ui')).toBe(
-      'Inter, sans-serif',
-    );
-    expect(document.documentElement.style.getPropertyValue('--font-family-mono')).toBe(
-      'Mono, monospace',
-    );
+    expect(document.documentElement.style.getPropertyValue('--sans')).toBe('Inter, sans-serif');
+    expect(document.documentElement.style.getPropertyValue('--serif')).toBe('Times, serif');
+    expect(document.documentElement.style.getPropertyValue('--mono')).toBe('Mono, monospace');
   });
 
   it('reuses existing preconnects and updates an existing stylesheet link', async () => {
@@ -55,6 +53,7 @@ describe('typography config', () => {
       stylesheetHref: 'https://new.example.test/fonts.css',
       preconnectHosts: ['https://fonts.example.test'],
       fontSans: 'System UI',
+      fontSerif: 'Times',
       fontMono: 'Mono',
     });
 

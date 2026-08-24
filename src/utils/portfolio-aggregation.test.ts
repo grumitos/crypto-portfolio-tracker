@@ -11,15 +11,11 @@ function baseState(): AppState {
     portfolio: {
       totalInvested: 40000,
       currentBalance: 41055,
-      savings: 40000,
       goalAmount: 45000,
       lastUpdated: '2026-05-02',
       balanceHistory: [{ date: '2026-05-02', balance: 41055 }],
     },
     positions: [],
-    manualPositions: [],
-    autoPositions: [],
-    positionsConfig: { mode: 'manual' },
     capitalLedger: getDefaultCapitalLedgerState(),
   };
 }

@@ -2,7 +2,6 @@ import { loadState, updateBalance, SIMULATOR_VIEW_KEY } from '../utils/storage';
 import { formatUSD, formatPct, formatDateLatin } from '../utils/calculator';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
-import { isAutoMode } from '../utils/binance-auth';
 import {
   fetchBalanceSummary,
   hasAnyExchangeApiCredentials,
@@ -44,11 +43,13 @@ import {
   GOAL_NUMBER_ANIM_MS,
 } from './dashboard.constants';
 import {
+  applyProgressTickLayout,
   formatBalanceAmount,
   getDashboardBalanceKey,
-  renderBalanceDetailCards,
+  renderBalanceDetailRows,
   renderBalanceEmptyState,
   renderDashboardTemplate,
+  resolveProgressTickLayout,
 } from './dashboard.template';
 import type {
   AppState,
@@ -56,6 +57,7 @@ import type {
   CompoundFrequency,
   DashboardGoalMode,
   DashboardLegendState,
+  ExchangeSource,
 } from '../types';
 
 let lastAutoBalanceSyncAt = 0;
@@ -253,8 +255,8 @@ function setDaysLabel(
   stopValueAnimation(daysAnimationByElement, goalDays);
   delete goalDays.dataset.numericValue;
   animateTextSwap(goalDays, value, animate);
-  goalDays.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
-  goalDaysSeparator.style.display = value ? 'inline' : 'none';
+  goalDays.style.color = highlight ? 'var(--ink)' : 'var(--ink-3)';
+  goalDaysSeparator.style.display = value ? 'inline-block' : 'none';
 }
 
 function setDaysDurationLabel(
@@ -266,8 +268,8 @@ function setDaysDurationLabel(
   const { goalDays, goalDaysSeparator } = getDashboardElements(container);
   if (!goalDays || !goalDaysSeparator) return;
 
-  goalDays.style.color = highlight ? 'var(--text-primary)' : 'var(--text-muted)';
-  goalDaysSeparator.style.display = 'inline';
+  goalDays.style.color = highlight ? 'var(--ink)' : 'var(--ink-3)';
+  goalDaysSeparator.style.display = 'inline-block';
   setAnimatedNumber(
     daysAnimationByElement,
     goalDays,
@@ -345,6 +347,19 @@ function updateGoalProgressVisual(
   elements.goalBar.classList.remove('mode-be', 'mode-goal', 'mode-both');
   elements.goalBar.classList.add(modeToClass(details.mode));
 
+  applyProgressTickLayout(
+    elements.goalHead,
+    elements.goalTickBreakEven,
+    elements.goalTickGoal,
+    resolveProgressTickLayout({
+      mode: details.mode,
+      invested: uiState.invested,
+      goal: uiState.goal,
+      bePct: details.mode === 'both' ? firstMilestonePct : 100,
+      goalPct: details.mode === 'both' ? secondMilestonePct : 100,
+    }),
+  );
+
   elements.goalMutedFirst.style.width = `${firstMilestonePct}%`;
   elements.goalMutedSecond.style.left = `${firstMilestonePct}%`;
   elements.goalMutedSecond.style.width = `${Math.max(0, secondMilestonePct - firstMilestonePct)}%`;
@@ -352,7 +367,6 @@ function updateGoalProgressVisual(
   elements.goalSolidSecond.style.left = `${firstMilestonePct}%`;
   elements.goalSolidSecond.style.width = `${secondSolidPct}%`;
 
-  setCurrencyOutput(elements.goalCurrent, uiState.balance, animateNumbers, GOAL_NUMBER_ANIM_MS);
   setCurrencyOutput(
     elements.goalTargetAmount,
     details.targetAmount,
@@ -444,12 +458,12 @@ function updateDashboardSummaryVisual(
   setStaticTextOutput(elements.balanceDate, formatDateLatin(lastUpdatedIso));
 
   if (elements.pnl) {
-    elements.pnl.className = `big-number ${loss >= 0 ? 'gain' : 'loss'}`;
+    elements.pnl.className = loss >= 0 ? 'gain' : 'loss';
     setCurrencyOutput(elements.pnl, loss, animate);
   }
 
   if (elements.pnlPct) {
-    elements.pnlPct.className = `mono sub-text ${loss >= 0 ? 'text-gain' : 'text-loss'}`;
+    elements.pnlPct.className = loss >= 0 ? 'gain' : 'loss';
     setPercentOutput(elements.pnlPct, lossPct, animate, true);
   }
 }
@@ -466,11 +480,7 @@ function updateDashboardYieldStats(
     Number.isFinite(yieldMetrics.weightedApr) &&
     yieldMetrics.weightedApr !== 0;
   apr.style.color =
-    yieldMetrics.weightedApr < 0
-      ? 'var(--color-loss)'
-      : hasApr
-        ? 'var(--text-primary)'
-        : 'var(--text-muted)';
+    yieldMetrics.weightedApr < 0 ? 'var(--loss)' : hasApr ? 'var(--ink)' : 'var(--ink-3)';
   if (hasApr) {
     setPercentOutput(apr, yieldMetrics.weightedApr, animate, false);
   } else {
@@ -485,15 +495,30 @@ function updateDashboardYieldStats(
 
   daily.style.color =
     yieldMetrics.dailyEarningsUsd < 0
-      ? 'var(--color-loss)'
+      ? 'var(--loss)'
       : yieldMetrics.dailyEarningsUsd > 0
-        ? 'var(--color-gain)'
-        : 'var(--text-muted)';
+        ? 'var(--gain)'
+        : 'var(--ink-3)';
   if (yieldMetrics.dailyEarningsUsd !== 0) {
     setCurrencyOutput(daily, yieldMetrics.dailyEarningsUsd, animate);
   } else {
     setTextResult(daily, '---', animate);
   }
+}
+
+/**
+ * Un activo puede recibir saldo de varios exchanges a la vez (saldo de uno y
+ * posiciones de otro), asi que la fila fusionada acumula todos los origenes en
+ * vez de quedarse con el primero.
+ */
+function rememberBalanceSource(
+  target: BinanceAccountBalance,
+  source: ExchangeSource | undefined,
+): void {
+  if (!source) return;
+  const sources = target.sources ?? [];
+  if (!sources.includes(source)) sources.push(source);
+  target.sources = sources;
 }
 
 function renderBalanceDetail(
@@ -506,40 +531,31 @@ function renderBalanceDetail(
 
   const mergedByAsset = new Map<string, BinanceAccountBalance>();
 
-  (balances ?? []).forEach((balance) => {
-    const asset = balance.asset.trim().toUpperCase();
-    if (!asset) return;
-
+  const mergeInto = (asset: string, free: number, locked: number, source?: ExchangeSource) => {
     const current = mergedByAsset.get(asset);
     if (current) {
-      current.free += balance.free;
-      current.locked += balance.locked;
+      current.free += free;
+      current.locked += locked;
+      rememberBalanceSource(current, source);
       return;
     }
 
-    mergedByAsset.set(asset, {
-      asset,
-      free: balance.free,
-      locked: balance.locked,
-    });
+    const created: BinanceAccountBalance = { asset, free, locked };
+    rememberBalanceSource(created, source);
+    mergedByAsset.set(asset, created);
+  };
+
+  (balances ?? []).forEach((balance) => {
+    const asset = balance.asset.trim().toUpperCase();
+    if (!asset) return;
+    mergeInto(asset, balance.free, balance.locked, balance.source);
   });
 
   positions.forEach((position) => {
     const asset = position.subscriptionAsset.trim().toUpperCase();
     const amount = position.amount;
     if (!asset || !Number.isFinite(amount) || amount <= 0) return;
-
-    const current = mergedByAsset.get(asset);
-    if (current) {
-      current.locked += amount;
-      return;
-    }
-
-    mergedByAsset.set(asset, {
-      asset,
-      free: 0,
-      locked: amount,
-    });
+    mergeInto(asset, 0, amount, position.source);
   });
 
   const relevant = [...mergedByAsset.values()]
@@ -584,7 +600,7 @@ function setBalanceDetailNumber(
 
 function updateBalanceDetailCards(container: HTMLElement, balances: BinanceAccountBalance[]): void {
   if (!sameBalanceCardStructure(container, balances)) {
-    renderBalanceDetailCards(container, balances);
+    renderBalanceDetailRows(container, balances);
     return;
   }
 
@@ -597,9 +613,7 @@ function updateBalanceDetailCards(container: HTMLElement, balances: BinanceAccou
     const breakdownValues = entry.querySelectorAll<HTMLElement>(
       '.dashboard-balance-breakdown-value',
     );
-    const lockedRow = entry.querySelector<HTMLElement>(
-      '.dashboard-balance-breakdown-row.is-locked, .dashboard-balance-breakdown-row:last-child',
-    );
+    const lockedCell = entry.querySelector<HTMLElement>('.dashboard-balance-locked');
     const total = balance.free + balance.locked;
 
     setBalanceDetailNumber(
@@ -609,14 +623,12 @@ function updateBalanceDetailCards(container: HTMLElement, balances: BinanceAccou
     );
     setBalanceDetailNumber(breakdownValues[0] ?? null, balance.free, formatBalanceAmount);
     setBalanceDetailNumber(breakdownValues[1] ?? null, balance.locked, formatBalanceAmount);
-    lockedRow?.classList.toggle('is-locked', balance.locked > 0);
+    lockedCell?.classList.toggle('is-locked', balance.locked > 0);
   });
 }
 
 function createInitialUiState(state: AppState): DashboardUiState {
-  const baseDisplayBalance =
-    state.positions.length === 0 ? state.portfolio.savings : state.portfolio.currentBalance;
-  const aggregate = getAggregatedPortfolioMetrics(state, baseDisplayBalance);
+  const aggregate = getAggregatedPortfolioMetrics(state);
   return {
     balance: aggregate.balance,
     invested: aggregate.invested,
@@ -629,7 +641,6 @@ function createInitialUiState(state: AppState): DashboardUiState {
 
 function renderInitialDashboard(container: HTMLElement, state: AppState): DashboardUiState {
   const uiState = createInitialUiState(state);
-  const autoModeEnabled = isAutoMode();
 
   container.innerHTML = renderDashboardTemplate({
     balance: uiState.balance,
@@ -637,7 +648,6 @@ function renderInitialDashboard(container: HTMLElement, state: AppState): Dashbo
     invested: uiState.invested,
     lastUpdatedIso: state.portfolio.lastUpdated,
     positionsCount: state.positions.length,
-    autoModeEnabled,
     hasApiCredentials: hasAnyExchangeApiCredentials(),
     firstMilestonePct: 0,
     secondMilestonePct: 0,
@@ -753,7 +763,7 @@ async function hydrateDashboardMarketStats(
   uiState.goal = currentState.portfolio.goalAmount;
   uiState.frequency = readSimulatorFrequency(uiState.frequency);
 
-  const shouldHydrateBinanceBalance = isAutoMode() && hasAnyExchangeApiCredentials();
+  const shouldHydrateBinanceBalance = hasAnyExchangeApiCredentials();
   let autoBalanceSummary: Awaited<ReturnType<typeof fetchBalanceSummary>> | null = null;
   let effectivePositions = positions;
 
@@ -801,23 +811,27 @@ async function hydrateDashboardMarketStats(
   );
 
   if (effectivePositions.length === 0) {
-    const savingsOnlyBalance =
-      Math.round((autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.savings) * 100) /
-      100;
+    // Sin posiciones el saldo es solo el wallet reportado por los exchanges. Si
+    // la sincronizacion no lo devolvio, se conserva el ultimo saldo guardado en
+    // vez de escribir un cero que borraria el dato bueno.
+    const walletOnlyBalance =
+      Math.round(
+        (autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.currentBalance) * 100,
+      ) / 100;
     const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
 
-    if (Math.abs(savingsOnlyBalance - storedBalance) >= 0.01) {
-      const updatedState = updateBalance(savingsOnlyBalance);
+    if (Math.abs(walletOnlyBalance - storedBalance) >= 0.01) {
+      const updatedState = updateBalance(walletOnlyBalance);
       updateBalanceInPlace(
         container,
-        savingsOnlyBalance,
+        walletOnlyBalance,
         uiState,
         updatedState,
         animateDynamicValues,
       );
     }
 
-    const aggregate = getAggregatedPortfolioMetrics(loadState(), savingsOnlyBalance);
+    const aggregate = getAggregatedPortfolioMetrics(loadState(), walletOnlyBalance);
     const yieldMetrics = combinePortfolioYieldMetrics(
       { totalUsd: 0, weightedApr: 0, dailyEarningsUsd: 0 },
       aggregate.capital,
@@ -845,12 +859,13 @@ async function hydrateDashboardMarketStats(
     const { snapshot, metrics } = await getSharedMarketData(effectivePositions, forceRefresh);
     registerApiLastUpdatedAt(snapshot.marketLastUpdatedAt);
 
-    const savings = autoBalanceSummary?.totalUsdEstimate ?? currentState.portfolio.savings;
+    // Saldo libre en los exchanges; sin resumen de saldos solo cuentan las posiciones.
+    const walletBalanceUsd = autoBalanceSummary?.totalUsdEstimate ?? 0;
     const balancePositionUsd = sumBalanceContributingPositionUsd(
       effectivePositions,
       metrics.usdByPositionId,
     );
-    const totalBalance = Math.round((balancePositionUsd + savings) * 100) / 100;
+    const totalBalance = Math.round((balancePositionUsd + walletBalanceUsd) * 100) / 100;
     const storedBalance = Math.round(currentState.portfolio.currentBalance * 100) / 100;
     const now = Date.now();
 

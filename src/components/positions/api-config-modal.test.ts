@@ -149,38 +149,6 @@ describe('api config modal', () => {
     expect(Object.keys(stored)).toEqual(['apiKey']);
   });
 
-  it('allows Auto mode with only Bybit credentials when they are read-only', async () => {
-    testBybitApiConnectionMock.mockResolvedValue({
-      success: true,
-      readOnly: true,
-      permissions: { Earn: ['Earn'] },
-    });
-    const { openApiConfigModal } = await import('./api-config-modal');
-
-    openApiConfigModal();
-    document.querySelector<HTMLButtonElement>('#mode-auto')?.click();
-    const keyInput = document.querySelector('#input-bybit-api-key') as HTMLInputElement;
-    const secretInput = document.querySelector('#input-bybit-api-secret') as HTMLInputElement;
-    keyInput.value = 'bybit-key';
-    secretInput.value = 'bybit-secret';
-
-    document.querySelector<HTMLButtonElement>('#btn-api-config-save')?.click();
-    await flushMicrotasks();
-
-    const stored = JSON.parse(localStorage.getItem('crypto-bybit-api') ?? '{}') as {
-      apiKey?: string;
-      apiSecret?: string;
-    };
-    expect(stored.apiKey).toBe('bybit-key');
-    expect(stored.apiSecret).toBeUndefined();
-    expect(Object.keys(stored)).toEqual(['apiKey']);
-    const rawState = localStorage.getItem('crypto-portfolio-tracker');
-    expect(rawState).not.toBeNull();
-    expect(JSON.parse(rawState ?? '{}')).toMatchObject({
-      positionsConfig: { mode: 'auto' },
-    });
-  });
-
   it('tests the credentials already in session when the form is left empty', async () => {
     // El campo de secret nunca se rellena: sin fallback a lo guardado, el boton
     // de probar seria inutilizable tras recargar la pagina.
@@ -353,6 +321,159 @@ describe('api config modal', () => {
     expect(document.querySelector('#api-config-status')?.textContent).toContain('readOnly: 1');
   });
 
+  it('censors the stored secret instead of rendering it or leaving the field empty', async () => {
+    localStorage.setItem('crypto-binance-api', JSON.stringify({ apiKey: 'stored-binance-key' }));
+    localStorage.setItem('crypto-bybit-api', JSON.stringify({ apiKey: 'stored-bybit-key' }));
+    loadLocalVaultCredentialsMock.mockResolvedValue({
+      binance: { apiKey: 'stored-binance-key', apiSecret: 'real-binance-secret' },
+      bybit: { apiKey: 'stored-bybit-key', apiSecret: 'real-bybit-secret' },
+    });
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+
+    const binanceSecret = document.querySelector('#input-api-secret') as HTMLInputElement;
+    const bybitSecret = document.querySelector('#input-bybit-api-secret') as HTMLInputElement;
+
+    for (const input of [binanceSecret, bybitSecret]) {
+      expect(input.disabled).toBe(true);
+      expect(input.value).toBe('•'.repeat(12));
+      expect(input.getAttribute('placeholder')).toBeNull();
+    }
+
+    const markup = document.querySelector('#modal-api-config')?.outerHTML ?? '';
+    expect(markup).not.toContain('real-binance-secret');
+    expect(markup).not.toContain('real-bybit-secret');
+    expect(document.querySelectorAll('.chip-gain')).toHaveLength(2);
+  });
+
+  it('leaves the secret field editable and empty when nothing is stored', async () => {
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+
+    const binanceSecret = document.querySelector('#input-api-secret') as HTMLInputElement;
+    const bybitSecret = document.querySelector('#input-bybit-api-secret') as HTMLInputElement;
+
+    for (const input of [binanceSecret, bybitSecret]) {
+      expect(input.disabled).toBe(false);
+      expect(input.value).toBe('');
+      expect(input.getAttribute('placeholder')).toContain('API Secret');
+    }
+
+    expect(document.querySelectorAll('.chip-idle')).toHaveLength(2);
+  });
+
+  it('never sends the censored filler as a secret when testing the connection', async () => {
+    localStorage.setItem('crypto-binance-api', JSON.stringify({ apiKey: 'stored-binance-key' }));
+    loadLocalVaultCredentialsMock.mockResolvedValue({
+      binance: { apiKey: 'stored-binance-key', apiSecret: 'real-binance-secret' },
+    });
+    testApiConnectionMock.mockResolvedValue({
+      success: true,
+      permissions: ['SPOT'],
+      readOnly: true,
+      permissionWarnings: [],
+    });
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+
+    document.querySelector<HTMLButtonElement>('#btn-api-config-test')?.click();
+    await flushMicrotasks();
+
+    expect(testApiConnectionMock).toHaveBeenCalledWith({
+      apiKey: 'stored-binance-key',
+      apiSecret: 'real-binance-secret',
+    });
+  });
+
+  it('saves invested and goal without any exchange configured', async () => {
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+    (document.querySelector('#input-cfg-invested') as HTMLInputElement).value = '5,000.00';
+    (document.querySelector('#input-cfg-goal') as HTMLInputElement).value = '9,000.00';
+
+    document.querySelector<HTMLButtonElement>('#btn-api-config-save')?.click();
+    await flushMicrotasks();
+
+    expect(JSON.parse(localStorage.getItem('crypto-portfolio-tracker') ?? '{}')).toMatchObject({
+      portfolio: { totalInvested: 5000, goalAmount: 9000 },
+    });
+    expect(document.querySelector('#modal-api-config')?.getAttribute('open')).toBeNull();
+  });
+
+  it('no longer offers a reading mode or an external savings field', async () => {
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+
+    expect(document.querySelector('#mode-manual')).toBeNull();
+    expect(document.querySelector('#mode-auto')).toBeNull();
+    expect(document.querySelector('.mode-btn')).toBeNull();
+    expect(document.querySelector('#cfg-savings-section')).toBeNull();
+    expect(document.querySelector('#input-cfg-savings')).toBeNull();
+    expect(document.querySelector('#modal-api-config')?.textContent).not.toContain('Modo');
+  });
+
+  it('keeps the stored secret untouched when the censored field is left alone on save', async () => {
+    localStorage.setItem('crypto-binance-api', JSON.stringify({ apiKey: 'stored-binance-key' }));
+    localStorage.setItem('crypto-bybit-api', JSON.stringify({ apiKey: 'stored-bybit-key' }));
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+    (document.querySelector('#input-cfg-invested') as HTMLInputElement).value = '5000';
+
+    document.querySelector<HTMLButtonElement>('#btn-api-config-save')?.click();
+    await flushMicrotasks();
+
+    expect(testApiConnectionMock).not.toHaveBeenCalled();
+    expect(testBybitApiConnectionMock).not.toHaveBeenCalled();
+    expect(saveLocalVaultCredentialMock).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem('crypto-binance-api') ?? '{}')).toEqual({
+      apiKey: 'stored-binance-key',
+    });
+    expect(JSON.parse(localStorage.getItem('crypto-bybit-api') ?? '{}')).toEqual({
+      apiKey: 'stored-bybit-key',
+    });
+  });
+
+  it('points at Eliminar credenciales when the API key changes while the secret is censored', async () => {
+    localStorage.setItem('crypto-binance-api', JSON.stringify({ apiKey: 'stored-binance-key' }));
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+    (document.querySelector('#input-api-key') as HTMLInputElement).value = 'another-key';
+
+    document.querySelector<HTMLButtonElement>('#btn-api-config-save')?.click();
+    await flushMicrotasks();
+
+    expect(saveLocalVaultCredentialMock).not.toHaveBeenCalled();
+    expect(document.querySelector('#api-config-status')?.textContent).toContain(
+      'Elimina las credenciales',
+    );
+  });
+
+  it('no longer ships the JSON backup section', async () => {
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+
+    expect(document.querySelector('#btn-export')).toBeNull();
+    expect(document.querySelector('#backup-file-input')).toBeNull();
+    expect(document.querySelector('#backup-file-name')).toBeNull();
+    expect(document.querySelector('#modal-api-config')?.textContent).not.toContain('Respaldo');
+  });
+
   it('refuses partial Binance credentials before changing persisted state', async () => {
     const { openApiConfigModal } = await import('./api-config-modal');
 
@@ -366,12 +487,7 @@ describe('api config modal', () => {
     await Promise.resolve();
 
     expect(localStorage.getItem('crypto-binance-api')).toBeNull();
-    const rawState = localStorage.getItem('crypto-portfolio-tracker');
-    expect(rawState).not.toBeNull();
-    expect(JSON.parse(rawState ?? '{}')).toMatchObject({
-      portfolio: { totalInvested: 0 },
-      positionsConfig: { mode: 'manual' },
-    });
+    expect(localStorage.getItem('crypto-portfolio-tracker')).toBeNull();
     expect(document.querySelector('#api-config-status')?.textContent).toContain(
       'API Key y Secret son requeridos',
     );

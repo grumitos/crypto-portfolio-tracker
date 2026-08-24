@@ -2,15 +2,11 @@ import { beforeEach, describe, expect, it, vi } from '#test';
 import {
   DEFAULT_CALC_REBUY_PCT,
   DEFAULT_CALC_SELL_PCT,
-  exportBackup,
   getDefaultCalcState,
-  importBackup,
   loadCalcState,
   loadState,
-  replacePositions,
-  replaceAutoPositions,
+  replaceSyncedPositions,
   updateBalance,
-  saveStoredPositionsMode,
   saveCalcState,
   saveState,
 } from './storage';
@@ -41,25 +37,6 @@ describe('storage', () => {
 
     expect(state.sellSyncSource).toBe('price');
     expect(state.purchases[0]).toEqual({ id: 1, qty: '1.25', price: '600.45' });
-  });
-
-  it('exports and imports backup including calculadora', () => {
-    const appState = loadState();
-    appState.portfolio.currentBalance = 12345;
-    saveState(appState);
-
-    const calcState = getDefaultCalcState();
-    calcState.sellPct = '1.11';
-    calcState.sellSyncSource = 'percent';
-    saveCalcState(calcState);
-
-    const backup = exportBackup();
-    localStorage.clear();
-    importBackup(backup);
-
-    expect(loadState().portfolio.currentBalance).toBe(12345);
-    expect(loadCalcState().sellPct).toBe('1.11');
-    expect(loadCalcState().sellSyncSource).toBe('percent');
   });
 
   it('sanitizes malformed position values from persisted app state', () => {
@@ -107,13 +84,13 @@ describe('storage', () => {
     expect(position.settlementDate).toBe(position.entryDate);
   });
 
-  it('replaces all positions from imported list', () => {
+  it('replaces stored positions with the synced list', () => {
     const original = loadState();
     expect(original.positions).toHaveLength(0);
 
-    replacePositions([
+    replaceSyncedPositions([
       {
-        id: 'bulk_1',
+        id: 'binance_1',
         asset: 'ETH',
         direction: 'buy-low',
         subscriptionAsset: 'USDT',
@@ -129,54 +106,118 @@ describe('storage', () => {
 
     const next = loadState();
     expect(next.positions).toHaveLength(1);
-    expect(next.positions[0].id).toBe('bulk_1');
+    expect(next.positions[0].id).toBe('binance_1');
     expect(next.positions[0].entryTime).toBe('08:05');
     expect(next.positions[0].settlementTime).toBe('03:00');
   });
 
-  it('preserves manual positions when syncing auto mode data', () => {
-    replacePositions([
-      {
-        id: 'manual_1',
-        asset: 'ETH',
-        direction: 'buy-low',
-        subscriptionAsset: 'USDT',
-        amount: 10,
-        targetPrice: 1900,
-        entryDate: '2026-02-19',
-        settlementDate: '2026-02-20',
-        apr: 80,
-      },
-    ]);
+  it('keeps only exchange positions when migrating state saved with the old manual mode', () => {
+    localStorage.setItem(
+      'crypto-portfolio-tracker',
+      JSON.stringify({
+        portfolio: {
+          totalInvested: 1000,
+          currentBalance: 900,
+          savings: 400,
+          goalAmount: 1500,
+          lastUpdated: '2026-02-21',
+          balanceHistory: [{ date: '2026-02-21', balance: 900 }],
+        },
+        positions: [
+          {
+            id: 'manual_1',
+            asset: 'ETH',
+            direction: 'buy-low',
+            subscriptionAsset: 'USDT',
+            amount: 10,
+            targetPrice: 1900,
+            entryDate: '2026-02-19',
+            settlementDate: '2026-02-20',
+            apr: 80,
+          },
+        ],
+        manualPositions: [
+          {
+            id: 'manual_1',
+            asset: 'ETH',
+            direction: 'buy-low',
+            subscriptionAsset: 'USDT',
+            amount: 10,
+            targetPrice: 1900,
+            entryDate: '2026-02-19',
+            settlementDate: '2026-02-20',
+            apr: 80,
+          },
+        ],
+        autoPositions: [
+          {
+            id: 'binance_1',
+            asset: 'BTC',
+            direction: 'sell-high',
+            subscriptionAsset: 'BTC',
+            amount: 0.25,
+            targetPrice: 75000,
+            entryDate: '2026-02-20',
+            settlementDate: '2026-02-21',
+            apr: 45,
+          },
+        ],
+        positionsConfig: { mode: 'manual' },
+      }),
+    );
 
-    saveStoredPositionsMode('auto');
-    replaceAutoPositions([
-      {
-        id: 'binance_1',
-        asset: 'BTC',
-        direction: 'sell-high',
-        subscriptionAsset: 'BTC',
-        amount: 0.25,
-        targetPrice: 75000,
-        entryDate: '2026-02-20',
-        settlementDate: '2026-02-21',
-        apr: 45,
-      },
-    ]);
+    const state = loadState();
+    expect(state.positions.map((position) => position.id)).toEqual(['binance_1']);
+    expect(state.portfolio.currentBalance).toBe(900);
 
-    expect(loadState().positions.map((position) => position.id)).toEqual(['binance_1']);
-
-    saveStoredPositionsMode('manual');
-
-    const next = loadState();
-    expect(next.positions.map((position) => position.id)).toEqual(['manual_1']);
-    expect(next.manualPositions.map((position) => position.id)).toEqual(['manual_1']);
-    expect(next.autoPositions.map((position) => position.id)).toEqual(['binance_1']);
+    saveState(state);
+    const persisted = JSON.parse(
+      localStorage.getItem('crypto-portfolio-tracker') ?? '{}',
+    ) as Record<string, unknown>;
+    expect(persisted.manualPositions).toBeUndefined();
+    expect(persisted.autoPositions).toBeUndefined();
+    expect(persisted.positionsConfig).toBeUndefined();
+    expect((persisted.portfolio as Record<string, unknown>).savings).toBeUndefined();
   });
 
-  it('preserves Bybit Discount Buy positions in auto mode data', () => {
-    saveStoredPositionsMode('auto');
-    replaceAutoPositions([
+  it('drops manual-only positions when the old state had no synced bucket', () => {
+    localStorage.setItem(
+      'crypto-portfolio-tracker',
+      JSON.stringify({
+        positionsConfig: { mode: 'manual' },
+        autoPositions: [],
+        positions: [
+          {
+            id: 'manual_1',
+            asset: 'ETH',
+            direction: 'buy-low',
+            subscriptionAsset: 'USDT',
+            amount: 10,
+            targetPrice: 1900,
+            entryDate: '2026-02-19',
+            settlementDate: '2026-02-20',
+            apr: 80,
+          },
+          {
+            id: 'bybit_dual_1',
+            asset: 'ETH',
+            direction: 'sell-high',
+            subscriptionAsset: 'ETH',
+            amount: 1,
+            targetPrice: 2400,
+            entryDate: '2026-02-19',
+            settlementDate: '2026-02-20',
+            apr: 90,
+          },
+        ],
+      }),
+    );
+
+    expect(loadState().positions.map((position) => position.id)).toEqual(['bybit_dual_1']);
+  });
+
+  it('preserves Bybit Discount Buy positions in synced data', () => {
+    replaceSyncedPositions([
       {
         id: 'bybit_discount_buy_11959',
         asset: 'BTC',
@@ -194,16 +235,15 @@ describe('storage', () => {
       },
     ]);
 
-    const position = loadState().autoPositions[0];
+    const position = loadState().positions[0];
     expect(position.positionKind).toBe('discount-buy');
     expect(position.source).toBe('Bybit');
     expect(position.displaySymbol).toBe('BTCUSDT');
     expect(position.projectedProfit).toBeCloseTo(0.005479452054794521, 12);
   });
 
-  it('preserves quote asset for crypto-cross auto positions', () => {
-    saveStoredPositionsMode('auto');
-    replaceAutoPositions([
+  it('preserves quote asset for crypto-cross synced positions', () => {
+    replaceSyncedPositions([
       {
         id: 'bybit_dual_eth_btc',
         asset: 'ETH',
@@ -221,14 +261,13 @@ describe('storage', () => {
       },
     ]);
 
-    const position = loadState().autoPositions[0];
+    const position = loadState().positions[0];
     expect(position.quoteAsset).toBe('BTC');
     expect(position.displaySymbol).toBe('ETHBTC');
   });
 
-  it('preserves exact expected settlement fields for auto positions', () => {
-    saveStoredPositionsMode('auto');
-    replaceAutoPositions([
+  it('preserves exact expected settlement fields for synced positions', () => {
+    replaceSyncedPositions([
       {
         id: 'bybit_dual_eth_usdt',
         asset: 'ETH',
@@ -249,15 +288,15 @@ describe('storage', () => {
       },
     ]);
 
-    const position = loadState().autoPositions[0];
+    const position = loadState().positions[0];
     expect(position.expectedSettlementAsset).toBe('USDT');
     expect(position.expectedSettlementAmount).toBe(10174.53);
   });
 
-  it('preserves grouped components when importing aggregated positions', () => {
-    replacePositions([
+  it('preserves grouped components when syncing aggregated positions', () => {
+    replaceSyncedPositions([
       {
-        id: 'agg_1',
+        id: 'binance_agg_1',
         asset: 'SOL',
         direction: 'sell-high',
         subscriptionAsset: 'SOL',
@@ -316,54 +355,6 @@ describe('storage', () => {
     vi.useRealTimers();
   });
 
-  it('imports legacy backup format without wrapper fields', () => {
-    const legacy = JSON.stringify({
-      portfolio: {
-        totalInvested: 2000,
-        currentBalance: 1500,
-        goalAmount: 2500,
-        savings: 300,
-        lastUpdated: '2026-02-20',
-        balanceHistory: [{ date: '2026-02-20', balance: 1500 }],
-      },
-      positions: [],
-    });
-
-    const imported = importBackup(legacy);
-    expect(imported.portfolio.totalInvested).toBe(2000);
-    expect(loadState().portfolio.currentBalance).toBe(1500);
-  });
-
-  it('rejects unrecognized legacy backup objects without overwriting persisted state', () => {
-    const state = loadState();
-    state.portfolio.currentBalance = 777;
-    saveState(state);
-
-    expect(() => importBackup(JSON.stringify({ foo: 'bar' }))).toThrow(
-      'Formato de backup no valido',
-    );
-    expect(loadState().portfolio.currentBalance).toBe(777);
-  });
-
-  it('rejects backups from unsupported future versions', () => {
-    const futureBackup = JSON.stringify({
-      version: 999,
-      app: {
-        portfolio: {
-          totalInvested: 1000,
-          currentBalance: 800,
-          goalAmount: 1500,
-          savings: 800,
-          lastUpdated: '2026-02-21',
-          balanceHistory: [{ date: '2026-02-21', balance: 800 }],
-        },
-        positions: [],
-      },
-    });
-
-    expect(() => importBackup(futureBackup)).toThrow('Versión de backup no soportada');
-  });
-
   it('falls back to defaults on malformed persisted JSON', () => {
     localStorage.setItem('crypto-portfolio-tracker', '{bad-json');
     localStorage.setItem('crypto-calculadora', '{bad-json');
@@ -385,7 +376,6 @@ describe('storage', () => {
           totalInvested: 1000,
           currentBalance: 500,
           goalAmount: 1500,
-          savings: 500,
           lastUpdated: '2026-02-21',
           balanceHistory: [
             { date: '2026-02-20', balance: 400 },

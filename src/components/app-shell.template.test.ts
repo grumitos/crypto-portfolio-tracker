@@ -3,10 +3,10 @@ import { renderAppShell } from './app-shell.template';
 import type { AppShellNavItem } from './app-shell.constants';
 
 const navItems: AppShellNavItem[] = [
-  { view: 'dashboard', label: 'Dashboard', icon: '', active: true },
-  { view: 'positions', label: 'Posiciones', icon: '', active: false },
-  { view: 'simulator', label: 'Simulador', icon: '', active: false },
-  { view: 'calculadora', label: 'Calculadora', icon: '', active: false },
+  { view: 'dashboard', label: 'Dashboard', active: true },
+  { view: 'positions', label: 'Posiciones', active: false },
+  { view: 'simulator', label: 'Simulador', active: false },
+  { view: 'calculadora', label: 'Calculadora', active: false },
 ];
 
 describe('renderAppShell', () => {

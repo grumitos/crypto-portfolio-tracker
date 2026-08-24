@@ -5,16 +5,17 @@ interface TypographyConfig {
   stylesheetHref: string;
   preconnectHosts: string[];
   fontSans: string;
+  fontSerif: string;
   fontMono: string;
 }
 
 const DEFAULT_TYPOGRAPHY: TypographyConfig = {
   stylesheetHref:
-    'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap',
   preconnectHosts: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'],
-  fontSans:
-    "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
-  fontMono: "'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace",
+  fontSans: "'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif",
+  fontSerif: "'Newsreader', 'Iowan Old Style', Georgia, serif",
+  fontMono: "'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace",
 };
 
 function ensurePreconnect(host: string, crossOrigin = false): void {
@@ -50,9 +51,7 @@ export function applyTypographyConfig(config: TypographyConfig = DEFAULT_TYPOGRA
   }
 
   const root = document.documentElement;
-  root.style.setProperty('--font-family-ui', config.fontSans);
-  root.style.setProperty('--font-family-mono', config.fontMono);
-  root.style.setProperty('--font-family-data', config.fontSans);
-  root.style.setProperty('--font-sans', config.fontSans);
-  root.style.setProperty('--font-mono', config.fontMono);
+  root.style.setProperty('--sans', config.fontSans);
+  root.style.setProperty('--serif', config.fontSerif);
+  root.style.setProperty('--mono', config.fontMono);
 }

@@ -80,29 +80,18 @@ import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-statu
 import { showApiErrorBanner } from '../utils/notifications';
 import { syncPositionsFromBinance } from '../utils/binance-sync';
 import { saveApiCredentials } from '../utils/binance-auth';
-import { DEFAULT_ASSET_POOL } from './positions.parser';
+const NON_STABLE_SPOT_ASSETS = ['BTC', 'ETH', 'BNB', 'SOL'];
 
-const NON_STABLE_SPOT_ASSETS = DEFAULT_ASSET_POOL.filter(
-  (asset) => asset !== 'USDT' && asset !== 'USDC',
-);
-
-function seedState(
-  positions: AppState['positions'],
-  options: { mode?: 'manual' | 'auto' } = {},
-): void {
+function seedState(positions: AppState['positions']): void {
   saveState({
     portfolio: {
       totalInvested: 1000,
       currentBalance: 900,
-      savings: 900,
       goalAmount: 1500,
       lastUpdated: '2026-02-21',
       balanceHistory: [{ date: '2026-02-21', balance: 900 }],
     },
     positions,
-    manualPositions: positions,
-    autoPositions: options.mode === 'auto' ? positions : [],
-    positionsConfig: { mode: options.mode ?? 'manual' },
   });
 }
 
@@ -148,14 +137,15 @@ describe('positions integration', () => {
     });
   });
 
-  it('renders empty state and skips market metrics when there are no positions', async () => {
+  it('asks for an exchange in the empty state when no credentials are configured', async () => {
     seedState([]);
     const container = document.createElement('div');
     document.body.appendChild(container);
     const dispose = renderPositions(container, vi.fn());
     await flushMicrotasks();
 
-    expect(container.textContent).toContain('Sin posiciones activas');
+    expect(container.textContent).toContain('Conecta un exchange para ver tus posiciones');
+    expect(container.textContent).toContain('Sin exchanges conectados');
     expect((container.querySelector('#positions-apr') as HTMLElement).textContent).toContain('---');
     expect(getAssetPriceSnapshot).not.toHaveBeenCalled();
     expect(calculatePositionMetricsFromSnapshot).not.toHaveBeenCalled();
@@ -164,7 +154,32 @@ describe('positions integration', () => {
     container.remove();
   });
 
-  it('does not render account balance detail in positions even in auto mode', async () => {
+  it('renders empty state and skips market metrics when a connected exchange returns nothing', async () => {
+    seedState([]);
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: [],
+      count: 0,
+      balances: [],
+      totalUsdEstimate: 0,
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, vi.fn());
+    await flushMicrotasks();
+
+    expect(container.textContent).toContain('Sin posiciones activas');
+    expect(container.textContent).toContain('Sincroniza para consultar posiciones activas.');
+    expect((container.querySelector('#positions-apr') as HTMLElement).textContent).toContain('---');
+    expect(getAssetPriceSnapshot).not.toHaveBeenCalled();
+    expect(calculatePositionMetricsFromSnapshot).not.toHaveBeenCalled();
+
+    dispose();
+    container.remove();
+  });
+
+  it('does not render account balance detail in the positions view', async () => {
     const positions = [
       {
         id: 'p1',
@@ -179,7 +194,7 @@ describe('positions integration', () => {
       },
     ];
 
-    seedState(positions, { mode: 'auto' });
+    seedState(positions);
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     vi.mocked(syncPositionsFromBinance).mockResolvedValue({
       positions,
@@ -360,11 +375,9 @@ describe('positions integration', () => {
     const missingPositionAsset = container.querySelector(
       '#positions-spot-value-BTC',
     ) as HTMLElement;
-    const skeletonCards = [
-      ...container.querySelectorAll('#positions-spot-strip .positions-spot-card'),
-    ];
+    const skeletonCards = [...container.querySelectorAll('#positions-spot-strip .spot-item')];
 
-    expect(strip.style.display).toBe('flex');
+    expect(strip.hidden).toBe(false);
     // Fixed BTC -> ETH -> BNB -> SOL order, regardless of which assets are held.
     expect(skeletonCards.map((card) => card.id)).toEqual([
       'positions-spot-BTC',
@@ -488,11 +501,11 @@ describe('positions integration', () => {
       },
     ];
 
-    seedState(firstPositions, { mode: 'auto' });
+    seedState(firstPositions);
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     vi.mocked(syncPositionsFromBinance)
       .mockImplementationOnce(async () => {
-        seedState(firstPositions, { mode: 'auto' });
+        seedState(firstPositions);
         return {
           positions: firstPositions,
           count: firstPositions.length,
@@ -501,7 +514,7 @@ describe('positions integration', () => {
         };
       })
       .mockImplementationOnce(async () => {
-        seedState(secondPositions, { mode: 'auto' });
+        seedState(secondPositions);
         return {
           positions: secondPositions,
           count: secondPositions.length,
@@ -745,7 +758,7 @@ describe('positions integration', () => {
       expect.arrayContaining([...NON_STABLE_SPOT_ASSETS]),
       expect.objectContaining({ forceRefresh: false }),
     );
-    const cards = [...container.querySelectorAll('#positions-spot-strip .positions-spot-card')];
+    const cards = [...container.querySelectorAll('#positions-spot-strip .spot-item')];
     expect(cards).toHaveLength(NON_STABLE_SPOT_ASSETS.length);
     expect(cards[0]?.id).toBe('positions-spot-BTC');
     expect(cards[1]?.id).toBe('positions-spot-ETH');

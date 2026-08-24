@@ -50,44 +50,55 @@ interface SeedDashboardOptions {
   positions?: AppState['positions'];
   totalInvested?: number;
   currentBalance?: number;
-  savings?: number;
   goalAmount?: number;
-  mode?: 'manual' | 'auto';
   capitalLedger?: AppState['capitalLedger'];
 }
 
-function seedState(options: SeedDashboardOptions = {}): void {
-  const defaultPositions: AppState['positions'] = [
-    {
-      id: 'p1',
-      asset: 'ETH',
-      direction: 'buy-low',
-      subscriptionAsset: 'USDT',
-      amount: 1,
-      targetPrice: 2200,
-      entryDate: '2026-02-20',
-      settlementDate: '2026-02-22',
-      apr: 40,
-    },
-  ];
+const DEFAULT_POSITIONS: AppState['positions'] = [
+  {
+    id: 'p1',
+    asset: 'ETH',
+    direction: 'buy-low',
+    subscriptionAsset: 'USDT',
+    amount: 1,
+    targetPrice: 2200,
+    entryDate: '2026-02-20',
+    settlementDate: '2026-02-22',
+    apr: 40,
+  },
+];
 
+function seedState(options: SeedDashboardOptions = {}): void {
   const state: AppState = {
     portfolio: {
       totalInvested: options.totalInvested ?? 1000,
-      currentBalance: options.currentBalance ?? 600,
-      savings: options.savings ?? 200,
+      currentBalance: options.currentBalance ?? 400,
       goalAmount: options.goalAmount ?? 1500,
       lastUpdated: '2026-02-21',
-      balanceHistory: [{ date: '2026-02-21', balance: options.currentBalance ?? 600 }],
+      balanceHistory: [{ date: '2026-02-21', balance: options.currentBalance ?? 400 }],
     },
-    positions: options.positions ?? defaultPositions,
-    manualPositions: options.positions ?? defaultPositions,
-    autoPositions: [],
-    positionsConfig: { mode: options.mode ?? 'manual' },
+    positions: options.positions ?? DEFAULT_POSITIONS,
     capitalLedger: options.capitalLedger ?? getDefaultCapitalLedgerState(),
   };
 
   saveState(state);
+}
+
+/**
+ * Saldo libre en los exchanges: sin modo manual es la unica via para que el
+ * portfolio valga mas que las posiciones abiertas.
+ */
+function connectExchangeWallet(
+  totalUsdEstimate: number,
+  positions: AppState['positions'] = DEFAULT_POSITIONS,
+): void {
+  saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+  vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+    positions,
+    count: positions.length,
+    totalUsdEstimate,
+    balances: [{ asset: 'USDT', free: totalUsdEstimate, locked: 0 }],
+  });
 }
 
 describe('dashboard legends', () => {
@@ -256,7 +267,7 @@ describe('dashboard legends', () => {
       'BE',
     );
     expect((container.querySelector('#dash-prog-solid-first') as HTMLElement).style.width).toBe(
-      '60%',
+      '40%',
     );
 
     beBtn.click();
@@ -312,10 +323,10 @@ describe('dashboard legends', () => {
     });
     seedState({
       currentBalance: 41055,
-      savings: 40000,
       totalInvested: 40000,
       goalAmount: 45000,
     });
+    connectExchangeWallet(40000);
 
     const snapshotSpy = vi.spyOn(projectionMilestones, 'buildProjectionSnapshot');
     const container = document.createElement('div');
@@ -346,10 +357,10 @@ describe('dashboard legends', () => {
     );
     seedState({
       currentBalance: 41055,
-      savings: 40000,
       totalInvested: 40000,
       goalAmount: 45000,
     });
+    connectExchangeWallet(40000);
 
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -428,11 +439,11 @@ describe('dashboard legends', () => {
     ];
     seedState({
       currentBalance: 41055,
-      savings: 40000,
       totalInvested: 40000,
       goalAmount: 45000,
       capitalLedger,
     });
+    connectExchangeWallet(40000);
 
     const snapshotSpy = vi.spyOn(projectionMilestones, 'buildProjectionSnapshot');
     const container = document.createElement('div');
@@ -481,8 +492,23 @@ describe('dashboard legends', () => {
     container.remove();
   });
 
-  it('shows zero balance when there are no positions and no savings', async () => {
-    seedState({ positions: [], currentBalance: 1234, savings: 0 });
+  it('keeps the stored balance when there are no positions and no exchange data', async () => {
+    seedState({ positions: [], currentBalance: 1234 });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect(container.querySelector('#dash-balance')?.textContent).toContain('$1,234.00');
+    expect(loadState().portfolio.currentBalance).toBe(1234);
+
+    dispose();
+    container.remove();
+  });
+
+  it('shows zero balance when the exchanges report an empty wallet and no positions', async () => {
+    seedState({ positions: [], currentBalance: 1234 });
+    connectExchangeWallet(0, []);
     const container = document.createElement('div');
     document.body.appendChild(container);
     const dispose = renderDashboard(container);
@@ -526,14 +552,14 @@ describe('dashboard legends', () => {
         priceSourceByAsset: { USDT: 'cache-stale' },
       },
     });
-    seedState({ currentBalance: 600, savings: 200 });
+    seedState({ currentBalance: 600 });
 
     const container = document.createElement('div');
     document.body.appendChild(container);
     const dispose = renderDashboard(container);
     await flushMicrotasks();
 
-    expect(container.querySelector('#dash-balance')?.textContent).toContain('$1,000.00');
+    expect(container.querySelector('#dash-balance')?.textContent).toContain('$800.00');
     expect(registerApiFailure).toHaveBeenCalled();
     expect(showApiErrorBanner).toHaveBeenCalled();
 
@@ -542,7 +568,7 @@ describe('dashboard legends', () => {
   });
 
   it('force refreshes auto data on mount and updates goal progress from the new balance', async () => {
-    const autoPositions: AppState['positions'] = [
+    const syncedPositions: AppState['positions'] = [
       {
         id: 'auto-1',
         asset: 'ETH',
@@ -556,17 +582,15 @@ describe('dashboard legends', () => {
       },
     ];
     seedState({
-      mode: 'auto',
-      positions: autoPositions,
+      positions: syncedPositions,
       currentBalance: 600,
-      savings: 200,
       totalInvested: 1000,
       goalAmount: 2000,
     });
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     vi.mocked(syncPositionsFromBinance).mockResolvedValue({
-      positions: autoPositions,
-      count: autoPositions.length,
+      positions: syncedPositions,
+      count: syncedPositions.length,
       totalUsdEstimate: 200,
       balances: [{ asset: 'USDT', free: 200, locked: 0 }],
     });
@@ -600,7 +624,7 @@ describe('dashboard legends', () => {
     await flushMicrotasks();
 
     expect(syncPositionsFromBinance).toHaveBeenCalledWith(true);
-    expect(getSharedMarketData).toHaveBeenCalledWith(autoPositions, true);
+    expect(getSharedMarketData).toHaveBeenCalledWith(syncedPositions, true);
     expect(loadState().portfolio.currentBalance).toBe(1200);
     expect(container.querySelector('#dash-balance')?.textContent).toContain('$1,200.00');
     expect(container.querySelector('#dash-goal-progress-bar')?.getAttribute('aria-valuenow')).toBe(
@@ -761,7 +785,7 @@ describe('dashboard legends', () => {
           },
         };
       });
-      seedState({ currentBalance: 600, savings: 200 });
+      seedState({ currentBalance: 400 });
 
       document.body.appendChild(container);
       dispose = renderDashboard(container);
@@ -848,7 +872,7 @@ describe('dashboard legends', () => {
           },
         };
       });
-      seedState({ currentBalance: 600, savings: 200, totalInvested: 1000 });
+      seedState({ currentBalance: 400, totalInvested: 1000 });
 
       document.body.appendChild(container);
       dispose = renderDashboard(container);
@@ -875,8 +899,8 @@ describe('dashboard legends', () => {
       expect(animatedIds).toContain('dash-balance');
       expect(animatedIds).toContain('dash-pnl');
       expect(animatedIds).toContain('dash-pnl-pct');
-      expect(container.querySelector('#dash-balance')?.textContent).toContain('$850.00');
-      expect(container.querySelector('#dash-pnl')?.textContent).toContain('-$150.00');
+      expect(container.querySelector('#dash-balance')?.textContent).toContain('$650.00');
+      expect(container.querySelector('#dash-pnl')?.textContent).toContain('-$350.00');
     } finally {
       dispose?.();
       container.remove();
@@ -901,34 +925,6 @@ describe('dashboard legends', () => {
     expect(showApiErrorBanner).toHaveBeenCalled();
     expect(container.querySelector('#dashboard-positions-count')?.textContent?.trim()).toBe('1');
     expect(container.querySelector('#dashboard-positions-count .skeleton')).toBeNull();
-
-    dispose();
-    container.remove();
-  });
-
-  it('applies savings changes immediately without full rerender', async () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const dispose = renderDashboard(container);
-    await flushMicrotasks();
-
-    // Update state directly and dispatch config change event (simulating unified config modal save)
-    const before = loadState();
-    const basePositionsValue =
-      before.positions.length > 0 ? before.portfolio.currentBalance - before.portfolio.savings : 0;
-    const nextBalance = Math.max(0, Math.round((basePositionsValue + 300) * 100) / 100);
-    saveState({
-      ...before,
-      portfolio: { ...before.portfolio, savings: 300, currentBalance: nextBalance },
-    });
-    window.dispatchEvent(new CustomEvent('binance-config-change'));
-    await flushMicrotasks();
-
-    const next = loadState();
-    expect(next.portfolio.savings).toBe(300);
-    expect(next.portfolio.currentBalance).toBe(700);
-    expect(container.querySelector('#dash-balance')?.textContent).toContain('$700.00');
-    expect(container.querySelector('#dash-pnl')?.textContent).toContain('-$300.00');
 
     dispose();
     container.remove();
@@ -959,8 +955,8 @@ describe('dashboard legends', () => {
     container.remove();
   });
 
-  it('renders account balance detail in dashboard when Binance auto mode is active', async () => {
-    seedState({ mode: 'auto', positions: [] });
+  it('renders account balance detail in dashboard when an exchange is connected', async () => {
+    seedState({ positions: [] });
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     vi.mocked(syncPositionsFromBinance).mockResolvedValue({
       positions: [],
@@ -994,7 +990,7 @@ describe('dashboard legends', () => {
     container.remove();
   });
 
-  it('animates account balance detail values when auto balances refresh in-place', async () => {
+  it('animates account balance detail values when balances refresh in-place', async () => {
     vi.useFakeTimers();
     mockMatchMedia(false);
 
@@ -1015,7 +1011,7 @@ describe('dashboard legends', () => {
     let dispose: (() => void) | null = null;
 
     try {
-      seedState({ mode: 'auto', positions: [] });
+      seedState({ positions: [] });
       saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
       vi.mocked(syncPositionsFromBinance)
         .mockResolvedValueOnce({
@@ -1060,8 +1056,14 @@ describe('dashboard legends', () => {
         })
         .map((call) => (call[1] as HTMLElement | null)?.className ?? '');
 
-      expect(animatedBalanceDetailClasses).toContain('dashboard-balance-total-value mono');
-      expect(animatedBalanceDetailClasses).toContain('dashboard-balance-breakdown-value mono');
+      expect(
+        animatedBalanceDetailClasses.some((name) => name.includes('dashboard-balance-total-value')),
+      ).toBe(true);
+      expect(
+        animatedBalanceDetailClasses.some((name) =>
+          name.includes('dashboard-balance-breakdown-value'),
+        ),
+      ).toBe(true);
       expect(total?.textContent).toContain('280.00 USDT');
     } finally {
       dispose?.();
@@ -1075,7 +1077,7 @@ describe('dashboard legends', () => {
   });
 
   it('adds active auto positions to the locked amount in the account balance detail', async () => {
-    const autoPositions: AppState['positions'] = [
+    const syncedPositions: AppState['positions'] = [
       {
         id: 'eth-1',
         asset: 'ETH',
@@ -1099,14 +1101,11 @@ describe('dashboard legends', () => {
         apr: 28,
       },
     ];
-    seedState({
-      mode: 'auto',
-      positions: autoPositions,
-    });
+    seedState({ positions: syncedPositions });
     saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
     vi.mocked(syncPositionsFromBinance).mockResolvedValue({
-      positions: autoPositions,
-      count: autoPositions.length,
+      positions: syncedPositions,
+      count: syncedPositions.length,
       totalUsdEstimate: 25,
       balances: [
         { asset: 'USDC', free: 22.80919709, locked: 0 },
@@ -1127,6 +1126,168 @@ describe('dashboard legends', () => {
     expect(stripText).toContain('9.9314');
     expect(stripText).toContain('SOL');
     expect(stripText).toContain('234.42');
+
+    dispose();
+    container.remove();
+  });
+
+  it('lists every exchange feeding an asset in the account balance source column', async () => {
+    const syncedPositions: AppState['positions'] = [
+      {
+        id: 'usdt-1',
+        asset: 'ETH',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 40,
+        targetPrice: 2200,
+        entryDate: '2026-02-20',
+        settlementDate: '2026-02-22',
+        apr: 40,
+        source: 'Bybit',
+      },
+    ];
+    seedState({ positions: syncedPositions });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: syncedPositions,
+      count: syncedPositions.length,
+      totalUsdEstimate: 300,
+      balances: [
+        { asset: 'USDT', free: 250, locked: 10, source: 'Binance' },
+        { asset: 'ETH', free: 0.25, locked: 0, source: 'Bybit' },
+        { asset: 'BTC', free: 0.01, locked: 0 },
+      ],
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    const sourceByAsset = Object.fromEntries(
+      [...container.querySelectorAll('.dashboard-balance-entry')].map((row) => [
+        row.querySelector('.asset-pair')?.textContent?.trim(),
+        row.querySelectorAll('td')[1]?.textContent?.trim(),
+      ]),
+    );
+
+    expect(sourceByAsset.USDT).toBe('Binance + Bybit');
+    expect(sourceByAsset.ETH).toBe('Bybit');
+    expect(sourceByAsset.BTC).toBe('—');
+
+    dispose();
+    container.remove();
+  });
+
+  it('hides both milestone ticks while the dashboard is still loading', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+
+    expect((container.querySelector('#dash-prog-tick-be') as HTMLElement).hidden).toBe(true);
+    expect((container.querySelector('#dash-prog-tick-goal') as HTMLElement).hidden).toBe(true);
+
+    dispose();
+    container.remove();
+  });
+
+  it('hides both milestone ticks when the goal scale is degenerate', async () => {
+    seedState({ positions: [], totalInvested: 0, goalAmount: 0, currentBalance: 0 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect((container.querySelector('#dash-prog-tick-be') as HTMLElement).hidden).toBe(true);
+    expect((container.querySelector('#dash-prog-tick-goal') as HTMLElement).hidden).toBe(true);
+
+    dispose();
+    container.remove();
+  });
+
+  it('hangs a milestone label to the right when its marker sits near the start', async () => {
+    seedState({ totalInvested: 100, goalAmount: 10000, currentBalance: 50 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    const beTick = container.querySelector('#dash-prog-tick-be') as HTMLElement;
+    const goalTick = container.querySelector('#dash-prog-tick-goal') as HTMLElement;
+
+    expect(beTick.hidden).toBe(false);
+    expect(beTick.classList.contains('is-after')).toBe(true);
+    expect(goalTick.classList.contains('is-before')).toBe(true);
+    expect(goalTick.style.left).toBe('100%');
+    // El titulo cede su fila para que la marca baja no lo cruce.
+    expect(container.querySelector('#dash-prog-head')?.className).toContain('has-edge-tick');
+
+    dispose();
+    container.remove();
+  });
+
+  it('lifts the lower milestone label when both markers nearly overlap', async () => {
+    seedState({ totalInvested: 1000, goalAmount: 1050, currentBalance: 600 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    const beTick = container.querySelector('#dash-prog-tick-be') as HTMLElement;
+    const goalTick = container.querySelector('#dash-prog-tick-goal') as HTMLElement;
+
+    expect(beTick.classList.contains('is-before')).toBe(true);
+    expect(beTick.classList.contains('is-stacked')).toBe(true);
+    expect(goalTick.classList.contains('is-stacked')).toBe(false);
+    expect(container.querySelector('#dash-prog-head')?.className).toContain('has-stacked-tick');
+
+    dispose();
+    container.remove();
+  });
+
+  it('keeps both milestone labels inline when the markers are far apart', async () => {
+    seedState({ totalInvested: 1000, goalAmount: 1500, currentBalance: 600 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    const beTick = container.querySelector('#dash-prog-tick-be') as HTMLElement;
+    const goalTick = container.querySelector('#dash-prog-tick-goal') as HTMLElement;
+
+    expect(beTick.classList.contains('is-before')).toBe(true);
+    expect(beTick.classList.contains('is-stacked')).toBe(false);
+    expect(goalTick.classList.contains('is-before')).toBe(true);
+    expect(goalTick.classList.contains('is-stacked')).toBe(false);
+    expect(container.querySelector('#dash-prog-head')?.className).toBe('progress-head');
+    // Las marcas nombran el hito con su importe: sin la cifra repetirian los chips.
+    expect(beTick.querySelector('.progress-tick-text')?.textContent).toBe('Breakeven $1,000');
+    expect(goalTick.querySelector('.progress-tick-text')?.textContent).toBe('Meta $1,500');
+
+    dispose();
+    container.remove();
+  });
+
+  it('hides the meta tick and pins the BE tick to the end in be-only mode', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    (container.querySelector('#dashboard-legend-goal') as HTMLButtonElement).click();
+
+    const beTick = container.querySelector('#dash-prog-tick-be') as HTMLElement;
+    const goalTick = container.querySelector('#dash-prog-tick-goal') as HTMLElement;
+
+    expect(goalTick.hidden).toBe(true);
+    expect(beTick.hidden).toBe(false);
+    expect(beTick.style.left).toBe('100%');
+    expect(beTick.classList.contains('is-before')).toBe(true);
+    expect(beTick.querySelector('.progress-tick-text')?.textContent).toContain('Breakeven $');
 
     dispose();
     container.remove();

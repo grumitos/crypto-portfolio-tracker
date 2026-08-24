@@ -9,7 +9,7 @@ import {
   parseCapitalLedgerDate,
   vaultPositionTransactions,
 } from '../utils/capital-ledger';
-import { iconRefreshCw, iconWallet } from '../utils/icons';
+import { iconRefreshCw } from '../utils/icons';
 import type { CapitalLedgerState, CapitalLedgerTransaction, CapitalLedgerVault } from '../types';
 
 export interface CapitalTemplateInput {
@@ -46,13 +46,19 @@ function formatPercent(value: number | null | undefined): string {
   return `${numberFormatter.format(amount)}%`;
 }
 
-function formatDateTime(value: string | number | null | undefined): string {
+function resolveDateParts(value: string | number | null | undefined): {
+  date: string;
+  time: string;
+} {
   const date = typeof value === 'number' ? new Date(value) : parseCapitalLedgerDate(value ?? '');
-  if (!date || Number.isNaN(date.getTime())) return String(value ?? '').trim() || '-';
+  if (!date || Number.isNaN(date.getTime())) {
+    return { date: String(value ?? '').trim() || '-', time: '' };
+  }
   const pad = (part: number): string => String(part).padStart(2, '0');
-  return `${pad(date.getHours())}:${pad(date.getMinutes())} ${pad(date.getDate())}/${pad(
-    date.getMonth() + 1,
-  )}/${date.getFullYear()}`;
+  return {
+    date: `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`,
+    time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  };
 }
 
 function shortAddress(address: string): string {
@@ -60,28 +66,22 @@ function shortAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function renderMetric(
-  id: string,
-  title: string,
-  value: string,
-  sub: string,
-  tone: 'neutral' | 'gain' | 'loss' | 'accent' = 'neutral',
-): string {
-  const toneClass = tone === 'neutral' ? '' : ` ${tone}`;
-  return `
-    <article class="stat-card capital-stat-card">
-      <div class="card-title">${title}</div>
-      <output class="stat-value lg${toneClass}" id="${id}" aria-live="polite">${value}</output>
-      <div class="mono text-muted sub-text">${sub}</div>
-    </article>
-  `;
+function renderLink(label: string, url: string): string {
+  const safeLabel = escapeHtml(label || '-');
+  if (!url) return safeLabel;
+  const safeUrl = escapeHtml(url);
+  return `<a class="lnk" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeLabel}</a>`;
 }
 
-function renderLink(label: string, url: string, className = ''): string {
-  const safeLabel = escapeHtml(label || '-');
-  if (!url) return `<span class="${className}">${safeLabel}</span>`;
-  const safeUrl = escapeHtml(url);
-  return `<a class="inline-link ${className}" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeLabel}</a>`;
+function renderDateStack(value: string | number | null | undefined, url = ''): string {
+  const { date, time } = resolveDateParts(value);
+  const head = url ? renderLink(date, url) : escapeHtml(date);
+  return `
+    <span class="cell-stack">
+      <span class="num">${head}</span>
+      ${time ? `<span class="cell-sub">${escapeHtml(time)}</span>` : ''}
+    </span>
+  `;
 }
 
 function renderVaultRow(ledger: CapitalLedgerState, vault: CapitalLedgerVault): string {
@@ -93,16 +93,16 @@ function renderVaultRow(ledger: CapitalLedgerState, vault: CapitalLedgerVault): 
     valuation,
   );
   const pnl = metrics?.activePnl ?? null;
-  const pnlTone = Number.isFinite(pnl) && (pnl as number) < 0 ? 'text-loss' : 'text-gain';
+  const pnlTone = Number.isFinite(pnl) && (pnl as number) < 0 ? 'loss' : 'gain';
 
   return `
     <tr>
-      <td>${renderLink(vault.name || shortAddress(vault.vaultAddress), vault.url, 'capital-vault-link')}</td>
-      <td class="td-amount mono">${formatNumber(metrics?.activeValue)}</td>
-      <td class="td-amount mono">${formatNumber(metrics?.activeCapital)}</td>
-      <td class="td-amount mono ${pnlTone}">${formatSignedUSD(pnl)}</td>
-      <td class="td-amount mono">${formatPercent(metrics?.activeApr)}</td>
-      <td class="td-date mono">${formatDateTime(user?.lockupUntil)}</td>
+      <td>${renderLink(vault.name || shortAddress(vault.vaultAddress), vault.url)}</td>
+      <td class="r num">${formatNumber(metrics?.activeValue)}</td>
+      <td class="r num soft">${formatNumber(metrics?.activeCapital)}</td>
+      <td class="r num ${pnlTone}">${formatSignedUSD(pnl)}</td>
+      <td class="r num">${formatPercent(metrics?.activeApr)}</td>
+      <td>${renderDateStack(user?.lockupUntil)}</td>
     </tr>
   `;
 }
@@ -114,13 +114,13 @@ function renderMovementRow(row: CapitalLedgerTransaction): string {
 
   return `
     <tr>
-      <td class="td-date mono">${renderLink(formatDateTime(row.at), row.url ?? '')}</td>
+      <td>${renderDateStack(row.at, row.url ?? '')}</td>
       <td>
-        <span class="badge ${isWithdrawal ? 'capital-badge-withdrawal' : 'capital-badge-deposit'}">
-          ${isWithdrawal ? CAPITAL_COPY.withdrawalLabel : CAPITAL_COPY.depositLabel}
+        <span class="chip ${isWithdrawal ? 'chip-sell' : 'chip-buy'}">
+          <span class="chip-dot"></span>${isWithdrawal ? CAPITAL_COPY.withdrawalLabel : CAPITAL_COPY.depositLabel}
         </span>
       </td>
-      <td class="td-amount mono ${isWithdrawal ? 'text-gain' : 'text-loss'}">${formatSignedUSD(signedAmount)}</td>
+      <td class="r num ${isWithdrawal ? 'gain' : 'loss'}">${formatSignedUSD(signedAmount)}</td>
     </tr>
   `;
 }
@@ -153,6 +153,18 @@ function renderMovementRows(ledger: CapitalLedgerState): string {
   return rows.map(renderMovementRow).join('');
 }
 
+function renderColumns(widths: readonly string[]): string {
+  return widths.map((width) => `<col style="width:${width}">`).join('');
+}
+
+function renderHeaderRow(headers: readonly string[], alignRight: readonly boolean[]): string {
+  return headers
+    .map(
+      (header, index) => `<th scope="col"${alignRight[index] ? ' class="r"' : ''}>${header}</th>`,
+    )
+    .join('');
+}
+
 export function renderCapitalTemplate(input: CapitalTemplateInput): string {
   const { ledger } = input;
   const summary = calculateCapitalLedgerSummary(ledger, {
@@ -160,74 +172,120 @@ export function renderCapitalTemplate(input: CapitalTemplateInput): string {
     useValuationDate: true,
   });
   const contribution = getCapitalLedgerPortfolioContribution(ledger);
-  const pnlTone = contribution.pnl < 0 ? 'loss' : contribution.pnl > 0 ? 'gain' : 'neutral';
-  const aprTone = contribution.apr === null ? 'neutral' : contribution.apr < 0 ? 'loss' : 'accent';
+  const pnlTone = contribution.pnl < 0 ? 'loss' : 'gain';
   const userValue = escapeHtml(ledger.hyperliquid.userAddress);
   const vaultValue = escapeHtml(ledger.hyperliquid.vaultAddress);
+  const vaultWord = contribution.vaultCount === 1 ? 'vault suscrito' : 'vaults suscritos';
 
   return `
-    <section class="section capital-section" aria-labelledby="capital-heading">
-      <div class="section-header">
-        <div>
-          <h2 class="section-title" id="capital-heading">${iconWallet(18)} ${CAPITAL_COPY.title}</h2>
+    <section class="capital-view" aria-labelledby="capital-heading">
+      <h2 class="visually-hidden" id="capital-heading">${CAPITAL_COPY.title}</h2>
+
+      <div class="context">
+        <div class="context-left">
+          <span class="context-title">${CAPITAL_COPY.contextTitle}</span>
+          <span class="context-sep"></span>
+          <span class="context-meta">${CAPITAL_COPY.contextMetaPrefix} · ${contribution.vaultCount} ${vaultWord}</span>
         </div>
-        <div class="capital-status" id="capital-status" role="status" aria-live="polite">${escapeHtml(input.statusText)}</div>
+        <div class="context-actions">
+          <span class="chip">
+            <span class="chip-dot" style="background:var(--gain)"></span>
+            <span id="capital-status" role="status" aria-live="polite">${escapeHtml(input.statusText)}</span>
+          </span>
+        </div>
       </div>
 
-      <div class="capital-metrics-grid" aria-label="Resumen de capital">
-        ${renderMetric('capital-active-value', CAPITAL_COPY.activeValueTitle, formatUSD(summary.activeValue), 'USDC', 'accent')}
-        ${renderMetric('capital-net-capital', CAPITAL_COPY.netCapitalTitle, formatUSD(contribution.investedCapital), 'USDC')}
-        ${renderMetric('capital-pnl', CAPITAL_COPY.pnlTitle, formatSignedUSD(contribution.pnl), 'USDC', pnlTone)}
-        ${renderMetric('capital-apr', CAPITAL_COPY.aprTitle, formatPercent(contribution.apr), 'XIRR anual', aprTone)}
-        ${renderMetric('capital-vault-count', CAPITAL_COPY.vaultsTitle, String(contribution.vaultCount), `${contribution.movementCount} mov.`)}
+      <section class="hero hero-solo">
+        <div class="hero-main">
+          <span class="label">${CAPITAL_COPY.activeValueTitle}</span>
+          <output class="hero-figure" id="capital-active-value" aria-live="polite">${formatUSD(summary.activeValue)}</output>
+          <div class="hero-delta">
+            <output class="${pnlTone}" id="capital-pnl" aria-live="polite">${formatSignedUSD(contribution.pnl)}</output>
+            <span class="hero-delta-sep"></span>
+            <span class="muted">${CAPITAL_COPY.pnlContext}</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="rail rail-4" aria-label="Resumen de capital">
+        <div class="rail-item">
+          <span class="label">${CAPITAL_COPY.netCapitalTitle}</span>
+          <span class="rail-value" id="capital-net-capital">${formatUSD(contribution.investedCapital)}</span>
+          <span class="rail-sub">${CAPITAL_COPY.netCapitalSub}</span>
+        </div>
+        <div class="rail-item">
+          <span class="label">${CAPITAL_COPY.aprTitle}</span>
+          <span class="rail-value" id="capital-apr">${formatPercent(contribution.apr)}</span>
+          <span class="rail-sub">${CAPITAL_COPY.aprSub}</span>
+        </div>
+        <div class="rail-item">
+          <span class="label">${CAPITAL_COPY.vaultsTitle}</span>
+          <span class="rail-value" id="capital-vault-count">${contribution.vaultCount}</span>
+          <span class="rail-sub">${CAPITAL_COPY.vaultsSub}</span>
+        </div>
+        <div class="rail-item">
+          <span class="label">${CAPITAL_COPY.movementsCountTitle}</span>
+          <span class="rail-value" id="capital-movement-count">${contribution.movementCount}</span>
+          <span class="rail-sub">${CAPITAL_COPY.movementsCountSub}</span>
+        </div>
       </div>
 
-      <article class="card capital-controls-card" aria-labelledby="capital-settings-title">
-        <div class="card-title mb-md" id="capital-settings-title">${CAPITAL_COPY.settingsTitle}</div>
-        <div class="capital-controls-grid">
-          <label class="form-group form-group-inline" for="capital-user-address">
-            <span>${CAPITAL_COPY.walletLabel}</span>
-            <input id="capital-user-address" type="text" autocomplete="off" spellcheck="false" placeholder="0x..." value="${userValue}">
-          </label>
-          <label class="form-group form-group-inline" for="capital-vault-address">
-            <span>${CAPITAL_COPY.vaultLabel}</span>
-            <input id="capital-vault-address" type="text" autocomplete="off" spellcheck="false" placeholder="${CAPITAL_COPY.vaultPlaceholder}" value="${vaultValue}">
-          </label>
-          <button class="btn btn-primary capital-sync-btn" id="capital-sync" type="button" ${input.isSyncing ? 'disabled aria-busy="true"' : ''}>
-            ${iconRefreshCw(14)} ${input.isSyncing ? CAPITAL_COPY.statusSyncing : CAPITAL_COPY.syncLabel}
+      <section class="block split">
+        <div>
+          <div class="table-head">
+            <span class="table-title" id="capital-vaults-title">${CAPITAL_COPY.subscribedVaultsTitle}</span>
+            <span class="block-note">${CAPITAL_COPY.subscribedVaultsNote}</span>
+          </div>
+          <div class="table-scroll">
+            <table class="tbl tbl-dense tbl-fixed capital-vaults-table" aria-labelledby="capital-vaults-title">
+              <colgroup>${renderColumns(CAPITAL_COPY.vaultColumnWidths)}</colgroup>
+              <thead>
+                <tr>${renderHeaderRow(CAPITAL_COPY.vaultHeaders, CAPITAL_COPY.vaultHeaderAlign)}</tr>
+              </thead>
+              <tbody id="capital-vaults">${renderVaultRows(ledger)}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="table-head">
+            <span class="table-title" id="capital-movements-title">${CAPITAL_COPY.movementsTitle}</span>
+            <span class="block-note">${contribution.movementCount} registros · capital neto <span class="num">${formatUSD(contribution.investedCapital)}</span></span>
+          </div>
+          <div class="table-scroll">
+            <table class="tbl tbl-dense tbl-fixed" aria-labelledby="capital-movements-title">
+              <colgroup>${renderColumns(CAPITAL_COPY.movementColumnWidths)}</colgroup>
+              <thead>
+                <tr>${renderHeaderRow(CAPITAL_COPY.movementHeaders, CAPITAL_COPY.movementHeaderAlign)}</tr>
+              </thead>
+              <tbody id="capital-movements">${renderMovementRows(ledger)}</tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="capital-settings-title">
+        <div class="table-head">
+          <span class="table-title" id="capital-settings-title">${CAPITAL_COPY.connectionTitle}</span>
+          <span class="block-note">${CAPITAL_COPY.connectionNote}</span>
+        </div>
+        <div class="rule"></div>
+        <div class="connbar">
+          <div class="field">
+            <label class="field-label" for="capital-user-address">${CAPITAL_COPY.walletLabel}</label>
+            <input class="input" id="capital-user-address" type="text" autocomplete="off" spellcheck="false" placeholder="0x..." value="${userValue}">
+          </div>
+          <div class="field">
+            <label class="field-label" for="capital-vault-address">
+              ${CAPITAL_COPY.vaultLabel} <span class="muted capital-optional">${CAPITAL_COPY.vaultLabelOptional}</span>
+            </label>
+            <input class="input" id="capital-vault-address" type="text" autocomplete="off" spellcheck="false" placeholder="${CAPITAL_COPY.vaultPlaceholder}" value="${vaultValue}">
+          </div>
+          <button class="btn btn-sm" id="capital-sync" type="button" ${input.isSyncing ? 'disabled aria-busy="true"' : ''}>
+            ${iconRefreshCw(13)} ${input.isSyncing ? CAPITAL_COPY.statusSyncing : CAPITAL_COPY.syncLabel}
           </button>
         </div>
-      </article>
-
-      <article class="card capital-table-card" aria-labelledby="capital-vaults-title">
-        <div class="capital-card-head">
-          <div class="card-title" id="capital-vaults-title">${CAPITAL_COPY.subscribedVaultsTitle}</div>
-          <span class="text-muted mono">${contribution.vaultCount}</span>
-        </div>
-        <div class="table-container capital-table-wrap">
-          <table class="capital-table">
-            <thead>
-              <tr>${CAPITAL_COPY.vaultHeaders.map((header) => `<th>${header}</th>`).join('')}</tr>
-            </thead>
-            <tbody id="capital-vaults">${renderVaultRows(ledger)}</tbody>
-          </table>
-        </div>
-      </article>
-
-      <article class="card capital-table-card" aria-labelledby="capital-movements-title">
-        <div class="capital-card-head">
-          <div class="card-title" id="capital-movements-title">${CAPITAL_COPY.movementsTitle}</div>
-          <span class="text-muted mono">${contribution.movementCount}</span>
-        </div>
-        <div class="table-container capital-table-wrap">
-          <table class="capital-table">
-            <thead>
-              <tr>${CAPITAL_COPY.movementHeaders.map((header) => `<th>${header}</th>`).join('')}</tr>
-            </thead>
-            <tbody id="capital-movements">${renderMovementRows(ledger)}</tbody>
-          </table>
-        </div>
-      </article>
+      </section>
     </section>
   `;
 }

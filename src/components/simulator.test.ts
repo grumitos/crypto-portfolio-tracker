@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from '#test';
 import { renderSimulator } from './simulator';
+import { renderProjectionChart } from './simulator.template';
 import { SIMULATOR_VIEW_KEY, getDefaultCapitalLedgerState, saveState } from '../utils/storage';
-import type { AppState } from '../types';
+import type { AppState, ProjectionRow } from '../types';
 import * as calculator from '../utils/calculator';
 import * as animation from '../utils/animation';
 import { createMemoryStorage, flushMicrotasks, mockMatchMedia, resetDom } from '../test/test-utils';
@@ -29,7 +30,6 @@ interface SeedSimulatorOptions {
   totalInvested?: number;
   goalAmount?: number;
   currentBalance?: number;
-  savings?: number;
   positions?: AppState['positions'];
   capitalLedger?: AppState['capitalLedger'];
 }
@@ -85,20 +85,33 @@ function mockAutoMetrics({
   });
 }
 
+function chartRows(balances: number[]): ProjectionRow[] {
+  return balances.map((balance, month) => ({
+    month,
+    date: `2026-${String(month + 1).padStart(2, '0')}-15`,
+    balance,
+    earned: balance - balances[0],
+  }));
+}
+
+function renderChartHost(
+  input: Omit<Parameters<typeof renderProjectionChart>[0], 'formatDate'>,
+): HTMLElement {
+  const host = document.createElement('div');
+  host.innerHTML = renderProjectionChart({ ...input, formatDate: (value) => value });
+  return host;
+}
+
 function seedState(options: SeedSimulatorOptions = {}): void {
   const state: AppState = {
     portfolio: {
       totalInvested: options.totalInvested ?? 1200,
       currentBalance: options.currentBalance ?? 1000,
-      savings: options.savings ?? 1000,
       goalAmount: options.goalAmount ?? 1500,
       lastUpdated: '2026-02-21',
       balanceHistory: [{ date: '2026-02-21', balance: options.currentBalance ?? 1000 }],
     },
     positions: options.positions ?? [DEFAULT_POSITION],
-    manualPositions: options.positions ?? [DEFAULT_POSITION],
-    autoPositions: [],
-    positionsConfig: { mode: 'manual' },
     capitalLedger: options.capitalLedger ?? getDefaultCapitalLedgerState(),
   };
 
@@ -139,24 +152,22 @@ describe('simulator dual milestones', () => {
     container.remove();
   });
 
-  it('shows projection table skeleton on initial load without a chart', () => {
+  it('shows the projection chart and table skeletons on initial load', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const dispose = renderSimulator(container);
 
-    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe(
-      'block',
-    );
-    expect(container.querySelector('#projection-chart')).toBeNull();
-    expect(container.querySelector('#sim-projection-chart-skeleton')).toBeNull();
-    expect(container.querySelector('#sim-table .sim-projection-table-skeleton')).not.toBeNull();
+    expect((container.querySelector('#sim-table-container') as HTMLElement).hidden).toBe(false);
+    expect(container.querySelector('#projection-chart')).not.toBeNull();
+    expect(container.querySelector('#sim-projection-chart-skeleton')).not.toBeNull();
+    expect(container.querySelector('#sim-table .sim-projection-skeleton')).not.toBeNull();
 
     dispose();
     container.remove();
   });
 
   it('marks milestone rows in the projection table', async () => {
-    seedState({ currentBalance: 400, savings: 0, totalInvested: 410, goalAmount: 430 });
+    seedState({ currentBalance: 400, totalInvested: 410, goalAmount: 430 });
     mockAutoMetrics({ totalUsd: 400, weightedApr: 35 });
 
     const container = document.createElement('div');
@@ -169,8 +180,31 @@ describe('simulator dual milestones', () => {
     );
 
     expect(headers).toContain('Hito');
-    expect(container.querySelector('.sim-projection-badge-be')).not.toBeNull();
-    expect(container.querySelector('.sim-projection-badge-goal')).not.toBeNull();
+    expect(container.querySelector('[data-projection-cell="milestone"] .chip-warn')).not.toBeNull();
+    expect(container.querySelector('[data-projection-cell="milestone"] .chip-gain')).not.toBeNull();
+
+    dispose();
+    container.remove();
+  });
+
+  it('draws the projection curve from the generated rows', async () => {
+    seedState({ currentBalance: 400, totalInvested: 410, goalAmount: 430 });
+    mockAutoMetrics({ totalUsd: 400, weightedApr: 35 });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderSimulator(container);
+    await flushMicrotasks();
+
+    const chart = container.querySelector('#projection-chart') as HTMLElement;
+    expect(chart.querySelector('#sim-projection-chart-skeleton')).toBeNull();
+
+    const line = chart.querySelector('.ch-line') as SVGPathElement | null;
+    expect(line).not.toBeNull();
+    // Mes 0 (hoy) + 12 meses proyectados = 13 vertices.
+    expect((line?.getAttribute('d') ?? '').split('L')).toHaveLength(13);
+    expect(chart.querySelector('.ch-dot-be')).not.toBeNull();
+    expect(chart.querySelector('.ch-dot-goal')).not.toBeNull();
 
     dispose();
     container.remove();
@@ -366,7 +400,6 @@ describe('simulator dual milestones', () => {
   it('uses combined balance with active earning capital for AUTO values', async () => {
     seedState({
       currentBalance: 41055,
-      savings: 40000,
       totalInvested: 40000,
       goalAmount: 45000,
     });
@@ -409,7 +442,6 @@ describe('simulator dual milestones', () => {
     ];
     seedState({
       currentBalance: 41055,
-      savings: 40000,
       totalInvested: 40000,
       goalAmount: 45000,
       capitalLedger,
@@ -440,7 +472,6 @@ describe('simulator dual milestones', () => {
   it('uses edited capital and APR as a manual calculator after AUTO values hydrate', async () => {
     seedState({
       currentBalance: 41055,
-      savings: 40000,
       totalInvested: 40000,
       goalAmount: 45000,
     });
@@ -567,9 +598,8 @@ describe('simulator dual milestones', () => {
 
     expect((container.querySelector('#sim-out-be-date') as HTMLElement).textContent).toBe('---');
     expect((container.querySelector('#sim-out-goal-date') as HTMLElement).textContent).toBe('---');
-    expect((container.querySelector('#sim-table-container') as HTMLElement).style.display).toBe(
-      'none',
-    );
+    expect((container.querySelector('#sim-table-container') as HTMLElement).hidden).toBe(true);
+    expect((container.querySelector('#sim-chart-block') as HTMLElement).hidden).toBe(true);
 
     dispose();
     container.remove();
@@ -604,6 +634,63 @@ describe('simulator dual milestones', () => {
 
     dispose();
     container.remove();
+  });
+
+  it('keeps milestone labels out of the SVG for every data set', () => {
+    // Hitos muy separados y hitos casi pegados: dentro del SVG ambos rotulos
+    // acababan en la misma `y` y se superponian sobre la curva.
+    const dataSets = [
+      { invested: 1000, goal: 12000 },
+      { invested: 9000, goal: 9050 },
+    ];
+
+    dataSets.forEach(({ invested, goal }) => {
+      const host = renderChartHost({
+        rows: chartRows([900, 3000, 6000, 9200, 12500]),
+        invested,
+        goal,
+        breakEvenMilestone: { label: 'Breakeven', amount: '$9,000.00', date: '24/11/2026' },
+        goalMilestone: { label: 'Meta', amount: '$100,000.00', date: '24/12/2028' },
+      });
+
+      expect(host.querySelector('svg text')).toBeNull();
+      expect(host.querySelectorAll('.chart-legend-item').length).toBe(2);
+      expect(host.querySelector('.chart-legend .chip-warn')).not.toBeNull();
+      expect(host.querySelector('.chart-legend .chip-gain')).not.toBeNull();
+      expect(host.querySelector('.chart-legend svg')).toBeNull();
+      expect(host.querySelectorAll('.ch-guide').length).toBe(2);
+    });
+  });
+
+  it('drops the milestone that does not apply instead of leaving a stray dot', () => {
+    const host = renderChartHost({
+      rows: chartRows([900, 1100, 1400, 1800, 2300]),
+      invested: 1000,
+      goal: 0,
+      breakEvenMilestone: { label: 'Breakeven', amount: '$1,000.00', date: '15/03/2026' },
+      goalMilestone: null,
+    });
+
+    expect(host.querySelectorAll('.chart-legend-item').length).toBe(1);
+    expect(host.querySelector('.chart-legend .chip-gain')).toBeNull();
+    expect(host.querySelector('.ch-dot-goal')).toBeNull();
+    expect(host.querySelectorAll('.ch-guide').length).toBe(1);
+  });
+
+  it('omits the separator when a milestone has no projected date', () => {
+    const host = renderChartHost({
+      rows: chartRows([900, 1100, 1400, 1800, 2300]),
+      invested: 1000,
+      goal: 50000,
+      breakEvenMilestone: { label: 'Breakeven', amount: '$1,000.00', date: '15/03/2026' },
+      goalMilestone: { label: 'Meta', amount: '$50,000.00', date: null },
+    });
+
+    const items = Array.from(host.querySelectorAll('.chart-legend-item')).map((item) =>
+      (item.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+
+    expect(items).toEqual(['Breakeven $1,000.00 · 15/03/2026', 'Meta $50,000.00']);
   });
 
   it('handles auto-value hydration failures by reporting API error', async () => {

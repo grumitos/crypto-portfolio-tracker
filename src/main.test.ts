@@ -44,19 +44,10 @@ vi.mock('./utils/api-status', () => ({
 }));
 
 vi.mock('./utils/icons', () => ({
-  iconDashboard: vi.fn(() => '<span></span>'),
-  iconLayers: vi.fn(() => '<span></span>'),
-  iconTrendingUp: vi.fn(() => '<span></span>'),
-  iconCalculator: vi.fn(() => '<span></span>'),
   iconSettings: vi.fn(() => '<span></span>'),
   iconRefreshCw: vi.fn(() => '<span></span>'),
   iconSun: vi.fn(() => '<span></span>'),
   iconMoon: vi.fn(() => '<span></span>'),
-  iconWallet: vi.fn(() => '<span></span>'),
-}));
-
-vi.mock('./utils/number-stepper', () => ({
-  enhanceNumberSteppers: vi.fn(),
 }));
 
 vi.mock('./utils/router', () => ({
@@ -87,7 +78,6 @@ vi.mock('./components/app-shell.template', () => ({
 }));
 
 vi.mock('./utils/binance-auth', () => ({
-  isAutoMode: vi.fn(() => true),
   saveApiCredentials: vi.fn(),
 }));
 
@@ -130,13 +120,13 @@ vi.mock('./utils/notifications', () => ({
 import { syncPositionsFromBinance } from './utils/binance-sync';
 import { showApiErrorBanner } from './utils/notifications';
 
-describe('app shell manual exchange sync', () => {
+describe('app shell exchange sync', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="app"></div>';
     vi.clearAllMocks();
   });
 
-  it('shows a banner instead of leaking a rejection when manual sync fails', async () => {
+  it('shows a banner instead of leaking a rejection when the sync fails', async () => {
     vi.mocked(syncPositionsFromBinance).mockRejectedValue(
       new Error('No se pudieron leer saldos de exchanges configurados.'),
     );

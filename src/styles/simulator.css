@@ -1,347 +1,65 @@
-.simulator-shell {
-  align-items: stretch;
+/* ── Simulador ── */
+
+/* Parametros a la izquierda, resultados (y curva) a la derecha */
+.hero.sim-hero {
+  grid-template-columns: 296px minmax(0, 1fr);
+  gap: 64px;
 }
 
-.sim-parameters-card {
-  background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-secondary));
+/* El filete que abre el bloque de la curva se separa un punto del hito de BE */
+.sim-hero .rule:has(+ #sim-chart-block) {
+  margin-top: 6px;
 }
 
-.sim-parameters-card .card-title,
-.sim-results-card .card-title,
-.sim-projection-card .card-title {
-  font-size: var(--font-size-meta);
+/* La cabecera de la curva cuelga del filete anterior: respira arriba y ajusta abajo */
+#sim-chart-block .table-head {
+  padding: 16px 0 10px;
 }
 
-.sim-parameters-card .form-group label {
-  font-size: var(--font-size-meta);
+.tbl.sim-projection-table {
+  min-width: 620px;
 }
 
-.sim-parameters-card .hint-text {
-  font-size: var(--font-size-meta);
-}
-
-.sim-results-card {
-  border-color: color-mix(in srgb, var(--accent-warm) 24%, var(--border));
-  background: color-mix(in srgb, var(--accent-warm-muted) 10%, var(--bg-card));
-}
-
-.sim-projection-card {
-  background: color-mix(in srgb, var(--bg-card) 84%, var(--bg-secondary));
-}
-
-.sim-projection-card-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-md);
-}
-
-.sim-projection-context {
-  max-width: 18rem;
-  font-size: var(--font-size-meta);
-  line-height: 1.35;
-  color: var(--text-muted);
-  text-align: right;
-}
-
-.sim-actions {
-  margin-top: var(--space-sm);
-}
-
-/* ── Simulator Results ── */
-.sim-results-container {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  min-height: 0;
-}
-
-.sim-milestones-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-md);
-}
-
-.sim-milestone-col {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0.82rem;
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-card) 74%, var(--bg-secondary));
-}
-
-.sim-result-item {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.sim-result-label {
-  font-size: var(--font-size-overline);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  line-height: 1.2;
-}
-
-.sim-result-value {
-  font-family: var(--font-family-mono);
-  font-variant-numeric: tabular-nums;
-  min-height: 1.35em;
-  display: flex;
-  align-items: center;
-  line-height: 1.15;
-}
-
-.sim-result-value.big {
-  font-size: var(--font-size-number-lg);
-  font-weight: 500;
-}
-
-.sim-result-value.medium {
-  font-size: var(--font-size-number-sm);
-}
-
-.sim-result-value.small {
-  font-size: var(--font-size-body);
-}
-
-.sim-projection-card .table-container {
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-secondary));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-card) 24%, transparent);
-  overflow: auto;
-}
-
-.sim-projection-card table {
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-  width: 100%;
-  min-width: 760px;
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
-}
-
-.sim-projection-card th {
-  font-size: var(--font-size-meta);
-  font-family: var(--font-family-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
-  text-align: left;
-  padding: 0.78rem 0.95rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-  white-space: nowrap;
-}
-
-.sim-projection-card th:nth-child(1) {
-  text-align: center;
-}
-
-.sim-projection-card th:nth-child(3),
-.sim-projection-card th:nth-child(4) {
-  text-align: right;
-}
-
-.sim-projection-card td {
-  font-size: var(--font-size-body);
-  padding: 0.82rem 0.95rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  color: var(--text-secondary);
-  white-space: nowrap;
-  background: transparent;
-  transition:
-    background-color 0.18s var(--ease-out),
-    color 0.18s var(--ease-out),
-    box-shadow 0.18s var(--ease-out);
-}
-
-.sim-projection-card tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.sim-projection-card tbody tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--bg-secondary) 42%, transparent);
-}
-
-.sim-projection-card tbody tr:hover td {
-  background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
-}
-
-.sim-projection-col-month {
-  width: 72px;
-}
-
-.sim-projection-col-date {
-  width: 148px;
-}
-
-.sim-projection-col-balance,
-.sim-projection-col-earned {
-  width: auto;
-}
-
-.sim-projection-col-milestone {
-  width: 124px;
-}
-
-.sim-projection-cell-month {
-  text-align: center;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.sim-projection-cell-balance,
-.sim-projection-cell-earned {
-  text-align: right;
-  color: var(--text-primary);
-}
-
-.sim-projection-value-positive,
-.sim-projection-cell-earned.text-gain {
-  color: var(--color-gain);
-  font-weight: 600;
-}
-
-.sim-projection-cell-date {
-  color: var(--text-primary);
-}
-
-.sim-projection-cell-milestone {
-  text-align: left;
+.sim-projection-value-positive {
+  color: var(--ink);
 }
 
 .sim-projection-badges {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
-.sim-projection-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.35rem;
-  padding: 0 0.48rem;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: var(--radius-xs);
-  font-size: var(--font-size-overline);
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-card));
+/* Filas que cruzan un hito: filete inferior teñido, sin caja */
+.sim-projection-table tbody tr.sim-row-cross-be td {
+  border-bottom-color: var(--warn);
 }
 
-.sim-projection-empty {
-  color: var(--text-muted);
+.sim-projection-table tbody tr.sim-row-cross-goal td {
+  border-bottom-color: var(--gain);
 }
 
-.sim-skeleton-w-22 {
-  width: 22px;
-}
-
-.sim-skeleton-w-36 {
-  width: 36px;
-}
-
-.sim-skeleton-w-60 {
-  width: 60px;
-}
-
-.sim-skeleton-w-72 {
-  width: 72px;
-}
-
-.sim-skeleton-w-74 {
-  width: 74px;
-}
-
-.sim-skeleton-w-84 {
-  width: 84px;
-}
-
-.sim-skeleton-w-92 {
-  width: 92px;
-}
-
-.sim-skeleton-w-94 {
-  width: 94px;
-}
-
-.sim-skeleton-w-100 {
-  width: 100px;
-}
-
-.sim-skeleton-w-108 {
-  width: 108px;
-}
-
-.sim-skeleton-w-116 {
-  width: 116px;
-}
-
-.sim-skeleton-w-140 {
-  width: 140px;
-}
-
-.sim-skeleton-h-xs {
-  height: 0.78rem;
-}
-
-.sim-skeleton-h-sm {
-  height: 0.95rem;
-}
-
-.sim-skeleton-h-md {
-  height: 1.1rem;
-}
-
-.sim-projection-table-skeleton {
+/* Estado de carga de la tabla de proyección */
+.sim-projection-skeleton {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 4px;
+  gap: 14px;
+  padding-top: 6px;
 }
 
-.sim-projection-table-head,
-.sim-projection-table-row {
+.sim-projection-skeleton-row {
   display: grid;
-  grid-template-columns: 52px 1fr 1fr 1.2fr 76px;
+  grid-template-columns: 56px 1fr 1fr 1fr 120px;
   gap: 12px;
 }
 
-@media (max-width: 768px) {
-  .simulator-shell {
-    grid-template-columns: 1fr;
-  }
+.sim-projection-skeleton-row .skeleton {
+  min-width: 0;
+  height: 14px;
+}
 
-  .sim-projection-card-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .sim-projection-context {
-    max-width: none;
-    text-align: left;
-  }
-
-  .sim-projection-card table {
-    min-width: 700px;
-  }
-
-  .sim-projection-card th,
-  .sim-projection-card td {
-    padding: 0.74rem 0.72rem;
-  }
-
-  .sim-projection-col-date {
-    width: 132px;
+@media (max-width: 1100px) {
+  .hero.sim-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-lg);
   }
 }

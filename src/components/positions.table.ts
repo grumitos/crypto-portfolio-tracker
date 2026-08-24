@@ -1,4 +1,4 @@
-import { formatDateLatin, formatUSDCompact } from '../utils/calculator';
+import { formatUSDCompact } from '../utils/calculator';
 import {
   calculateDualElapsedBilledDays,
   calculateDualProjectedBilledDays,
@@ -8,8 +8,10 @@ import {
   resolveDualSettlementAt,
 } from '../utils/dual-yield';
 import { ONE_DAY_MS, ONE_MINUTE_MS, ONE_SECOND_MS } from '../utils/constants';
+import { formatTimeHHMMLocal } from '../utils/date';
 import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-logos';
 import { escapeHtml } from '../utils/ui-helpers';
+import { POSITIONS_COPY } from './positions.constants';
 import type { DualPosition } from '../types';
 
 type PositionFieldId =
@@ -19,8 +21,7 @@ type PositionFieldId =
   | 'usd'
   | 'target'
   | 'outcome'
-  | 'subscription'
-  | 'settlement'
+  | 'window'
   | 'earnings'
   | 'remaining';
 
@@ -41,11 +42,21 @@ interface PositionCellRender {
   html: string;
 }
 
+interface OutcomeRow {
+  label: string;
+  amount: number;
+  asset: string;
+  /** El desenlace convierte el activo suscrito: se enfatiza en color, no en tamano. */
+  changed: boolean;
+}
+
 interface PositionField {
   id: PositionFieldId;
   heading: string;
   label: string;
-  colClass: string;
+  /** Anchos del <colgroup> por direccion; la tabla es table-layout: fixed. */
+  width: { buyLow: string; sellHigh: string };
+  align?: 'right';
   include?: (context: { showUsdColumn: boolean }) => boolean;
   cellClass?: string | ((context: PositionRenderContext) => string);
   render: (context: PositionRenderContext) => PositionCellRender;
@@ -56,25 +67,32 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
   const safeTitle = escapeHtml(title);
   const groupSummary = `${positions.length} posicion${positions.length > 1 ? 'es' : ''}`;
   const fields = getPositionFields(!isBuyLow);
+  const note = isBuyLow ? POSITIONS_COPY.buyLowNote : POSITIONS_COPY.sellHighNote;
   return `
-    <div class="card positions-group-card">
-      <div class="flex-between positions-group-head">
-        <div class="card-title form-group-inline">
-          <span class="badge ${isBuyLow ? 'badge-buy' : 'badge-sell'}">${safeTitle}</span>
-          <span class="positions-group-count">${groupSummary}</span>
-        </div>
+    <section class="block positions-group">
+      <div class="table-head">
+        <span class="table-title">
+          <span class="chip ${isBuyLow ? 'chip-buy' : 'chip-sell'}"><span class="chip-dot"></span>${safeTitle}</span>
+          ${groupSummary}
+        </span>
+        <span class="block-note">${note}</span>
       </div>
-      <div class="table-container">
-        <table class="positions-table ${isBuyLow ? 'positions-table--buy-low' : 'positions-table--sell-high'}" aria-label="Tabla de posiciones ${safeTitle}">
+      <div class="table-scroll">
+        <table class="tbl tbl-dense tbl-fixed positions-table" aria-label="Tabla de posiciones ${safeTitle}">
           <caption class="visually-hidden">
             ${safeTitle}: ${groupSummary}
           </caption>
           <colgroup>
-            ${fields.map((field) => `<col class="${field.colClass}" data-field="${field.id}">`).join('')}
+            ${fields.map((field) => `<col style="width:${isBuyLow ? field.width.buyLow : field.width.sellHigh}" data-field="${field.id}">`).join('')}
           </colgroup>
           <thead>
             <tr>
-              ${fields.map((field) => `<th scope="col" class="pos-head-cell pos-head-cell--${field.id}" data-field="${field.id}">${field.heading}</th>`).join('')}
+              ${fields
+                .map(
+                  (field) =>
+                    `<th scope="col"${field.align === 'right' ? ' class="r"' : ''} data-field="${field.id}">${field.heading}</th>`,
+                )
+                .join('')}
             </tr>
           </thead>
           <tbody>
@@ -82,7 +100,7 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   `;
 }
 
@@ -92,21 +110,18 @@ const POSITION_FIELDS: PositionField[] = [
     id: 'asset',
     heading: 'Activo',
     label: 'Activo',
-    colClass: 'col-pos-asset',
-    cellClass: 'pos-product-cell',
+    width: { buyLow: '16%', sellHigh: '15%' },
     render: ({ position, rowKind }) => ({
-      html:
-        rowKind === 'component'
-          ? ''
-          : `<span class="pos-product-label">${productLabelHtml(position)}</span>`,
+      html: rowKind === 'component' ? '' : productLabelHtml(position),
     }),
   },
   {
     id: 'amount',
     heading: 'Monto',
     label: 'Monto',
-    colClass: 'col-pos-amount',
-    cellClass: 'mono',
+    width: { buyLow: '13%', sellHigh: '12%' },
+    align: 'right',
+    cellClass: 'r num',
     render: ({ position }) => ({
       html: formatAmount(position.amount, position.subscriptionAsset),
     }),
@@ -115,16 +130,18 @@ const POSITION_FIELDS: PositionField[] = [
     id: 'apr',
     heading: 'APR',
     label: 'APR',
-    colClass: 'col-pos-apr',
+    width: { buyLow: '9%', sellHigh: '8%' },
+    align: 'right',
     render: ({ position, rowKind }) => renderAprCell(position, rowKind),
   },
   {
     id: 'usd',
     heading: 'Valor USD',
     label: 'Valor USD',
-    colClass: 'col-pos-usd',
+    width: { buyLow: '0%', sellHigh: '10%' },
+    align: 'right',
     include: ({ showUsdColumn }) => showUsdColumn,
-    cellClass: 'mono pos-usd-cell',
+    cellClass: 'r num',
     render: ({ position, parent, componentId, rowKind }) => ({
       id:
         rowKind === 'component'
@@ -137,8 +154,9 @@ const POSITION_FIELDS: PositionField[] = [
     id: 'target',
     heading: 'Target',
     label: 'Target',
-    colClass: 'col-pos-target',
-    cellClass: 'mono',
+    width: { buyLow: '13%', sellHigh: '10%' },
+    align: 'right',
+    cellClass: 'r num',
     render: ({ position }) => ({
       html: position.targetPrice > 0 ? formatTargetPrice(position.targetPrice) : '---',
     }),
@@ -147,44 +165,26 @@ const POSITION_FIELDS: PositionField[] = [
     id: 'outcome',
     heading: 'Resultado',
     label: 'Resultado',
-    colClass: 'col-pos-outcome',
-    cellClass: 'pos-outcome-cell',
+    width: { buyLow: '17%', sellHigh: '15%' },
+    align: 'right',
+    cellClass: 'r',
     render: ({ position }) => ({ html: renderOutcomeCell(position) }),
   },
   {
-    id: 'subscription',
-    heading: 'Suscrip.',
-    label: 'Suscripción',
-    colClass: 'col-pos-subscription',
-    cellClass: 'pos-datetime-cell',
+    id: 'window',
+    heading: 'Ventana',
+    label: 'Ventana',
+    width: { buyLow: '13%', sellHigh: '12%' },
     render: ({ position, rowKind }) => ({
-      html: renderDateTimeCell(
-        position.entryDate,
-        rowKind === 'main' ? getDateTimeHint(position, 'entry') : null,
-      ),
-    }),
-  },
-  {
-    id: 'settlement',
-    heading: 'Liq.',
-    label: 'Liquidación',
-    colClass: 'col-pos-settlement',
-    cellClass: 'pos-datetime-cell',
-    render: ({ position, rowKind }) => ({
-      html:
-        position.positionKind === 'derivative'
-          ? '<span class="pos-date-value">---</span>'
-          : renderDateTimeCell(
-              position.settlementDate,
-              rowKind === 'main' ? getDateTimeHint(position, 'settlement') : null,
-            ),
+      html: renderWindowCell(position, rowKind === 'main'),
     }),
   },
   {
     id: 'earnings',
     heading: 'Ganancia',
     label: 'Ganancia',
-    colClass: 'col-pos-earnings',
+    width: { buyLow: '12%', sellHigh: '11%' },
+    align: 'right',
     render: ({ position, rowKind }) => {
       const projectedEarned =
         position.positionKind === 'derivative'
@@ -199,15 +199,12 @@ const POSITION_FIELDS: PositionField[] = [
   },
   {
     id: 'remaining',
-    heading: 'Rest.',
+    heading: 'Restante',
     label: 'Restante',
-    colClass: 'col-pos-remaining',
-    cellClass: ({ hasComponents }) => `pos-row-tail${hasComponents ? ' pos-row-tail-grouped' : ''}`,
+    width: { buyLow: '7%', sellHigh: '7%' },
+    align: 'right',
+    cellClass: 'r',
     render: ({ position, parent, componentId, rowKind, hasComponents }) => {
-      const daysDisplay =
-        position.positionKind === 'derivative'
-          ? '<span class="mono pos-remaining-value pos-remaining-value--accent">Abierta</span>'
-          : formatRemainingTime(position);
       const remainingId =
         rowKind === 'component'
           ? `position-remaining-${parent!.id}-comp-${componentId}`
@@ -215,16 +212,16 @@ const POSITION_FIELDS: PositionField[] = [
       const toggle =
         rowKind === 'main' && hasComponents
           ? `
-            <button type="button" class="pos-components-summary" data-toggle-components aria-expanded="false" aria-label="Ver desglose de la posicion">
+            <button type="button" class="btn btn-ghost btn-sm pos-components-summary" data-toggle-components aria-expanded="false" aria-label="Ver desglose de la posicion">
               <span class="pos-components-chevron" aria-hidden="true">▸</span>
-              Ver desglose (${position.components!.length})
+              Desglose (${position.components!.length})
             </button>
           `
           : '';
       return {
         html: `
-        <span class="pos-row-tail-content">
-          <span id="${escapeHtml(remainingId)}">${daysDisplay}</span>
+        <span class="cell-stack r">
+          <span id="${escapeHtml(remainingId)}">${formatRemainingTime(position)}</span>
           ${toggle}
         </span>
       `,
@@ -245,7 +242,7 @@ function classNames(...values: Array<string | undefined | false>): string {
 function getCellClass(field: PositionField, context: PositionRenderContext): string {
   const fieldClass =
     typeof field.cellClass === 'function' ? field.cellClass(context) : field.cellClass;
-  return classNames('pos-cell', `pos-cell--${field.id}`, fieldClass);
+  return classNames(`pos-cell--${field.id}`, fieldClass);
 }
 
 function renderPositionCells(context: PositionRenderContext): string {
@@ -283,19 +280,19 @@ function renderAprCell(position: DualPosition, rowKind: PositionRowKind): Positi
   const id = rowKind === 'main' ? `position-apr-${position.id}` : undefined;
 
   if (position.positionKind === 'derivative') {
-    return { className: 'mono pos-emphasis', html: '---' };
+    return { className: 'r num', html: '---' };
   }
 
   if (position.positionKind === 'discount-buy') {
     return {
-      className: 'mono pos-emphasis text-muted',
+      className: 'r num muted',
       id,
       html: '<span class="skeleton skeleton-number" style="width:64px"></span>',
     };
   }
 
   return {
-    className: 'mono pos-emphasis',
+    className: 'r num',
     id,
     html: `${position.apr.toFixed(2)}%`,
   };
@@ -307,7 +304,7 @@ function renderEarningsCell(
 ): { className: string; html: string } {
   if (position.positionKind === 'discount-buy') {
     return {
-      className: 'mono pos-earn-cell pos-earn-cell--market text-muted',
+      className: 'r num muted',
       html: '<span class="skeleton skeleton-number" style="width:72px"></span>',
     };
   }
@@ -317,7 +314,7 @@ function renderEarningsCell(
     ? formatUSDCompact(projectedEarned)
     : formatPositionEarnings(position, projectedEarned);
   return {
-    className: 'mono pos-earn-cell',
+    className: 'r num gain',
     html: `${isDerivative && projectedEarned < 0 ? '' : '+'}${projectedEarnedStr}`,
   };
 }
@@ -353,7 +350,7 @@ function renderComponentRows(parent: DualPosition, options: { showUsdColumn: boo
 
 function initialUsdCellHtml(position: DualPosition): string {
   if (position.direction === 'buy-low') {
-    return '<span class="pos-muted-dash">---</span>';
+    return '<span class="muted">---</span>';
   }
   if (position.positionKind === 'derivative' && Number.isFinite(position.notionalUsd)) {
     return formatUSDCompact(position.notionalUsd ?? 0);
@@ -363,46 +360,51 @@ function initialUsdCellHtml(position: DualPosition): string {
 
 function renderOutcomeCell(position: DualPosition): string {
   if (position.positionKind === 'derivative') {
-    return '<span class="pos-outcome-muted">Mercado abierto</span>';
+    return '<span class="muted">Mercado abierto</span>';
   }
 
   if (position.positionKind === 'discount-buy') {
     return renderDiscountBuyOutcomeCell(position);
   }
 
-  const rows = resolveOutcomeRows(position);
-  return `
-    <span class="pos-outcome-stack">
-      ${rows
-        .map(
-          (row) => `
-            <span class="pos-outcome-line ${row.changed ? 'pos-outcome-line--change' : ''}">
-              <span class="pos-outcome-label">${escapeHtml(row.label)}</span>
-              <span class="mono pos-outcome-value">${formatAmount(row.amount, row.asset)}</span>
-            </span>
-          `,
-        )
-        .join('')}
-    </span>
-  `;
+  return renderOutcomeRows(resolveOutcomeRows(position));
 }
 
 function renderDiscountBuyOutcomeCell(position: DualPosition): string {
   const purchaseAmount = position.targetPrice > 0 ? position.amount / position.targetPrice : 0;
 
+  return renderOutcomeRows([
+    { label: 'Compra', amount: purchaseAmount, asset: position.asset, changed: true },
+  ]);
+}
+
+/**
+ * Los desenlaces de una posicion (ejecutado / no ejecutado) son datos pares:
+ * comparten tamano, familia mono y cifras tabulares. La rejilla reparte
+ * etiqueta, importe y unidad en columnas propias para que las cifras queden a
+ * plomo aunque los tickers midan distinto; el desenlace convertido solo se
+ * distingue por color.
+ */
+function renderOutcomeRows(rows: OutcomeRow[]): string {
   return `
-    <span class="pos-outcome-stack">
-      <span class="pos-outcome-line pos-outcome-line--compact pos-outcome-line--change">
-        <span class="pos-outcome-label">Compra</span>
-        <span class="mono pos-outcome-value">${formatAmount(purchaseAmount, position.asset)}</span>
-      </span>
+    <span class="pos-outcome">
+      ${rows
+        .map((row) => {
+          const amount = formatAmountParts(row.amount, row.asset);
+          return `
+            <span class="pos-outcome-row${row.changed ? ' is-converted' : ''}">
+              <span class="muted pos-outcome-label">${escapeHtml(row.label)}</span>
+              <span class="num pos-outcome-amount">${amount.value}</span>
+              <span class="pos-outcome-asset">${amount.asset}</span>
+            </span>
+          `;
+        })
+        .join('')}
     </span>
   `;
 }
 
-function resolveOutcomeRows(
-  position: DualPosition,
-): Array<{ label: string; amount: number; asset: string; changed: boolean }> {
+function resolveOutcomeRows(position: DualPosition): OutcomeRow[] {
   const projectedProfit = calculateDualProjectedProfit(position);
 
   if (position.direction === 'buy-low') {
@@ -439,10 +441,7 @@ function resolveOutcomeRows(
   ]);
 }
 
-function applyExpectedSettlementRow(
-  position: DualPosition,
-  rows: Array<{ label: string; amount: number; asset: string; changed: boolean }>,
-): Array<{ label: string; amount: number; asset: string; changed: boolean }> {
+function applyExpectedSettlementRow(position: DualPosition, rows: OutcomeRow[]): OutcomeRow[] {
   if (
     !position.expectedSettlementAsset ||
     !Number.isFinite(position.expectedSettlementAmount) ||
@@ -463,17 +462,41 @@ function applyExpectedSettlementRow(
   });
 }
 
+/**
+ * Fraccion de la ventana ya transcurrida (0-100). Reutiliza el calculo de dias
+ * facturados que ya alimenta la ganancia proyectada.
+ */
+function elapsedWindowPct(position: DualPosition): number {
+  const total = calculateDualProjectedBilledDays(position);
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  const elapsed = calculateDualElapsedBilledDays(position);
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
+  return Math.max(0, Math.min(100, (elapsed / total) * 100));
+}
+
+function renderMiniBar(position: DualPosition): string {
+  const pct = elapsedWindowPct(position);
+  const isClosing = pct >= 70;
+  return `<span class="mini-bar" aria-hidden="true"><span${isClosing ? ' class="is-warn"' : ''} style="width:${pct.toFixed(1)}%"></span></span>`;
+}
+
 function formatRemainingTime(position: DualPosition): string {
+  if (position.positionKind === 'derivative') {
+    return '<span class="num soft">Abierta</span>';
+  }
+
   const remainingMs = getRemainingMsToSettlement(position);
   const isSettled = isDualSettlementReached(position);
 
   if (isSettled) {
-    return '<span class="mono pos-remaining-value pos-remaining-value--muted">Liquidada</span>';
+    return '<span class="num muted">Liquidada</span>';
   }
+
+  const bar = renderMiniBar(position);
 
   if (Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_MINUTE_MS) {
     const totalSecondsRemaining = Math.max(1, Math.ceil(remainingMs / ONE_SECOND_MS));
-    return `<span class="mono pos-remaining-value pos-remaining-value--accent">${totalSecondsRemaining}s</span>`;
+    return `<span class="num warn">${totalSecondsRemaining}s</span>${bar}`;
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs < ONE_DAY_MS) {
@@ -481,16 +504,16 @@ function formatRemainingTime(position: DualPosition): string {
     const hours = Math.floor(totalMinutesRemaining / 60);
     const minutes = totalMinutesRemaining % 60;
     const minutesLabel = String(minutes).padStart(2, '0');
-    return `<span class="mono pos-remaining-value pos-remaining-value--accent">${hours}h ${minutesLabel}m</span>`;
+    return `<span class="num warn">${hours}h ${minutesLabel}m</span>${bar}`;
   }
 
   if (Number.isFinite(remainingMs) && remainingMs > 0) {
     const totalHours = Math.floor(remainingMs / (60 * ONE_MINUTE_MS));
     const days = Math.floor(totalHours / 24);
     const hours = totalHours % 24;
-    const colorClass = days < 1 ? ' pos-remaining-value--accent' : '';
+    const toneClass = days < 1 ? 'num warn' : 'num';
     const label = hours > 0 ? `${days}d ${hours}h` : `${days > 0 ? days : 1}d`;
-    return `<span class="mono pos-remaining-value${colorClass}">${label}</span>`;
+    return `<span class="${toneClass}">${label}</span>${bar}`;
   }
 
   // Fallback for edge cases where settlement timestamp cannot be resolved.
@@ -499,11 +522,11 @@ function formatRemainingTime(position: DualPosition): string {
   const remainingDaysFallback = Math.max(0, totalDaysRaw - elapsedRaw);
   if (remainingDaysFallback > 0) {
     const roundedRemainingDays = Math.max(1, Math.ceil(remainingDaysFallback));
-    const colorClass = roundedRemainingDays <= 1 ? ' pos-remaining-value--accent' : '';
-    return `<span class="mono pos-remaining-value${colorClass}">${roundedRemainingDays}d</span>`;
+    const toneClass = roundedRemainingDays <= 1 ? 'num warn' : 'num';
+    return `<span class="${toneClass}">${roundedRemainingDays}d</span>${bar}`;
   }
 
-  return '<span class="mono pos-remaining-value pos-remaining-value--muted">---</span>';
+  return '<span class="num muted">---</span>';
 }
 
 function getRemainingMsToSettlement(position: DualPosition): number {
@@ -523,9 +546,37 @@ function getContainedElementById(container: HTMLElement, id: string): HTMLElemen
   );
 }
 
-function renderDateTimeCell(date: string, hint?: string | null): string {
-  const titleAttr = hint ? ` title="${escapeHtml(hint)}"` : '';
-  return `<span class="pos-datetime-wrap"${titleAttr}><span class="pos-date-value">${escapeHtml(formatDateLatin(date))}</span></span>`;
+/** dd/mm sin año: la ventana muestra dos fechas en una sola linea. */
+function formatShortDate(value: string): string {
+  const [year, month, day] = value.split('-');
+  if (year && month && day) return `${day}/${month}`;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return `${String(parsed.getDate()).padStart(2, '0')}/${String(parsed.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function renderWindowCell(position: DualPosition, withHint: boolean): string {
+  if (position.positionKind === 'derivative') {
+    return `<span class="cell-stack"><span class="num">${escapeHtml(formatShortDate(position.entryDate))} &rarr; ---</span></span>`;
+  }
+
+  const settlementAt = resolveDualSettlementAt(position);
+  const entryTime = normalizeTime(position.entryTime) ?? '--:--';
+  const settlementTime = settlementAt ? formatTimeHHMMLocal(settlementAt) : '--:--';
+
+  const hints = withHint
+    ? [getDateTimeHint(position, 'entry'), getDateTimeHint(position, 'settlement')]
+        .filter(Boolean)
+        .join(' ')
+    : '';
+  const titleAttr = hints ? ` title="${escapeHtml(hints)}"` : '';
+
+  return `
+    <span class="cell-stack"${titleAttr}>
+      <span class="num">${escapeHtml(formatShortDate(position.entryDate))} &rarr; ${escapeHtml(formatShortDate(position.settlementDate))}</span>
+      <span class="cell-sub">${escapeHtml(entryTime)} &middot; ${escapeHtml(settlementTime)}</span>
+    </span>
+  `;
 }
 
 function getDateTimeHint(position: DualPosition, field: 'entry' | 'settlement'): string | null {
@@ -550,12 +601,20 @@ function getDateTimeHint(position: DualPosition, field: 'entry' | 'settlement'):
   }
 }
 
+/** Importe y unidad por separado para poder alinearlos en columnas propias. */
+function formatAmountParts(amount: number, asset: string): { value: string; asset: string } {
+  const isStable = asset === 'USDT' || asset === 'USDC';
+  return {
+    value: isStable
+      ? formatUSDCompact(amount).replace('$', '')
+      : amount.toLocaleString('en-US', { maximumFractionDigits: 6 }),
+    asset: escapeHtml(asset),
+  };
+}
+
 function formatAmount(amount: number, asset: string): string {
-  const safeAsset = escapeHtml(asset);
-  if (asset === 'USDT' || asset === 'USDC') {
-    return formatUSDCompact(amount).replace('$', '') + ' ' + safeAsset;
-  }
-  return amount.toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' ' + safeAsset;
+  const { value, asset: safeAsset } = formatAmountParts(amount, asset);
+  return `${value} <span class="muted">${safeAsset}</span>`;
 }
 
 function sameAsset(left: string | undefined, right: string | undefined): boolean {
@@ -608,24 +667,23 @@ function getQuoteAsset(position: DualPosition): string {
   return position.subscriptionAsset;
 }
 
-function productLabel(position: DualPosition): string {
+function productLabelParts(position: DualPosition): { base: string; quote: string | null } {
   if (position.positionKind === 'derivative' && position.displaySymbol) {
     const side = position.side === 'short' ? 'Short' : 'Long';
-    return `${position.displaySymbol} ${side}`;
+    return { base: `${position.displaySymbol} ${side}`, quote: null };
   }
 
-  if (position.positionKind === 'discount-buy') {
-    return `${position.asset}/${position.subscriptionAsset}`;
+  if (position.direction === 'sell-high' && position.positionKind !== 'discount-buy') {
+    return { base: position.subscriptionAsset, quote: getQuoteAsset(position) };
   }
 
-  if (position.direction === 'sell-high') {
-    return `${position.subscriptionAsset}/${getQuoteAsset(position)}`;
-  }
-  return `${position.asset}/${position.subscriptionAsset}`;
+  return { base: position.asset, quote: position.subscriptionAsset };
 }
 
 function productLabelHtml(position: DualPosition): string {
-  const label = escapeHtml(productLabel(position));
+  const { base, quote } = productLabelParts(position);
+  const safeBase = escapeHtml(base);
+  const safeQuote = quote ? `<span class="quote">/${escapeHtml(quote)}</span>` : '';
   const logoAsset =
     position.direction === 'sell-high' ? position.subscriptionAsset : position.asset;
 
@@ -638,7 +696,7 @@ function productLabelHtml(position: DualPosition): string {
     : '';
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
-  return `<span class="pos-pair-cell"><span class="pos-pair-logo-wrap" data-asset-logo-root><img class="pos-pair-logo" data-asset-logo-img ${safePrimaryAttr} ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="pos-pair-fallback" data-asset-logo-fallback>${safeMonogram}</span></span>${label}</span>`;
+  return `<span class="asset"><span class="asset-logo-wrap" data-asset-logo-root><img class="asset-logo" data-asset-logo-img ${safePrimaryAttr} ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="asset-fallback" data-asset-logo-fallback>${safeMonogram}</span></span><span class="asset-pair">${safeBase}${safeQuote}</span></span>`;
 }
 
 export function updateRemainingTimesInPlace(
@@ -668,7 +726,7 @@ export function updateRemainingTimesInPlace(
 
         const cRemainingEl = getContainedElementById(
           container,
-          `#position-remaining-${position.id}-comp-${c.id}`,
+          `position-remaining-${position.id}-comp-${c.id}`,
         );
         if (!cRemainingEl) return;
         const cNextHtml = formatRemainingTime(tempPos);
@@ -677,10 +735,4 @@ export function updateRemainingTimesInPlace(
     }
   });
   return hasSubMinuteCountdown;
-}
-
-export function formatTimeHHMM(value: Date): string {
-  const h = String(value.getHours()).padStart(2, '0');
-  const m = String(value.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
 }

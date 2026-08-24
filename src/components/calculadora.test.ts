@@ -53,7 +53,7 @@ describe('calculadora integration', () => {
     expect(capitalInput.value).toBe('330.00');
     expect(priceInput.readOnly).toBe(true);
     expect(priceInput.value).toBe('110.00');
-    expect(lockTag.style.display).toBe('inline-flex');
+    expect(lockTag.hidden).toBe(false);
   });
 
   it('keeps sell price and sell percent synchronized in both directions', () => {

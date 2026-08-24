@@ -129,19 +129,19 @@ export function handleTransitionEntry(container: HTMLElement): void {
     });
   }
 
+  // Piezas de la vista que entran escalonadas: el riel de metricas y la tira
+  // spot. Las que ademas se desplazan ya llevan su propia animacion arriba.
   let delay = 0;
-  container
-    .querySelectorAll<HTMLElement>('.card, .stat-card, .positions-spot-card')
-    .forEach((el) => {
-      const key = el.dataset.sharedCard;
-      if (key && movedKeys.has(key)) return;
+  container.querySelectorAll<HTMLElement>('.rail-item, .spot-item').forEach((el) => {
+    const key = el.dataset.sharedCard;
+    if (key && movedKeys.has(key)) return;
 
-      el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: 160,
-        delay,
-        easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        fill: 'backwards',
-      });
-      delay += 12;
+    el.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: 160,
+      delay,
+      easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      fill: 'backwards',
     });
+    delay += 12;
+  });
 }

@@ -51,7 +51,7 @@ describe('api-status utils', () => {
 
     apiStatus.registerApiLastUpdatedAt(new Date('2026-02-21T00:00:05.000Z').getTime());
 
-    expect(target.textContent).toBe('próxima actualización en 60s');
+    expect(target.textContent).toBe('se actualiza en 60s');
     expect(target.classList.contains('is-error')).toBe(false);
   });
 
@@ -85,9 +85,9 @@ describe('api-status utils', () => {
     const apiStatus = await loadApiStatus();
 
     apiStatus.registerApiLastUpdatedAt(new Date('2026-02-20T23:59:59.000Z').getTime());
-    expect(target.textContent).toBe('próxima actualización en 60s');
+    expect(target.textContent).toBe('se actualiza en 60s');
 
     vi.advanceTimersByTime(61_000);
-    expect(target.textContent).toBe('próxima actualización en 0s');
+    expect(target.textContent).toBe('se actualiza en 0s');
   });
 });

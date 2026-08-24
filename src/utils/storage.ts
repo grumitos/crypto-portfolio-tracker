@@ -6,7 +6,6 @@ import type {
   BalanceSnapshot,
   CalculadoraState,
   Purchase,
-  PositionsConfig,
   PositionEntryTimeSource,
   PositionSettlementTimeSource,
   CapitalLedgerDiscoveredVault,
@@ -42,7 +41,6 @@ function getDefaultPortfolio(): PortfolioData {
   return {
     totalInvested: 0,
     currentBalance: 0,
-    savings: 0,
     goalAmount: 0,
     lastUpdated: today,
     balanceHistory: [{ date: today, balance: 0 }],
@@ -70,15 +68,8 @@ function getDefaultState(): AppState {
   return {
     portfolio: getDefaultPortfolio(),
     positions: getDefaultPositions(),
-    manualPositions: getDefaultPositions(),
-    autoPositions: getDefaultPositions(),
-    positionsConfig: getDefaultPositionsConfig(),
     capitalLedger: getDefaultCapitalLedgerState(),
   };
-}
-
-function getDefaultPositionsConfig(): PositionsConfig {
-  return { mode: 'manual' };
 }
 
 export function getDefaultCapitalLedgerState(): CapitalLedgerState {
@@ -256,9 +247,6 @@ function sanitizePortfolio(rawPortfolio: unknown): PortfolioData {
   const record = isRecord(rawPortfolio) ? rawPortfolio : {};
   const totalInvested = sanitizePositive(record.totalInvested, defaults.totalInvested);
   const currentBalance = sanitizeNonNegative(record.currentBalance, defaults.currentBalance);
-  // Migration: if savings is absent, fall back to currentBalance so existing data is preserved
-  const savings =
-    'savings' in record ? sanitizeNonNegative(record.savings, currentBalance) : currentBalance;
   const goalAmount = sanitizePositive(record.goalAmount, totalInvested);
   const lastUpdated = sanitizeISODate(record.lastUpdated, defaults.lastUpdated);
   const balanceHistory = sanitizeBalanceHistory(record.balanceHistory, lastUpdated, currentBalance);
@@ -266,7 +254,6 @@ function sanitizePortfolio(rawPortfolio: unknown): PortfolioData {
   return {
     totalInvested,
     currentBalance,
-    savings,
     goalAmount,
     lastUpdated,
     balanceHistory,
@@ -524,53 +511,38 @@ function sanitizeCapitalLedger(rawCapitalLedger: unknown): CapitalLedgerState {
   };
 }
 
-function isBinancePositionId(value: string): boolean {
-  return value.startsWith('binance_');
+function isExchangePositionId(value: string): boolean {
+  return value.startsWith('binance_') || value.startsWith('bybit_');
 }
 
-function sanitizePositionsConfig(rawConfig: unknown): PositionsConfig {
-  const record = isRecord(rawConfig) ? rawConfig : {};
-  return {
-    mode: record.mode === 'auto' ? 'auto' : 'manual',
-  };
+/** Estado escrito por versiones que separaban posiciones cargadas a mano de las sincronizadas. */
+function isLegacyDualBucketState(state: Record<string, unknown>): boolean {
+  return 'manualPositions' in state || 'autoPositions' in state || 'positionsConfig' in state;
+}
+
+/**
+ * Las posiciones solo llegan de los exchanges conectados. Del estado antiguo se
+ * conserva el bucket sincronizado y se descartan las filas cargadas a mano, que
+ * ninguna sincronizacion puede volver a producir.
+ */
+function sanitizeSyncedPositions(state: Record<string, unknown>): DualPosition[] {
+  const positions = sanitizePositions(state.positions);
+  if (!isLegacyDualBucketState(state)) return positions;
+
+  const legacyAutoPositions = sanitizePositions(state.autoPositions);
+  return legacyAutoPositions.length > 0
+    ? legacyAutoPositions
+    : positions.filter((position) => isExchangePositionId(position.id));
 }
 
 function sanitizeAppState(raw: Partial<AppState> | null | undefined): AppState {
   const state = isRecord(raw) ? raw : {};
-  const positions = sanitizePositions(state.positions);
-  const manualPositions = sanitizePositions(state.manualPositions);
-  const autoPositions = sanitizePositions(state.autoPositions);
-  const inferredManualPositions =
-    manualPositions.length > 0
-      ? manualPositions
-      : positions.filter((position) => !isBinancePositionId(position.id));
-  const inferredAutoPositions =
-    autoPositions.length > 0
-      ? autoPositions
-      : positions.filter((position) => isBinancePositionId(position.id));
 
   return {
     portfolio: sanitizePortfolio(state.portfolio),
-    positions,
-    manualPositions:
-      inferredManualPositions.length > 0 ||
-      inferredAutoPositions.length > 0 ||
-      positions.length === 0
-        ? inferredManualPositions
-        : positions,
-    autoPositions: inferredAutoPositions,
-    positionsConfig: sanitizePositionsConfig(state.positionsConfig),
+    positions: sanitizeSyncedPositions(state),
     capitalLedger: sanitizeCapitalLedger(state.capitalLedger),
   };
-}
-
-function isLegacyAppBackupPayload(raw: Record<string, unknown>): boolean {
-  const hasPortfolio = Object.prototype.hasOwnProperty.call(raw, 'portfolio');
-  const hasPositions = Object.prototype.hasOwnProperty.call(raw, 'positions');
-  if (!hasPortfolio && !hasPositions) return false;
-  if (hasPortfolio && !isRecord(raw.portfolio)) return false;
-  if (hasPositions && !Array.isArray(raw.positions)) return false;
-  return true;
 }
 
 function inferSellSyncSource(sellPrice: string, sellPct: string): 'price' | 'percent' | null {
@@ -646,30 +618,6 @@ export function loadState(): AppState {
   }
 }
 
-function syncActivePositionsForMode(
-  state: AppState,
-  mode: PositionsConfig['mode'] = state.positionsConfig.mode,
-): AppState {
-  const prevMode = state.positionsConfig.mode;
-
-  // When actually switching modes, persist current positions into the previous bucket
-  if (mode !== prevMode) {
-    if (prevMode === 'manual' && state.positions.length > 0 && state.manualPositions.length === 0) {
-      state.manualPositions = [...state.positions];
-    } else if (
-      prevMode === 'auto' &&
-      state.positions.length > 0 &&
-      state.autoPositions.length === 0
-    ) {
-      state.autoPositions = [...state.positions];
-    }
-  }
-
-  state.positionsConfig.mode = mode;
-  state.positions = mode === 'auto' ? [...state.autoPositions] : [...state.manualPositions];
-  return state;
-}
-
 export function saveState(state: AppState | Partial<AppState>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeAppState(state)));
@@ -681,32 +629,12 @@ export function saveState(state: AppState | Partial<AppState>): void {
   }
 }
 
-export function loadStoredPositionsMode(): PositionsConfig['mode'] | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed) || !isRecord(parsed.positionsConfig)) return null;
-    return parsed.positionsConfig.mode === 'auto' ? 'auto' : 'manual';
-  } catch {
-    return null;
-  }
-}
-
-export function saveStoredPositionsMode(mode: PositionsConfig['mode']): AppState {
+/** Guarda la lista devuelta por la sincronizacion de exchanges. */
+export function replaceSyncedPositions(positions: DualPosition[]): AppState {
   const state = loadState();
-  const next =
-    state.positionsConfig.mode === mode ? state : syncActivePositionsForMode(state, mode);
-  saveState(next);
-  return next;
-}
-
-export function replaceAutoPositions(positions: DualPosition[]): AppState {
-  const state = loadState();
-  state.autoPositions = sanitizePositions(positions);
-  const next = state.positionsConfig.mode === 'auto' ? syncActivePositionsForMode(state) : state;
-  saveState(next);
-  return next;
+  state.positions = sanitizePositions(positions);
+  saveState(state);
+  return state;
 }
 
 export function saveCapitalLedgerState(capitalLedger: CapitalLedgerState): AppState {
@@ -741,98 +669,6 @@ export function updateBalance(balance: number): AppState {
 
   saveState(state);
   return state;
-}
-
-// ── Position CRUD ──
-
-export function addPosition(position: DualPosition): AppState {
-  const state = loadState();
-  const nextPosition = sanitizePosition(position, state.manualPositions.length);
-  state.manualPositions.push(nextPosition);
-  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
-  saveState(next);
-  return next;
-}
-
-export function replacePositions(positions: DualPosition[]): AppState {
-  const state = loadState();
-  state.manualPositions = sanitizePositions(positions);
-  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
-  saveState(next);
-  return next;
-}
-
-export function updatePosition(id: string, updates: Partial<DualPosition>): AppState {
-  const state = loadState();
-  const idx = state.manualPositions.findIndex((p: DualPosition) => p.id === id);
-  if (idx >= 0) {
-    state.manualPositions[idx] = sanitizePosition(
-      { ...state.manualPositions[idx], ...updates },
-      idx,
-    );
-  }
-  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
-  saveState(next);
-  return next;
-}
-
-export function deletePosition(id: string): AppState {
-  const state = loadState();
-  state.manualPositions = state.manualPositions.filter((p: DualPosition) => p.id !== id);
-  const next = state.positionsConfig.mode === 'manual' ? syncActivePositionsForMode(state) : state;
-  saveState(next);
-  return next;
-}
-
-// ── Backup ──
-
-export function exportBackup(): string {
-  return JSON.stringify(
-    {
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      app: loadState(),
-      calculadora: loadCalcState(),
-    },
-    null,
-    2,
-  );
-}
-
-const CURRENT_BACKUP_VERSION = 2;
-
-export function importBackup(json: string): AppState {
-  const parsed = JSON.parse(json) as unknown;
-
-  if (isRecord(parsed) && isRecord(parsed.app)) {
-    const version = typeof parsed.version === 'number' ? parsed.version : 1;
-    if (version > CURRENT_BACKUP_VERSION) {
-      throw new Error(
-        `Versión de backup no soportada (v${version}). Actualiza la app para importar este archivo.`,
-      );
-    }
-
-    const appState = sanitizeAppState(parsed.app as Partial<AppState>);
-    saveState(appState);
-
-    if (isRecord(parsed.calculadora)) {
-      saveCalcState(sanitizeCalcState(parsed.calculadora as Partial<CalculadoraState>));
-    }
-
-    return appState;
-  }
-
-  if (isRecord(parsed) && isLegacyAppBackupPayload(parsed)) {
-    const legacyState = sanitizeAppState(parsed as Partial<AppState>);
-    saveState(legacyState);
-    return legacyState;
-  }
-
-  throw new Error('Formato de backup no valido');
-}
-
-export function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 // ── Calculadora State (separate key) ──

@@ -84,7 +84,10 @@ export function generateProjection(params: SimulatorParams): {
       month,
       date: formatDate(monthDate),
       balance: Math.round(balance * 100) / 100,
-      earned: Math.max(0, Math.round((balance - invested) * 100) / 100),
+      // Lo ganado en ESTE mes: el delta contra el balance con el que entro.
+      // Medirlo contra lo invertido daria el acumulado, que queda clavado en
+      // cero mientras la cartera esta por debajo del breakeven.
+      earned: Math.max(0, Math.round((balance - startBalance) * 100) / 100),
     });
 
     // Check breakeven (using totalInvested as breakeven)

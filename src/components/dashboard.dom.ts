@@ -9,7 +9,9 @@ export interface DashboardElements {
   goalMutedSecond: HTMLElement | null;
   goalSolidFirst: HTMLElement | null;
   goalSolidSecond: HTMLElement | null;
-  goalCurrent: HTMLElement | null;
+  goalHead: HTMLElement | null;
+  goalTickBreakEven: HTMLElement | null;
+  goalTickGoal: HTMLElement | null;
   goalTargetLabel: HTMLElement | null;
   goalTargetAmount: HTMLElement | null;
   goalRemainingText: HTMLElement | null;
@@ -44,7 +46,9 @@ export function getDashboardElements(container: HTMLElement): DashboardElements 
     goalMutedSecond: query(container, '#dash-prog-muted-second'),
     goalSolidFirst: query(container, '#dash-prog-solid-first'),
     goalSolidSecond: query(container, '#dash-prog-solid-second'),
-    goalCurrent: query(container, '#dash-prog-current'),
+    goalHead: query(container, '#dash-prog-head'),
+    goalTickBreakEven: query(container, '#dash-prog-tick-be'),
+    goalTickGoal: query(container, '#dash-prog-tick-goal'),
     goalTargetLabel: query(container, '#dash-prog-target-label'),
     goalTargetAmount: query(container, '#dash-prog-target-amount'),
     goalRemainingText: query(container, '#dash-prog-remaining-text'),

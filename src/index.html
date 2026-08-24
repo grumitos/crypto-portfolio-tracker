@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f8f8f6" />
+    <meta name="theme-color" content="#faf9f7" />
     <meta
       name="description"
       content="Monitorea tu portafolio crypto: posiciones Dual Investment, simulador de recuperación y calculadora de swing trade."
@@ -14,14 +14,14 @@
     <link rel="icon" type="image/svg+xml" href="../public/favicon.svg" />
     <style>
       html {
-        background: #f8f8f6;
-        color: #121212;
+        background: #faf9f7;
+        color: #1a1a18;
         color-scheme: light;
       }
 
       html[data-theme='dark'] {
-        background: #1f1f1e;
-        color: #f8f8f6;
+        background: #131312;
+        color: #f4f3ef;
         color-scheme: dark;
       }
 
@@ -48,12 +48,12 @@
           t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme:dark)').matches);
         if (dark) {
           document.documentElement.dataset.theme = 'dark';
-          document.documentElement.style.backgroundColor = '#1f1f1e';
+          document.documentElement.style.backgroundColor = '#131312';
           document.documentElement.style.colorScheme = 'dark';
           var m = document.querySelector('meta[name="theme-color"]');
-          if (m) m.content = '#1f1f1e';
+          if (m) m.content = '#131312';
         } else {
-          document.documentElement.style.backgroundColor = '#f8f8f6';
+          document.documentElement.style.backgroundColor = '#faf9f7';
           document.documentElement.style.colorScheme = 'light';
         }
       })();

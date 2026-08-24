@@ -1,6 +1,5 @@
 import { loadState, saveCapitalLedgerState } from '../utils/storage';
 import { showApiErrorBanner } from '../utils/notifications';
-import { enhanceNumberSteppers } from '../utils/number-stepper';
 import { calculateCapitalLedgerSummary } from '../utils/capital-ledger';
 import { normalizeHyperliquidAddress } from '../utils/hyperliquid-sync';
 import { CAPITAL_COPY } from './capital.constants';
@@ -131,7 +130,6 @@ export function renderCapital(container: HTMLElement): () => void {
       isSyncing: renderState.isSyncing,
     });
     bindEvents();
-    enhanceNumberSteppers(container);
   };
 
   const runSync = async (isAuto = false): Promise<void> => {

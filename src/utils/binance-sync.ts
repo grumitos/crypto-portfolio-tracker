@@ -18,7 +18,7 @@ import {
   fetchBybitOpenPositions,
   fetchBybitWalletBalances,
 } from './bybit-client';
-import { replaceAutoPositions } from './storage';
+import { replaceSyncedPositions } from './storage';
 import { getAssetPriceSnapshot } from './market';
 import {
   parseBinanceDualSettlementUTC,
@@ -182,7 +182,7 @@ export async function syncPositionsFromBinance(
   forceRefresh = false,
 ): Promise<BinancePortfolioSnapshot> {
   const snapshot = await fetchBinancePortfolioSnapshot(forceRefresh);
-  replaceAutoPositions(snapshot.positions);
+  replaceSyncedPositions(snapshot.positions);
   return snapshot;
 }
 

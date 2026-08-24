@@ -8,10 +8,6 @@ import {
 import type { AssetPriceSnapshot, PositionMetrics } from '../utils/market';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
-import {
-  parseBinancePositions as parseBinancePositionsFromText,
-  parseImportedPositions as parseImportedPositionsFromText,
-} from './positions.parser';
 import { renderPositionGroup, updateRemainingTimesInPlace } from './positions.table';
 import type { DualPosition } from '../types';
 import { ONE_SECOND_MS } from '../utils/constants';
@@ -24,7 +20,6 @@ import {
   resolveAssetLogoSources,
 } from '../utils/asset-logos';
 import { onApiConfigChange } from './positions/api-config-modal';
-import { isAutoMode } from '../utils/binance-auth';
 import { hasAnyExchangeApiCredentials, syncPositionsFromBinance } from '../utils/binance-sync';
 import {
   getCachedAutoPortfolioSnapshot,
@@ -44,7 +39,7 @@ import {
 import {
   renderPositionsEmptyState,
   renderPositionsTemplate,
-  renderSpotCardTemplate,
+  renderSpotItemTemplate,
 } from './positions.template';
 
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -341,14 +336,12 @@ function updateDerivativeEarnings(container: HTMLElement, positions: DualPositio
 
 function setSpotChange(el: HTMLElement | null, value: number | null): void {
   if (!el) return;
-  const cardEl = el.closest('.positions-spot-card');
 
   const isValid = typeof value === 'number' && Number.isFinite(value);
   if (!isValid) {
     setAnimatedFallbackText(el, spotStripChangeAnimationByElement, POSITIONS_COPY.noData);
     el.classList.remove('text-gain', 'text-loss');
     el.classList.add('text-muted');
-    cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
     return;
   }
 
@@ -361,11 +354,6 @@ function setSpotChange(el: HTMLElement | null, value: number | null): void {
   } else {
     el.classList.add('text-muted');
   }
-
-  cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
-  if (next > 0) cardEl?.classList.add('is-gain');
-  else if (next < 0) cardEl?.classList.add('is-loss');
-  else cardEl?.classList.add('is-flat');
 
   stopValueAnimation(textAnimationByElement, el);
   setAnimatedNumber(
@@ -387,12 +375,10 @@ function setSpotLoading(el: HTMLElement | null): void {
 
 function setSpotChangeLoading(el: HTMLElement | null): void {
   if (!el) return;
-  const cardEl = el.closest('.positions-spot-card');
   stopValueAnimation(spotStripChangeAnimationByElement, el);
   delete el.dataset.numericValue;
   el.classList.remove('text-gain', 'text-loss', 'text-muted');
   el.innerHTML = skeletonSpan(SPOT_CHANGE_SKELETON_WIDTH);
-  cardEl?.classList.remove('is-gain', 'is-loss', 'is-flat');
 }
 
 function buildSpotAssetData(spotAssets: string[], snapshot: AssetPriceSnapshot): SpotAssetData[] {
@@ -403,7 +389,7 @@ function buildSpotAssetData(spotAssets: string[], snapshot: AssetPriceSnapshot):
   }));
 }
 
-function bindSpotCardLogo(cardEl: HTMLElement, asset: string): void {
+function bindSpotItemLogo(cardEl: HTMLElement, asset: string): void {
   const logoEl = cardEl.querySelector('.positions-spot-logo') as HTMLImageElement | null;
   const fallbackEl = cardEl.querySelector('.positions-spot-fallback') as HTMLElement | null;
   if (!logoEl || !fallbackEl) return;
@@ -438,13 +424,13 @@ function bindSpotCardLogo(cardEl: HTMLElement, asset: string): void {
   }
 }
 
-function createSpotCard(asset: string): HTMLElement {
-  const card = document.createElement('article');
-  card.className = 'positions-spot-card';
-  card.id = `positions-spot-${asset}`;
-  card.innerHTML = renderSpotCardTemplate(asset);
-  bindSpotCardLogo(card, asset);
-  return card;
+function createSpotItem(asset: string): HTMLElement {
+  const item = document.createElement('div');
+  item.className = 'spot-item';
+  item.id = `positions-spot-${asset}`;
+  item.innerHTML = renderSpotItemTemplate(asset);
+  bindSpotItemLogo(item, asset);
+  return item;
 }
 
 function renderPositionTablesMarkup(positions: DualPosition[]): string {
@@ -472,7 +458,7 @@ function shouldRenderPositionTables(
 function updatePositionTables(
   container: HTMLElement,
   positions: DualPosition[],
-  options: { forceRender: boolean; autoMode: boolean; hasApi: boolean },
+  options: { forceRender: boolean; hasApi: boolean },
 ): void {
   const tablesContainer = container.querySelector('#positions-tables-container');
   if (!tablesContainer) return;
@@ -484,7 +470,7 @@ function updatePositionTables(
     return;
   }
 
-  tablesContainer.innerHTML = renderPositionsEmptyState(options.autoMode, options.hasApi);
+  tablesContainer.innerHTML = renderPositionsEmptyState(options.hasApi);
 }
 
 function updateSpotStrip(
@@ -498,7 +484,6 @@ function updateSpotStrip(
   if (positions.length === 0) {
     stripEl.replaceChildren();
     stripEl.hidden = true;
-    stripEl.style.display = 'none';
     return;
   }
 
@@ -509,18 +494,16 @@ function updateSpotStrip(
   if (snapshot && hydratedAssets.length === 0) {
     stripEl.replaceChildren();
     stripEl.hidden = true;
-    stripEl.style.display = 'none';
     return;
   }
 
   stripEl.hidden = false;
-  stripEl.style.display = 'flex';
   const fragment = document.createDocumentFragment();
 
   if (snapshot) {
     hydratedAssets.forEach(({ asset, spotPrice, changePercent24h }) => {
       const existing = stripEl.querySelector(`#positions-spot-${asset}`) as HTMLElement | null;
-      const card = existing ?? createSpotCard(asset);
+      const card = existing ?? createSpotItem(asset);
       const valueEl = card.querySelector(`#positions-spot-value-${asset}`) as HTMLElement | null;
       const changeEl = card.querySelector(`#positions-spot-change-${asset}`) as HTMLElement | null;
       setSpotValue(valueEl, spotPrice);
@@ -530,7 +513,7 @@ function updateSpotStrip(
   } else {
     orderedAssets.forEach((asset) => {
       const existing = stripEl.querySelector(`#positions-spot-${asset}`) as HTMLElement | null;
-      const card = existing ?? createSpotCard(asset);
+      const card = existing ?? createSpotItem(asset);
       const valueEl = card.querySelector(`#positions-spot-value-${asset}`) as HTMLElement | null;
       const changeEl = card.querySelector(`#positions-spot-change-${asset}`) as HTMLElement | null;
       setSpotLoading(valueEl);
@@ -581,10 +564,10 @@ function applyPositionMarketData(
 
   aprEl.style.color =
     metrics.weightedApr > 0
-      ? 'var(--text-primary)'
+      ? 'var(--ink)'
       : metrics.weightedApr < 0
-        ? 'var(--color-loss)'
-        : 'var(--text-muted)';
+        ? 'var(--loss)'
+        : 'var(--ink-3)';
   if (Number.isFinite(metrics.weightedApr) && metrics.weightedApr !== 0) {
     setStatPercent(aprEl, metrics.weightedApr, true);
   } else {
@@ -599,10 +582,10 @@ function applyPositionMarketData(
 
   dailyEl.style.color =
     metrics.dailyEarningsUsd > 0
-      ? 'var(--color-gain)'
+      ? 'var(--gain)'
       : metrics.dailyEarningsUsd < 0
-        ? 'var(--color-loss)'
-        : 'var(--text-muted)';
+        ? 'var(--loss)'
+        : 'var(--ink-3)';
   if (Number.isFinite(metrics.dailyEarningsUsd) && metrics.dailyEarningsUsd !== 0) {
     setStatCurrency(dailyEl, metrics.dailyEarningsUsd, true);
   } else {
@@ -667,7 +650,6 @@ async function performAutoSync(
     setPositionsCount(container.querySelector('#positions-count'), count, true);
     updatePositionTables(container, synced, {
       forceRender: previousPositionsKey !== nextPositionsKey,
-      autoMode: true,
       hasApi: hasAnyExchangeApiCredentials(),
     });
 
@@ -690,7 +672,6 @@ async function performAutoSync(
 }
 
 export function renderPositions(container: HTMLElement, onStateChange: () => void): () => void {
-  const autoMode = isAutoMode();
   const state = loadState();
   const { positions } = state;
   const activeCount = positions.length;
@@ -702,7 +683,6 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const hasApi = hasAnyExchangeApiCredentials();
 
   container.innerHTML = renderPositionsTemplate({
-    autoMode,
     hasApi,
     activeCount,
     buyLowMarkup: buyLow.length > 0 ? renderPositionGroup(POSITIONS_COPY.buyLowTitle, buyLow) : '',
@@ -715,7 +695,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   bindPositionEvents(container);
   updateSpotStrip(container, positions, null);
 
-  // Listen for config changes (mode switch)
+  // Listen for config changes (credentials added or removed)
   const unsubConfig = onApiConfigChange(() => {
     onStateChange();
   });
@@ -747,7 +727,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const runInitialHydration = async (): Promise<void> => {
     if (disposed || !container.isConnected) return;
 
-    if (autoMode && hasAnyExchangeApiCredentials() && !getCachedAutoPortfolioSnapshot()) {
+    if (hasAnyExchangeApiCredentials() && !getCachedAutoPortfolioSnapshot()) {
       await performAutoSync(container, onStateChange, false);
       latestKnownPositions = loadState().positions;
       syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
@@ -763,7 +743,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const unsubscribeMarket = subscribeToMarketTicks(async (forceRefresh) => {
     if (disposed || !container.isConnected) return;
 
-    if (autoMode && hasAnyExchangeApiCredentials()) {
+    if (hasAnyExchangeApiCredentials()) {
       await performAutoSync(container, onStateChange, forceRefresh);
       const { positions: syncedPositions } = loadState();
       latestKnownPositions = syncedPositions;
@@ -816,14 +796,6 @@ async function hydratePositionMarketData(
   }
 
   return hasSubMinuteCountdown;
-}
-
-export function parseBinancePositions(raw: string): DualPosition[] {
-  return parseBinancePositionsFromText(raw);
-}
-
-export function parseImportedPositions(raw: string): DualPosition[] {
-  return parseImportedPositionsFromText(raw);
 }
 
 function bindPositionEvents(container: HTMLElement): void {

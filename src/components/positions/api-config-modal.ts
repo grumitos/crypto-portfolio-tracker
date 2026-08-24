@@ -4,8 +4,6 @@ import {
   loadStoredApiKey,
   saveApiCredentials,
   clearApiCredentials,
-  loadPositionsMode,
-  savePositionsMode,
 } from '../../utils/binance-auth';
 import { testApiConnection, clearAllCaches } from '../../utils/binance-client';
 import {
@@ -24,17 +22,85 @@ import {
   saveLocalVaultCredential,
 } from '../../utils/local-vault';
 import { escapeHtml } from '../../utils/ui-helpers';
-import { iconArchive, iconLock, iconWallet } from '../../utils/icons';
-import { loadState, updatePortfolio, updateBalance } from '../../utils/storage';
+import { iconLock, iconWallet, iconX } from '../../utils/icons';
+import { loadState, updatePortfolio } from '../../utils/storage';
 import { parseFlexibleNumber } from '../../utils/parse-number';
-import { bindBackupControls, renderBackupSection } from '../backup';
-import type { PositionsMode } from '../../types';
+
+// Relleno de longitud fija para el campo de secret: nunca se renderiza el
+// secret real ni se filtra su longitud.
+const SECRET_MASK = '•'.repeat(12);
+
+// El campo censurado esta deshabilitado, asi que su value es relleno y no
+// entrada del usuario: leerlo enviaria la mascara como secret.
+function readSecretInput(input: HTMLInputElement): string {
+  return input.disabled ? '' : input.value.trim();
+}
+
+function missingSecretMessage(exchange: string, secretInput: HTMLInputElement): string {
+  const hint = secretInput.disabled ? ' Elimina las credenciales para escribir unas nuevas.' : '';
+  return `API Key y Secret son requeridos para guardar ${exchange}.${hint}`;
+}
 
 function formatEditableCurrency(value: number): string {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+interface ExchangeIds {
+  name: string;
+  keyInput: string;
+  secretInput: string;
+  testBtn: string;
+  clearBtn: string;
+}
+
+const BINANCE_IDS: ExchangeIds = {
+  name: 'Binance',
+  keyInput: 'input-api-key',
+  secretInput: 'input-api-secret',
+  testBtn: 'btn-api-config-test',
+  clearBtn: 'btn-api-config-clear',
+};
+
+const BYBIT_IDS: ExchangeIds = {
+  name: 'Bybit',
+  keyInput: 'input-bybit-api-key',
+  secretInput: 'input-bybit-api-secret',
+  testBtn: 'btn-bybit-api-config-test',
+  clearBtn: 'btn-bybit-api-config-clear',
+};
+
+function renderExchange(ids: ExchangeIds, storedApiKey: string): string {
+  const isConnected = storedApiKey.length > 0;
+
+  return `
+    <div class="cfg-exchange">
+      <div class="cfg-exchange-head">
+        <span class="cfg-exchange-name">${ids.name}</span>
+        <span class="chip ${isConnected ? 'chip-gain' : 'chip-idle'}">
+          <span class="chip-dot"></span>${isConnected ? 'Conectado' : 'Sin configurar'}
+        </span>
+      </div>
+      <div class="cfg-grid">
+        <div class="field">
+          <label class="field-label" for="${ids.keyInput}">API Key</label>
+          <input class="input" type="text" id="${ids.keyInput}" placeholder="Tu API Key de ${ids.name}"
+                 value="${escapeHtml(storedApiKey)}" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label class="field-label" for="${ids.secretInput}">API Secret</label>
+          <input class="input" type="password" id="${ids.secretInput}"
+                 ${isConnected ? `value="${SECRET_MASK}" disabled` : `value="" placeholder="Tu API Secret de ${ids.name}"`}
+                 autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <div class="row">
+        <button type="button" class="btn btn-sm" id="${ids.testBtn}">Probar conexión</button>
+        <button type="button" class="btn btn-danger btn-sm" id="${ids.clearBtn}" ${isConnected ? '' : 'disabled aria-disabled="true"'}>Eliminar credenciales</button>
+      </div>
+    </div>`;
 }
 
 let modalEl: HTMLDialogElement | null = null;
@@ -45,135 +111,70 @@ function getOrCreateModal(): HTMLDialogElement {
   const dialog = document.createElement('dialog');
   dialog.id = 'modal-api-config';
   dialog.className = 'modal-overlay';
+  dialog.setAttribute('aria-labelledby', 'modal-api-config-title');
 
   const apiKey = loadStoredApiKey();
   const bybitApiKey = loadStoredBybitApiKey();
-  const mode = loadPositionsMode();
-  const hasStoredBinanceApiKey = apiKey.length > 0;
-  const hasStoredBybitApiKey = bybitApiKey.length > 0;
-  const isAuto = mode === 'auto';
   const { portfolio } = loadState();
 
   dialog.innerHTML = `
-    <div class="modal modal--wide modal-api-config">
-      <div class="modal-api-config-head">
-        <div class="modal-api-config-headline">
-          <span class="modal-api-config-eyebrow">Configuración</span>
-        </div>
+    <div class="modal modal-config">
+      <div class="modal-head">
+        <h3 class="modal-title" id="modal-api-config-title">Configuración</h3>
+        <button type="button" class="icon-btn" id="btn-api-config-close" aria-label="Cerrar configuración">
+          ${iconX(15)}
+        </button>
       </div>
 
-      <div id="api-config-status" class="dual-market-status" hidden></div>
+      <div class="modal-status-slot">
+        <div id="api-config-status" class="modal-status" role="status" aria-live="polite" hidden></div>
+      </div>
 
-      <div class="modal-api-config-layout">
-        <section class="modal-api-block modal-api-block--portfolio" aria-labelledby="config-portfolio-title">
-          <div class="modal-api-block-head">
-            <div class="modal-api-block-kicker" id="config-portfolio-title">${iconWallet(14)} Portfolio</div>
+      <div class="modal-body">
+        <section class="cfg-section" aria-labelledby="config-portfolio-title">
+          <div class="cfg-legend">
+            <span class="cfg-legend-title" id="config-portfolio-title">${iconWallet(13)} Portfolio</span>
+            <span class="cfg-legend-copy">Define cuanto llevas invertido y cual es el objetivo que persigues.</span>
           </div>
-
-          <div class="modal-mode-panel">
-            <div class="modal-mode-panel-head">
-              <span class="modal-field-label">Modo de lectura</span>
-              <div class="mode-toggle">
-                <button
-                  type="button"
-                  class="mode-btn${!isAuto ? ' active' : ''}"
-                  data-mode="manual"
-                  id="mode-manual"
-                  aria-pressed="${!isAuto ? 'true' : 'false'}"
-                >
-                  Manual
-                </button>
-                <button
-                  type="button"
-                  class="mode-btn${isAuto ? ' active' : ''}"
-                  data-mode="auto"
-                  id="mode-auto"
-                  aria-pressed="${isAuto ? 'true' : 'false'}"
-                >
-                  Auto
-                </button>
+          <div class="cfg-body">
+            <div class="cfg-grid">
+              <div class="field">
+                <label class="field-label" for="input-cfg-invested">Invertido total</label>
+                <span class="input-affix">
+                  <span class="input-prefix">$</span>
+                  <input class="input has-prefix" type="text" id="input-cfg-invested" inputmode="decimal" value="${formatEditableCurrency(portfolio.totalInvested)}">
+                </span>
+              </div>
+              <div class="field">
+                <label class="field-label" for="input-cfg-goal">Meta</label>
+                <span class="input-affix">
+                  <span class="input-prefix">$</span>
+                  <input class="input has-prefix" type="text" id="input-cfg-goal" inputmode="decimal" value="${formatEditableCurrency(portfolio.goalAmount)}">
+                </span>
               </div>
             </div>
-          </div>
-
-          <div class="modal-api-form-grid modal-api-form-grid--portfolio">
-            <div class="form-group">
-              <label for="input-cfg-invested">Invertido USD</label>
-              <input type="text" id="input-cfg-invested" inputmode="decimal" value="${formatEditableCurrency(portfolio.totalInvested)}">
-            </div>
-            <div class="form-group">
-              <label for="input-cfg-goal">Meta USD</label>
-              <input type="text" id="input-cfg-goal" inputmode="decimal" value="${formatEditableCurrency(portfolio.goalAmount)}">
-            </div>
-            <div id="cfg-savings-section" class="modal-api-form-span" ${isAuto ? 'hidden' : ''}>
-              <div class="form-group">
-                <label for="input-cfg-savings">Ahorros externos USD</label>
-                <input type="text" id="input-cfg-savings" inputmode="decimal" value="${formatEditableCurrency(portfolio.savings)}">
-              </div>
-            </div>
+            <span class="field-hint">El saldo y las posiciones se leen de los exchanges conectados; invertido y meta los defines tu.</span>
           </div>
         </section>
 
-        <section class="modal-api-block modal-api-block--binance" aria-labelledby="config-binance-title">
-          <div class="modal-api-block-head">
-            <div class="modal-api-block-kicker" id="config-binance-title">${iconLock(14)} Binance</div>
+        <section class="cfg-section" aria-labelledby="config-exchanges-title">
+          <div class="cfg-legend">
+            <span class="cfg-legend-title" id="config-exchanges-title">${iconLock(13)} Exchanges</span>
+            <span class="cfg-legend-copy">Claves de solo lectura. Nunca habilites permisos de trading ni retiro. El secret guardado no se muestra.</span>
           </div>
-
-          <div id="api-config-fields" class="modal-api-form-grid">
-            <div class="form-group">
-              <label for="input-api-key">API Key Binance</label>
-              <input type="text" id="input-api-key" placeholder="Tu API Key de Binance"
-                     value="${escapeHtml(apiKey)}" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="form-group">
-              <label for="input-api-secret">API Secret Binance</label>
-              <input type="password" id="input-api-secret" placeholder="Tu API Secret"
-                     value="" autocomplete="off" spellcheck="false">
-            </div>
+          <div class="cfg-body">
+            ${renderExchange(BINANCE_IDS, apiKey)}
+            ${renderExchange(BYBIT_IDS, bybitApiKey)}
           </div>
-
-          <div class="modal-api-inline-actions">
-            <button type="button" class="btn btn-sm" id="btn-api-config-test">Probar Binance</button>
-            <button type="button" class="btn btn-danger btn-sm" id="btn-api-config-clear" ${hasStoredBinanceApiKey ? '' : 'disabled aria-disabled="true"'}>Eliminar Binance</button>
-          </div>
-        </section>
-
-        <section class="modal-api-block modal-api-block--bybit" aria-labelledby="config-bybit-title">
-          <div class="modal-api-block-head">
-            <div class="modal-api-block-kicker" id="config-bybit-title">${iconLock(14)} Bybit</div>
-          </div>
-
-          <div id="bybit-api-config-fields" class="modal-api-form-grid">
-            <div class="form-group">
-              <label for="input-bybit-api-key">API Key Bybit</label>
-              <input type="text" id="input-bybit-api-key" placeholder="Tu API Key de Bybit"
-                     value="${escapeHtml(bybitApiKey)}" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="form-group">
-              <label for="input-bybit-api-secret">API Secret Bybit</label>
-              <input type="password" id="input-bybit-api-secret" placeholder="Tu API Secret"
-                     value="" autocomplete="off" spellcheck="false">
-            </div>
-          </div>
-
-          <div class="modal-api-inline-actions">
-            <button type="button" class="btn btn-sm" id="btn-bybit-api-config-test">Probar Bybit</button>
-            <button type="button" class="btn btn-danger btn-sm" id="btn-bybit-api-config-clear" ${hasStoredBybitApiKey ? '' : 'disabled aria-disabled="true"'}>Eliminar Bybit</button>
-          </div>
-
-        </section>
-
-        <section class="modal-api-block modal-api-block--backup modal-api-config-section" aria-labelledby="backup-section-title">
-          <div class="modal-api-block-head">
-            <div class="modal-api-block-kicker" id="backup-section-title">${iconArchive(14)} Respaldo</div>
-          </div>
-          ${renderBackupSection({ embedded: true })}
         </section>
       </div>
 
-      <div class="modal-actions modal-api-config-actions">
-        <button type="button" class="btn" id="btn-api-config-cancel">Cancelar</button>
-        <button type="button" class="btn btn-primary" id="btn-api-config-save">Guardar</button>
+      <div class="modal-foot">
+        <span class="muted">Las credenciales se guardan cifradas en el vault local (DPAPI).</span>
+        <span class="row">
+          <button type="button" class="btn btn-sm" id="btn-api-config-cancel">Cancelar</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-api-config-save">Guardar cambios</button>
+        </span>
       </div>
     </div>
   `;
@@ -181,59 +182,30 @@ function getOrCreateModal(): HTMLDialogElement {
   document.body.appendChild(dialog);
   modalEl = dialog;
 
-  bindModalEvents(dialog, [dialog.querySelector('#btn-api-config-cancel') as HTMLElement]);
+  bindModalEvents(dialog, [
+    dialog.querySelector('#btn-api-config-cancel') as HTMLElement,
+    dialog.querySelector('#btn-api-config-close') as HTMLElement,
+  ]);
   bindApiConfigEvents(dialog);
-  bindBackupControls(dialog, () => {
-    closeModal(dialog);
-    dispatchConfigChange();
-  });
 
   return dialog;
 }
 
+function syncClearButton(dialog: HTMLDialogElement, id: string, hasCredentials: boolean): void {
+  const button = dialog.querySelector(`#${id}`) as HTMLButtonElement;
+  button.disabled = !hasCredentials;
+  button.setAttribute('aria-disabled', button.disabled ? 'true' : 'false');
+}
+
 function bindApiConfigEvents(dialog: HTMLDialogElement): void {
   const statusEl = dialog.querySelector('#api-config-status') as HTMLElement;
-  let selectedMode: PositionsMode = loadPositionsMode();
-
-  // Mode toggle
-  dialog.querySelectorAll('.mode-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const mode = (btn as HTMLElement).dataset.mode as PositionsMode;
-      selectedMode = mode;
-      dialog.querySelectorAll('.mode-btn').forEach((b) => {
-        const isActive = (b as HTMLElement).dataset.mode === mode;
-        b.classList.toggle('active', isActive);
-        b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-      });
-
-      const clearBtn = dialog.querySelector('#btn-api-config-clear') as HTMLButtonElement;
-      const bybitClearBtn = dialog.querySelector(
-        '#btn-bybit-api-config-clear',
-      ) as HTMLButtonElement;
-      const savingsSection = dialog.querySelector('#cfg-savings-section') as HTMLElement;
-
-      if (mode === 'auto') {
-        savingsSection.hidden = true;
-        clearBtn.disabled = !loadStoredApiKey();
-        clearBtn.setAttribute('aria-disabled', clearBtn.disabled ? 'true' : 'false');
-        bybitClearBtn.disabled = !loadStoredBybitApiKey();
-        bybitClearBtn.setAttribute('aria-disabled', bybitClearBtn.disabled ? 'true' : 'false');
-      } else {
-        savingsSection.hidden = false;
-        clearBtn.disabled = !loadStoredApiKey();
-        clearBtn.setAttribute('aria-disabled', clearBtn.disabled ? 'true' : 'false');
-        bybitClearBtn.disabled = !loadStoredBybitApiKey();
-        bybitClearBtn.setAttribute('aria-disabled', bybitClearBtn.disabled ? 'true' : 'false');
-      }
-    });
-  });
 
   dialog.querySelector('#btn-bybit-api-config-test')?.addEventListener('click', async () => {
     const keyInput = dialog.querySelector('#input-bybit-api-key') as HTMLInputElement;
     const secretInput = dialog.querySelector('#input-bybit-api-secret') as HTMLInputElement;
     const stored = loadBybitApiCredentials();
     const key = keyInput.value.trim() || stored?.apiKey || '';
-    const secret = secretInput.value.trim() || stored?.apiSecret || '';
+    const secret = readSecretInput(secretInput) || stored?.apiSecret || '';
 
     if (!key || !secret) {
       showStatus(statusEl, 'Ingresa API Key y Secret de Bybit.', 'error');
@@ -276,7 +248,7 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     // podrian probar las credenciales ya guardadas sin re-escribirlas.
     const stored = loadApiCredentials();
     const key = keyInput.value.trim() || stored?.apiKey || '';
-    const secret = secretInput.value.trim() || stored?.apiSecret || '';
+    const secret = readSecretInput(secretInput) || stored?.apiSecret || '';
 
     if (!key || !secret) {
       showStatus(statusEl, 'Ingresa API Key y Secret.', 'error');
@@ -314,13 +286,18 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     }
   });
 
-  // El vault se carga solo al abrir el modal: no hay accion manual que hacer.
+  // El vault se carga solo al abrir el modal: no hay accion del usuario que hacer.
   void (async () => {
     const credentials = await loadLocalVaultCredentials();
     if (!credentials?.binance && !credentials?.bybit) return;
 
     if (credentials.binance) saveApiCredentials(credentials.binance);
     if (credentials.bybit) saveBybitApiCredentials(credentials.bybit);
+
+    // El modal ya se pinto sin credenciales: sin esto, "Eliminar credenciales"
+    // seguiria deshabilitado aunque el vault acabe de aportarlas.
+    syncClearButton(dialog, BINANCE_IDS.clearBtn, loadStoredApiKey().length > 0);
+    syncClearButton(dialog, BYBIT_IDS.clearBtn, loadStoredBybitApiKey().length > 0);
 
     clearAllRuntimeCaches();
     dispatchConfigChange();
@@ -333,34 +310,22 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     const bybitSecretInput = dialog.querySelector('#input-bybit-api-secret') as HTMLInputElement;
     const investedInput = dialog.querySelector('#input-cfg-invested') as HTMLInputElement;
     const goalInput = dialog.querySelector('#input-cfg-goal') as HTMLInputElement;
-    const savingsInput = dialog.querySelector('#input-cfg-savings') as HTMLInputElement;
     const storedBinanceKey = loadStoredApiKey();
     const storedBybitKey = loadStoredBybitApiKey();
     const key = keyInput.value.trim();
-    const secret = secretInput.value.trim();
+    const secret = readSecretInput(secretInput);
     const bybitKey = bybitKeyInput.value.trim();
-    const bybitSecret = bybitSecretInput.value.trim();
+    const bybitSecret = readSecretInput(bybitSecretInput);
     const shouldSaveBinanceCredentials = secret.length > 0 || key !== storedBinanceKey;
     const shouldSaveBybitCredentials = bybitSecret.length > 0 || bybitKey !== storedBybitKey;
-    const hasStoredExchangeCredentials = storedBinanceKey.length > 0 || storedBybitKey.length > 0;
 
     if (shouldSaveBinanceCredentials && (!key || !secret)) {
-      showStatus(statusEl, 'API Key y Secret son requeridos para guardar Binance.', 'error');
+      showStatus(statusEl, missingSecretMessage('Binance', secretInput), 'error');
       return;
     }
 
     if (shouldSaveBybitCredentials && (!bybitKey || !bybitSecret)) {
-      showStatus(statusEl, 'API Key y Secret son requeridos para guardar Bybit.', 'error');
-      return;
-    }
-
-    if (
-      selectedMode === 'auto' &&
-      !shouldSaveBinanceCredentials &&
-      !shouldSaveBybitCredentials &&
-      !hasStoredExchangeCredentials
-    ) {
-      showStatus(statusEl, 'Configura Binance o Bybit para usar el modo Auto.', 'error');
+      showStatus(statusEl, missingSecretMessage('Bybit', bybitSecretInput), 'error');
       return;
     }
 
@@ -405,24 +370,6 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     if (!isNaN(invested) && !isNaN(goal) && invested > 0 && goal > 0) {
       updatePortfolio({ totalInvested: invested, goalAmount: goal });
     }
-
-    // Save savings (manual mode only)
-    if (selectedMode !== 'auto') {
-      const savings = parseFlexibleNumber(savingsInput.value);
-      if (!isNaN(savings) && savings >= 0) {
-        const before = loadState();
-        const basePositionsValue =
-          before.positions.length > 0
-            ? before.portfolio.currentBalance - before.portfolio.savings
-            : 0;
-        const nextBalance = Math.max(0, Math.round((basePositionsValue + savings) * 100) / 100);
-        updatePortfolio({ savings });
-        updateBalance(nextBalance);
-      }
-    }
-
-    // Save mode
-    savePositionsMode(selectedMode);
 
     // Save API credentials for read-only Binance sync.
     if (shouldSaveBinanceCredentials) {
@@ -487,7 +434,7 @@ function showStatus(
   type: 'info' | 'success' | 'error' | 'warning',
 ): void {
   el.hidden = false;
-  el.className = `dual-market-status dual-market-status--${type}`;
+  el.className = `modal-status modal-status--${type}`;
   el.textContent = message;
 }
 
@@ -503,15 +450,7 @@ export function openApiConfigModal(): void {
     modalEl.remove();
     modalEl = null;
   }
-  const dialog = getOrCreateModal();
-  openModal(dialog);
-  const panel = dialog.querySelector<HTMLElement>('.modal-api-config');
-  if (panel) {
-    panel.scrollTop = 0;
-    requestAnimationFrame(() => {
-      panel.scrollTop = 0;
-    });
-  }
+  openModal(getOrCreateModal());
 }
 
 export function onApiConfigChange(callback: () => void): () => void {

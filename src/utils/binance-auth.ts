@@ -1,56 +1,10 @@
-import type { BinanceApiCredentials, PositionsMode } from '../types';
-import { loadStoredPositionsMode, saveStoredPositionsMode } from './storage';
+import type { BinanceApiCredentials } from '../types';
 
 const STORAGE_KEY = 'crypto-binance-api';
-const LEGACY_MODE_KEY = 'crypto-positions-mode';
 let apiSecretSessionValue: string | null = null;
 
 interface StoredApiCredentials {
   apiKey: string;
-}
-
-// ── Positions mode (single source of truth: main app state) ──
-
-export function loadPositionsMode(): PositionsMode {
-  try {
-    const stateMode = loadStoredPositionsMode();
-    if (stateMode) {
-      // Migrate: remove legacy key if present
-      try {
-        localStorage.removeItem(LEGACY_MODE_KEY);
-      } catch {
-        /* ignore */
-      }
-      return stateMode;
-    }
-    // Fallback: migrate from legacy key
-    const raw = localStorage.getItem(LEGACY_MODE_KEY);
-    const mode: PositionsMode = raw === 'auto' ? 'auto' : 'manual';
-    // Persist into main state and remove legacy key
-    saveStoredPositionsMode(mode);
-    try {
-      localStorage.removeItem(LEGACY_MODE_KEY);
-    } catch {
-      /* ignore */
-    }
-    return mode;
-  } catch {
-    return 'manual';
-  }
-}
-
-export function savePositionsMode(mode: PositionsMode): void {
-  saveStoredPositionsMode(mode);
-  // Clean up legacy key if still present
-  try {
-    localStorage.removeItem(LEGACY_MODE_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-export function isAutoMode(): boolean {
-  return loadPositionsMode() === 'auto';
 }
 
 // ── Credentials persistence ──

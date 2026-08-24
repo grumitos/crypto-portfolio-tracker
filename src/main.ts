@@ -6,26 +6,15 @@ import { renderSimulator } from './components/simulator';
 import { renderCalculadora } from './components/calculadora';
 import { initTheme, toggleTheme, getResolvedTheme } from './utils/theme';
 import { syncApiLastUpdatedLabel } from './utils/api-status';
-import {
-  iconDashboard,
-  iconLayers,
-  iconTrendingUp,
-  iconCalculator,
-  iconSettings,
-  iconRefreshCw,
-  iconSun,
-  iconMoon,
-  iconWallet,
-} from './utils/icons';
+import { iconSettings, iconRefreshCw, iconSun, iconMoon } from './utils/icons';
 import type { View } from './types';
-import { enhanceNumberSteppers } from './utils/number-stepper';
 import { getCurrentView, initRouter, navigateTo, handleTransitionEntry } from './utils/router';
 import { onStorageChange } from './utils/storage';
 import { openApiConfigModal } from './components/positions/api-config-modal';
 import { renderAppShell } from './components/app-shell.template';
 import type { AppShellNavItem } from './components/app-shell.constants';
 import { applyTypographyConfig } from './utils/typography';
-import { isAutoMode, saveApiCredentials } from './utils/binance-auth';
+import { saveApiCredentials } from './utils/binance-auth';
 import { clearAllCaches as clearBinanceClientCaches } from './utils/binance-client';
 import {
   clearBinanceSyncCaches,
@@ -47,7 +36,7 @@ let disposeActiveView: (() => void) | null = null;
 let forceRefreshNextDashboardRender = false;
 
 function themeIcon(): string {
-  return getResolvedTheme() === 'dark' ? iconSun(16) : iconMoon(16);
+  return getResolvedTheme() === 'dark' ? iconSun(15) : iconMoon(15);
 }
 
 function syncThemeButton(button: Element | null): void {
@@ -75,14 +64,14 @@ async function init(): Promise<void> {
   await hydrateLocalVaultSession();
 
   const navItems: AppShellNavItem[] = [
-    { view: 'dashboard', label: 'Dashboard', icon: iconDashboard(15), active: true },
-    { view: 'positions', label: 'Posiciones', icon: iconLayers(15), active: false },
-    { view: 'capital', label: 'Capital', icon: iconWallet(15), active: false },
-    { view: 'simulator', label: 'Simulador', icon: iconTrendingUp(15), active: false },
-    { view: 'calculadora', label: 'Calculadora', icon: iconCalculator(15), active: false },
+    { view: 'dashboard', label: 'Dashboard', active: true },
+    { view: 'positions', label: 'Posiciones', active: false },
+    { view: 'capital', label: 'Capital', active: false },
+    { view: 'simulator', label: 'Simulador', active: false },
+    { view: 'calculadora', label: 'Calculadora', active: false },
   ];
   app.innerHTML = renderAppShell(
-    iconRefreshCw(14),
+    iconRefreshCw(15),
     iconSettings(15),
     themeIcon(),
     navItems,
@@ -115,7 +104,7 @@ async function init(): Promise<void> {
 
   app.querySelector('#btn-sync-positions')?.addEventListener('click', async () => {
     const syncBtn = app.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
-    if (!syncBtn || syncBtn.disabled || !isAutoMode() || !hasAnyExchangeApiCredentials()) return;
+    if (!syncBtn || syncBtn.disabled || !hasAnyExchangeApiCredentials()) return;
 
     syncBtn.disabled = true;
     syncBtn.classList.add('syncing');
@@ -148,7 +137,6 @@ async function init(): Promise<void> {
     }
   });
 
-  enhanceNumberSteppers(app);
   syncApiLastUpdatedLabel();
 
   initRouter((view) => renderView(app, view));
@@ -245,7 +233,7 @@ function updatePositionsSyncButton(app: HTMLElement): void {
   const syncBtn = app.querySelector('#btn-sync-positions') as HTMLButtonElement | null;
   if (!syncBtn) return;
 
-  const isAvailable = isAutoMode() && hasAnyExchangeApiCredentials();
+  const isAvailable = hasAnyExchangeApiCredentials();
   syncBtn.disabled = !isAvailable;
 
   if (!isAvailable) {

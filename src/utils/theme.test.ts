@@ -76,14 +76,14 @@ describe('theme utils', () => {
     theme.setTheme('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
-      '#1F1F1E',
+      '#131312',
     );
     expect(favicon.href).toBe(faviconHref);
 
     theme.toggleTheme();
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect((document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content).toBe(
-      '#F8F8F6',
+      '#FAF9F7',
     );
     expect(favicon.href).toBe(faviconHref);
   });

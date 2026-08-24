@@ -73,11 +73,7 @@ function settleDialog(value: boolean): void {
   resolve?.(value);
 }
 
-function prepareDialog(
-  message: string,
-  options: DialogOptions,
-  withCancel: boolean,
-): DialogElements | null {
+function prepareDialog(message: string, options: DialogOptions): DialogElements | null {
   const elements = ensureDialogElements();
   if (!elements) return null;
 
@@ -87,9 +83,8 @@ function prepareDialog(
     resolvePrevious(false);
   }
 
-  elements.title.textContent = options.title ?? (withCancel ? 'Confirmar' : 'Aviso');
+  elements.title.textContent = options.title ?? 'Confirmar';
   elements.message.textContent = message;
-  elements.cancelButton.style.display = withCancel ? '' : 'none';
   elements.cancelButton.textContent = options.cancelLabel ?? 'Cancelar';
   elements.confirmButton.textContent = options.confirmLabel ?? 'Aceptar';
   elements.confirmButton.classList.toggle('btn-danger', options.destructive === true);
@@ -99,19 +94,10 @@ function prepareDialog(
 }
 
 export function showConfirmDialog(message: string, options: DialogOptions = {}): Promise<boolean> {
-  const elements = prepareDialog(message, options, true);
+  const elements = prepareDialog(message, options);
   if (!elements) return Promise.resolve(false);
 
   return new Promise<boolean>((resolve) => {
     pendingResolve = resolve;
-  });
-}
-
-export function showAlertDialog(message: string, options: DialogOptions = {}): Promise<void> {
-  const elements = prepareDialog(message, options, false);
-  if (!elements) return Promise.resolve();
-
-  return new Promise<void>((resolve) => {
-    pendingResolve = () => resolve();
   });
 }

@@ -119,7 +119,7 @@ function renderPurchaseRows(container: HTMLElement): void {
         ? roundTo(qty * price, 2)
         : NaN;
 
-    const row = document.createElement('div');
+    const row = document.createElement('tr');
     row.className = 'calc-purchase-row';
     row.innerHTML = renderPurchaseRow(
       purchase.id,
@@ -334,15 +334,15 @@ function bindPurchaseListEvents(container: HTMLElement, signal: AbortSignal): vo
         purchase[field] = el.value;
         const row = el.closest('.calc-purchase-row') as HTMLElement;
         if (row) {
-          const totalInput = row.querySelector('.calc-locked') as HTMLInputElement;
-          if (totalInput) {
+          const totalCell = row.querySelector('.calc-row-total') as HTMLElement | null;
+          if (totalCell) {
             const qty = parseNum(purchase.qty);
             const price = roundTo(parseNum(purchase.price), 2);
             const total =
               Number.isFinite(qty) && qty > 0 && Number.isFinite(price) && price > 0
                 ? roundTo(qty * price, 2)
                 : NaN;
-            totalInput.value = Number.isFinite(total) ? fmtNum(total, 2) : '-';
+            totalCell.textContent = Number.isFinite(total) ? fmtNum(total, 2) : '-';
           }
         }
         scheduleRecalculate(container);
@@ -459,18 +459,12 @@ function recalculate(container: HTMLElement, options: { animate?: boolean } = {}
     priceInput.value = totals.avgPrice.toFixed(2);
     priceInput.readOnly = true;
     priceInput.classList.add('calc-locked');
-    if (priceLock) {
-      priceLock.hidden = false;
-      priceLock.style.display = 'inline-flex';
-    }
+    if (priceLock) priceLock.hidden = false;
     basePrice = totals.avgPrice;
   } else {
     priceInput.readOnly = false;
     priceInput.classList.remove('calc-locked');
-    if (priceLock) {
-      priceLock.hidden = true;
-      priceLock.style.display = 'none';
-    }
+    if (priceLock) priceLock.hidden = true;
     basePrice = roundTo(parseNum(priceInput.value), 2);
   }
 
@@ -496,6 +490,8 @@ function recalculate(container: HTMLElement, options: { animate?: boolean } = {}
     const synced = roundTo(basePrice * (1 + currentSellPct / 100), 2);
     if (Number.isFinite(synced)) sellPriceActual = synced;
   }
+
+  updateSignalContext(container, trades, capital);
 
   // Achieved results
   const achieved = computeAchievedResults(sellPriceActual, trades, capital, basePrice, makerPct);
@@ -619,11 +615,42 @@ function renderAchieved(container: HTMLElement, achieved: AchievedResults, anima
   }
 }
 
+function updateSignalContext(container: HTMLElement, trades: number, capital: number): void {
+  const el = container.querySelector('#calc-signal-context') as HTMLElement | null;
+  if (!el) return;
+
+  const hasTrades = Number.isFinite(trades) && trades > 0;
+  const hasCapital = Number.isFinite(capital) && capital > 0;
+  if (!hasTrades || !hasCapital) {
+    el.textContent = '';
+    return;
+  }
+  const cycles = fmtNum(trades, 0);
+  el.textContent = `${cycles} ciclos por año sobre ${formatUSD(capital)}`;
+}
+
+function updateSignalStatus(container: HTMLElement, netUsdCycle: number): void {
+  const el = container.querySelector('#calc-signal-status') as HTMLElement | null;
+  if (!el) return;
+
+  const isValid = Number.isFinite(netUsdCycle) && netUsdCycle !== 0;
+  const tone = !isValid ? '' : netUsdCycle > 0 ? ' chip-gain' : ' chip-loss';
+  const label = !isValid
+    ? CALCULADORA_COPY.signalFlat
+    : netUsdCycle > 0
+      ? CALCULADORA_COPY.signalPositive
+      : CALCULADORA_COPY.signalNegative;
+  el.className = `chip${tone}`;
+  el.innerHTML = `<span class="chip-dot"></span>${label}`;
+}
+
 function renderStrategy(container: HTMLElement, strategy: StrategyResults, animate: boolean): void {
   const sellEl = container.querySelector('#calc-out-sell-price') as HTMLElement;
   const rebuyEl = container.querySelector('#calc-out-rebuy-price') as HTMLElement;
   const cyclePctEl = container.querySelector('#calc-out-net-cycle-pct') as HTMLElement;
   const cycleUsdEl = container.querySelector('#calc-out-net-cycle-usd') as HTMLElement;
+
+  updateSignalStatus(container, strategy.netUsdCycle);
 
   if (sellEl) {
     setTone(sellEl, strategy.sellPrice);

@@ -2,7 +2,6 @@
 export interface PortfolioData {
   totalInvested: number;
   currentBalance: number;
-  savings: number; // cash / stablecoins outside positions (manual)
   goalAmount: number;
   lastUpdated: string; // ISO date
   balanceHistory: BalanceSnapshot[];
@@ -131,10 +130,8 @@ export interface StrategyResults {
 // ── App State ──
 export interface AppState {
   portfolio: PortfolioData;
+  /** Posiciones sincronizadas desde los exchanges conectados. */
   positions: DualPosition[];
-  manualPositions: DualPosition[];
-  autoPositions: DualPosition[];
-  positionsConfig: PositionsConfig;
   capitalLedger: CapitalLedgerState;
 }
 
@@ -160,13 +157,6 @@ export interface DashboardGoalDetails {
   targetLabelLong: 'breakeven' | 'meta';
 }
 
-// ── Positions mode ──
-export type PositionsMode = 'manual' | 'auto';
-
-export interface PositionsConfig {
-  mode: PositionsMode;
-}
-
 // ── Binance API ──
 export interface BinanceApiCredentials {
   apiKey: string;
@@ -180,11 +170,20 @@ export interface BybitApiCredentials {
 
 export type DualOptionType = 'CALL' | 'PUT';
 
+export type ExchangeSource = 'Binance' | 'Bybit';
+
 export interface BinanceAccountBalance {
   asset: string;
   free: number;
   locked: number;
-  source?: 'Binance' | 'Bybit';
+  source?: ExchangeSource;
+  /**
+   * Origenes de una fila fusionada. `source` solo puede describir un exchange,
+   * pero el dashboard agrupa el saldo por activo y un mismo activo puede recibir
+   * saldo de Binance y posiciones de Bybit a la vez; sin este campo la fusion se
+   * quedaria con un unico origen y la columna "Fuente" mentiria.
+   */
+  sources?: ExchangeSource[];
 }
 
 export interface BinanceDualPosition {

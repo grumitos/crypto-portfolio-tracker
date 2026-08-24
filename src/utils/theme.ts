@@ -2,8 +2,8 @@ const STORAGE_KEY = 'crypto-theme';
 const THEME_COLOR_VAR = '--browser-theme-color';
 
 const CSS_FALLBACKS = {
-  browserThemeColorLight: '#F8F8F6',
-  browserThemeColorDark: '#1F1F1E',
+  browserThemeColorLight: '#FAF9F7',
+  browserThemeColorDark: '#131312',
 } as const;
 
 export type ThemePreference = 'light' | 'dark' | 'system';
@@ -58,18 +58,20 @@ export function initTheme(): void {
 function applyTheme(): void {
   const resolved = getResolvedTheme();
   const root = document.documentElement;
-  const browserThemeColor = readThemeVariable(
-    THEME_COLOR_VAR,
-    resolved === 'dark'
-      ? CSS_FALLBACKS.browserThemeColorDark
-      : CSS_FALLBACKS.browserThemeColorLight,
-  );
 
   if (resolved === 'dark') {
     root.dataset.theme = 'dark';
   } else {
     delete root.dataset.theme;
   }
+
+  // El token se lee despues de fijar data-theme: si no, siempre devolveria el valor claro.
+  const browserThemeColor = readThemeVariable(
+    THEME_COLOR_VAR,
+    resolved === 'dark'
+      ? CSS_FALLBACKS.browserThemeColorDark
+      : CSS_FALLBACKS.browserThemeColorLight,
+  );
 
   // Update meta theme-color
   const meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;

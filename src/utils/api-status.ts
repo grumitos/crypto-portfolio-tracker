@@ -80,8 +80,12 @@ function ensureFallbackNextPollAt(): void {
   }
 }
 
-function formatCountdownLabel(nextPollAt: number | null, prefix: string): string {
-  if (!nextPollAt) return `${prefix} pendiente`;
+function formatCountdownLabel(
+  nextPollAt: number | null,
+  prefix: string,
+  pendingLabel = `${prefix} pendiente`,
+): string {
+  if (!nextPollAt) return pendingLabel;
   const remainingMs = nextPollAt - Date.now();
   const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   return `${prefix} en ${remainingSeconds}s`;
@@ -101,7 +105,7 @@ function resolveHeaderLabel(ts: number | null): string {
   if (hasApiFailure) {
     return `Actualización: error · último dato ${relative} · ${formatCountdownLabel(nextPollAt, 'reintento')}`;
   }
-  return formatCountdownLabel(nextPollAt, 'próxima actualización');
+  return formatCountdownLabel(nextPollAt, 'se actualiza', 'actualización pendiente');
 }
 
 function updateHeaderLabel(): void {

@@ -37,7 +37,6 @@ describe('simulator view state', () => {
       portfolio: {
         totalInvested: 1000,
         currentBalance: 500,
-        savings: 500,
         goalAmount: 900,
         lastUpdated: '2026-02-21',
         balanceHistory: [{ date: '2026-02-21', balance: 500 }],

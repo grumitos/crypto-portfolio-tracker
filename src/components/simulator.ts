@@ -37,11 +37,15 @@ import { getSimulatorElements } from './simulator.dom';
 import { PROJECTION_MAX_MONTH, RESULT_NUMBER_ANIM_MS, SIMULATOR_COPY } from './simulator.constants';
 import {
   formatAutoAprHint,
+  projectionChartSkeletonHtml,
   projectionTableSkeletonHtml,
+  renderProjectionChart,
   renderProjectionMilestone,
   renderProjectionTable,
   renderSimulatorTemplate,
+  formatProjectionEarned,
 } from './simulator.template';
+import type { ProjectionChartMilestone } from './simulator.template';
 
 const valueAnimationByElement = new WeakMap<HTMLElement, number>();
 const textAnimationByElement = new WeakMap<HTMLElement, number>();
@@ -60,11 +64,10 @@ type ProjectionDisplayRow = ProjectionRow & { rowClass: string };
 function renderProjectionLoadingState(container: HTMLElement): void {
   const elements = getSimulatorElements(container);
 
-  if (elements.tableContainer) {
-    elements.tableContainer.hidden = false;
-    elements.tableContainer.style.display = 'block';
-  }
+  if (elements.tableContainer) elements.tableContainer.hidden = false;
   if (elements.table) elements.table.innerHTML = projectionTableSkeletonHtml();
+  if (elements.chartBlock) elements.chartBlock.hidden = false;
+  if (elements.chart) elements.chart.innerHTML = projectionChartSkeletonHtml();
 }
 
 function setTagMode(tag: HTMLElement, isAuto: boolean): void {
@@ -150,6 +153,18 @@ function setProjectionNumberOutput(el: HTMLElement | null, value: number, animat
   });
 }
 
+function setProjectionEarnedOutput(el: HTMLElement | null, value: number, animate: boolean): void {
+  if (!el) return;
+  stopTextAnimation(el);
+  setAnimatedNumber(
+    valueAnimationByElement,
+    el,
+    value,
+    (next) => formatProjectionEarned(next, formatUSD),
+    { enabled: animate, durationMs: RESULT_NUMBER_ANIM_MS, allowRememberedStart: false },
+  );
+}
+
 function setProjectionTextOutput(el: HTMLElement | null, value: string, animate: boolean): void {
   setTextOutput(el, value, animate, 'fade');
 }
@@ -199,10 +214,9 @@ function setInvalidSimulationOutputs(container: HTMLElement): void {
   setStaticOutput(elements.rate, '---');
   setStaticOutput(elements.final, '---');
 
-  if (elements.tableContainer) {
-    elements.tableContainer.hidden = true;
-    elements.tableContainer.style.display = 'none';
-  }
+  if (elements.tableContainer) elements.tableContainer.hidden = true;
+  if (elements.chartBlock) elements.chartBlock.hidden = true;
+  if (elements.chart) elements.chart.innerHTML = '';
 }
 
 function resolveProjectionRowClasses(
@@ -257,7 +271,7 @@ function updateProjectionTableInPlace(
     setProjectionNumberOutput(balanceEl, row.balance, animate);
 
     earnedEl?.classList.toggle('text-gain', row.earned > 0);
-    setProjectionNumberOutput(earnedEl, row.earned, animate);
+    setProjectionEarnedOutput(earnedEl, row.earned, animate);
 
     const nextMilestone = renderProjectionMilestone(row.rowClass);
     if (milestoneEl && milestoneEl.innerHTML !== nextMilestone) {
@@ -563,6 +577,56 @@ function bindSimulatorEvents(
   });
 }
 
+function milestoneChartLegend(
+  label: string,
+  targetAmount: number,
+  date: string | null,
+): ProjectionChartMilestone | null {
+  if (!Number.isFinite(targetAmount) || targetAmount <= 0) return null;
+  return {
+    label,
+    amount: formatUSD(targetAmount),
+    date: date ? formatDateLatin(date) : null,
+  };
+}
+
+function renderChart(
+  elements: ReturnType<typeof getSimulatorElements>,
+  snapshot: ReturnType<typeof buildProjectionSnapshot>,
+  milestones: ReturnType<typeof resolveSimulationMilestones>,
+  invested: number,
+  goal: number,
+): void {
+  if (!elements.chart || !elements.chartBlock) return;
+
+  const chartRows = snapshot.rows.filter(
+    (row) => row.month >= 0 && row.month <= PROJECTION_MAX_MONTH,
+  );
+  if (chartRows.length < 2) {
+    elements.chartBlock.hidden = true;
+    elements.chart.innerHTML = '';
+    return;
+  }
+
+  elements.chartBlock.hidden = false;
+  elements.chart.innerHTML = renderProjectionChart({
+    rows: chartRows,
+    invested,
+    goal,
+    breakEvenMilestone: milestoneChartLegend(
+      SIMULATOR_COPY.breakEvenLabel,
+      invested,
+      milestones.byMilestone.be.date,
+    ),
+    goalMilestone: milestoneChartLegend(
+      SIMULATOR_COPY.milestoneGoalLabel,
+      goal,
+      milestones.byMilestone.goal.date,
+    ),
+    formatDate: formatDateLatin,
+  });
+}
+
 function runSimulation(
   container: HTMLElement,
   autoState: AutoState,
@@ -650,18 +714,18 @@ function runSimulation(
     (row) => row.month >= 1 && row.month <= PROJECTION_MAX_MONTH,
   );
   if (!elements.tableContainer || !elements.table || projectedRows.length === 0) {
-    if (elements.tableContainer) {
-      elements.tableContainer.hidden = true;
-      elements.tableContainer.style.display = 'none';
-    }
+    if (elements.tableContainer) elements.tableContainer.hidden = true;
+    if (elements.chartBlock) elements.chartBlock.hidden = true;
+    if (elements.chart) elements.chart.innerHTML = '';
     return;
   }
 
   const beCrossMonth = milestones.byMilestone.be.row?.month ?? null;
   const goalCrossMonth = milestones.byMilestone.goal.row?.month ?? null;
 
+  renderChart(elements, snapshot, milestones, invested, goalIsValid ? goal : 0);
+
   elements.tableContainer.hidden = false;
-  elements.tableContainer.style.display = 'block';
   updateProjectionTable(
     elements.table,
     projectedRows.map((row) => ({

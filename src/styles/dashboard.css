@@ -1,602 +1,131 @@
-.dashboard-section {
-  container-type: inline-size;
-}
+/* ── Dashboard ── */
 
-.dashboard-header {
-  align-items: flex-end;
-}
-
-.dashboard-heading-block {
-  display: grid;
-  gap: 6px;
-}
-
-.dashboard-section-title {
-  max-width: 14ch;
-}
-
-.dashboard-summary-grid,
-.dashboard-metrics-grid {
-  align-items: stretch;
-}
-
-.dashboard-summary-grid {
-  grid-template-columns: 1.08fr 1.08fr 0.84fr;
-}
-
-.dashboard-card,
-.dashboard-stat-card {
-  min-height: 100%;
-}
-
-.dashboard-card {
-  background: color-mix(in srgb, var(--bg-card) 84%, var(--bg-secondary));
-}
-
-.dashboard-summary-grid .dashboard-card {
-  min-height: 132px;
-}
-
-.dashboard-summary-grid .dashboard-card .card-title {
-  margin-bottom: var(--space-md);
-}
-
-.dashboard-goal-card {
-  display: grid;
-  gap: var(--space-md);
-  padding: 18px;
-  border-color: color-mix(in srgb, var(--accent-warm) 22%, var(--border));
-  background: color-mix(in srgb, var(--accent-warm-muted) 10%, var(--bg-card));
-  box-shadow:
-    var(--shadow-card),
-    inset 0 1px 0 color-mix(in srgb, var(--bg-card) 22%, transparent);
-}
-
-.dashboard-goal-card .card-title {
-  margin-bottom: 0;
-  color: color-mix(in srgb, var(--accent-warm) 72%, var(--text-muted));
-}
-
-.dashboard-card output,
-.dashboard-stat-card output {
-  display: inline-block;
-}
-
-.dashboard-goal-card .goal-progress-value:first-child {
-  font-size: 1.32rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.dashboard-goal-card .goal-progress-target {
-  padding-left: var(--space-md);
-  border-left: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-}
-
-/* ── Progress bar ── */
-.progress-container {
-  margin-top: var(--space-sm);
-}
-
-.progress-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-meta);
-  color: var(--text-secondary);
-  margin-bottom: var(--space-xs);
-}
-
-.progress-bar {
-  width: 100%;
-  height: 6px;
-  background: var(--border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width var(--duration-panel) var(--ease-out);
-  background: var(--color-gain);
-}
-
-.progress-fill.loss {
-  background: var(--color-loss);
-}
-
-.goal-progress-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  margin-bottom: 8px;
-}
-
-.goal-progress-value {
-  font-size: var(--font-size-meta);
-  line-height: var(--line-height-snug);
-}
-
-.goal-progress-target {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.goal-progress-target-label {
-  min-width: 2.8ch;
-  color: var(--text-muted);
-}
-
-.goal-progress-target-amount {
-  font-family: var(--font-family-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.goal-progress-bar {
-  margin-bottom: 6px;
-  position: relative;
-  height: 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-secondary) 78%, var(--border));
-  transition: background-color var(--duration-panel) var(--ease-out);
-}
-
-.goal-progress-zone {
+/* Bandas del track: cada milestone tiene su franja, el relleno solido es el avance */
+.progress-zone {
   position: absolute;
   top: 0;
   bottom: 0;
-  z-index: 2;
-  transition:
-    width var(--duration-panel) var(--ease-out-quint),
-    left var(--duration-panel) var(--ease-out-quint),
-    opacity var(--duration-ui) var(--ease-out),
-    background-color var(--duration-ui) var(--ease-out);
-}
-
-.goal-progress-zone-muted {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 1;
-  transition:
-    width var(--duration-panel) var(--ease-out-quint),
-    left var(--duration-panel) var(--ease-out-quint),
-    opacity var(--duration-ui) var(--ease-out),
-    background-color var(--duration-ui) var(--ease-out);
-}
-
-.goal-progress-zone.breakeven {
-  background: var(--color-breakeven);
-}
-
-.goal-progress-zone.goal {
-  background: var(--color-gain);
-}
-
-.goal-progress-zone-muted.breakeven {
-  background: var(--goal-progress-be-muted);
-}
-
-.goal-progress-zone-muted.goal {
-  background: var(--goal-progress-meta-muted);
-}
-
-.goal-progress-bar.mode-goal .zone-first.goal-progress-zone {
-  background: var(--color-gain);
-}
-
-.goal-progress-bar.mode-goal .zone-first.goal-progress-zone-muted {
-  background: var(--goal-progress-meta-muted);
-}
-
-.goal-progress-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-  padding-top: 6px;
-}
-
-.goal-progress-remaining {
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-snug);
-  color: var(--text-secondary);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: baseline;
-}
-
-.goal-progress-remaining output {
-  color: inherit;
-}
-
-.goal-progress-meta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  line-height: var(--line-height-snug);
-  flex-wrap: wrap;
-}
-
-.goal-progress-legend {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-meta);
-  padding: 5px 10px;
+  left: 0;
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 84%, transparent);
+  background: var(--warn-bg);
+}
+
+.progress-zone.is-goal {
+  background: var(--gain-bg);
+}
+
+.progress-track.mode-goal .progress-zone {
+  background: var(--gain-bg);
+}
+
+.progress-track.mode-goal .progress-fill {
+  background: var(--gain-fill);
+}
+
+.progress-tick[hidden] {
+  display: none;
+}
+
+/* ── Cabecera del progreso: titulo y marcas comparten fila ──
+   La escala tiene que medir exactamente lo mismo que el track para que los
+   porcentajes de las marcas caigan sobre el punto correcto de la barra, asi que
+   ocupa el ancho completo y el titulo se superpone sobre su franja izquierda.
+   global.css define la base de .progress-head/.progress-scale; aqui solo se
+   ajusta la variante que aloja las marcas. */
+.progress-block .progress-head {
+  display: block;
+  position: relative;
+}
+
+.progress-head .label {
+  position: absolute;
+  bottom: 12px; /* alinea el titulo con la fila de etiquetas de las marcas */
+  left: 0;
+  white-space: nowrap;
+}
+
+/* Hace falta una segunda fila: o una etiqueta se ha separado de la otra, o el
+   titulo cede su sitio a una marca que cae dentro de su franja. */
+.progress-head.has-stacked-tick .progress-scale,
+.progress-head.has-edge-tick .progress-scale {
+  height: 48px;
+}
+
+/* Marca dentro de la franja del titulo: el titulo sube por encima de la fila de
+   etiquetas para que ni la etiqueta ni la linea guia de esa marca lo crucen. */
+.progress-head.has-edge-tick .label {
+  bottom: 30px;
+}
+
+@media (max-width: 900px) {
+  /* El titulo ya no cabe junto a las marcas: recupera su propia fila y deja de
+     robar espacio horizontal, asi que tampoco necesita ceder el suyo. */
+  .progress-head .label,
+  .progress-head.has-edge-tick .label {
+    position: static;
+    display: block;
+    margin-bottom: 6px;
+    white-space: normal;
+  }
+
+  .progress-head.has-edge-tick:not(.has-stacked-tick) .progress-scale {
+    height: 26px;
+  }
+}
+
+/* ── Leyenda conmutable de BE / Meta ── */
+.chip.goal-progress-legend {
+  border: 1px solid transparent;
   cursor: pointer;
   transition:
-    border-color var(--duration-ui) var(--ease-out),
-    background-color var(--duration-ui) var(--ease-out),
-    color var(--duration-ui) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.goal-progress-legend:hover {
-  border-color: var(--border-hover);
-  background: var(--bg-hover);
-}
-
-.goal-progress-legend:active {
-  transform: scale(0.95);
-}
-
-.goal-progress-legend:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.goal-progress-legend.is-active {
-  color: var(--text-primary);
-  border-color: var(--border-hover);
-  background: var(--bg-hover);
+    opacity var(--duration-ui) var(--ease-out),
+    background var(--duration-ui) var(--ease-out);
 }
 
 .goal-progress-legend.is-inactive {
-  opacity: 0.58;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink-3);
+}
+
+.goal-progress-legend.is-inactive .chip-dot {
+  background: var(--ink-3);
 }
 
 .goal-progress-legend.is-locked {
-  animation: legendShake 0.15s linear 2;
+  animation: legendLocked var(--duration-panel) var(--ease-out);
 }
 
-.goal-progress-legend.is-active .goal-progress-dot {
-  box-shadow: 0 0 0 3px var(--accent-muted);
-}
-
-.goal-progress-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.goal-progress-dot.breakeven {
-  background: var(--color-breakeven);
-}
-
-.goal-progress-dot.goal {
-  background: var(--color-gain);
-}
-
-.goal-progress-sep {
-  opacity: 0.3;
-  color: var(--text-muted);
-}
-
-#dashboard-days {
-  font-size: var(--font-size-meta);
-  color: var(--text-secondary);
-}
-
-.dashboard-metrics-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--layout-gap-tight);
-}
-
-.dashboard-stat-card {
-  min-height: 108px;
-  background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-secondary));
-}
-
-.dashboard-stat-card .card-title {
-  margin-bottom: 10px;
-}
-
-.text-swap {
-  animation: fadeInUp var(--duration-ui) var(--ease-out);
-}
-
-@keyframes legendShake {
-  0% {
-    transform: translateX(0);
-  }
-  25% {
-    transform: translateX(-1px);
-  }
-  50% {
-    transform: translateX(1px);
-  }
-  75% {
-    transform: translateX(-1px);
-  }
+@keyframes legendLocked {
+  0%,
   100% {
     transform: translateX(0);
   }
+
+  30% {
+    transform: translateX(-2px);
+  }
+
+  70% {
+    transform: translateX(2px);
+  }
 }
 
-.dashboard-balance-panel {
-  display: grid;
-  gap: clamp(14px, 1.8vw, 20px);
-  margin-top: 0;
-  padding: clamp(16px, 1.8vw, 22px) 0 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  background: transparent;
+/* La estimacion no compite con el texto de "faltan X": baja medio punto */
+.progress-eta {
+  font-size: 12.5px;
 }
 
-.dashboard-balance-panel-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--space-sm) var(--space-md);
+/* ── Tabla de saldo en cuenta ── */
+.dashboard-balance-entry.is-loading td {
+  pointer-events: none;
 }
 
-.dashboard-balance-panel-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-meta);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-primary);
-}
-
-.dashboard-balance-panel-copy {
-  margin: 6px 0 0;
-  max-width: 36ch;
-  font-size: var(--font-size-meta);
-  line-height: var(--line-height-body);
-  color: var(--text-muted);
-}
-
-.dashboard-balance-panel-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  min-height: auto;
-  padding: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--font-size-caption);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.dashboard-balance-panel-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0 var(--space-lg);
-  overflow: visible;
-  border: 0;
-  background: transparent;
-}
-
-.dashboard-balance-entry {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: 16px 0 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  background: transparent;
-}
-
-.dashboard-balance-entry.is-loading {
-  justify-content: center;
-}
-
-.dashboard-balance-entry-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
-
-.dashboard-balance-entry-main {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.dashboard-balance-logo-wrap {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-}
-
-.dashboard-balance-logo,
-.dashboard-balance-fallback {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-}
-
-.dashboard-balance-logo {
-  object-fit: cover;
-  display: block;
-}
-
-.dashboard-balance-fallback {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-caption);
-  font-weight: 600;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-}
-
-.dashboard-balance-card-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 0;
-  line-height: 1.15;
-}
-
-.dashboard-balance-asset {
-  font-size: var(--font-size-body);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
+/* Columna de origen: dato de apoyo, medio punto por debajo de las cifras */
 .dashboard-balance-source {
-  font-size: var(--font-size-overline);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  font-size: 12.5px;
 }
 
-.dashboard-balance-total {
-  display: grid;
-  gap: 3px;
-  text-align: right;
-  justify-items: end;
-}
-
-.dashboard-balance-total-label {
-  font-size: var(--font-size-overline);
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.dashboard-balance-total-value {
-  font-size: 1.08rem;
-  line-height: 1.1;
-  color: var(--text-primary);
-}
-
-.dashboard-balance-breakdown {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
-.dashboard-balance-breakdown-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-meta);
-  font-variant-numeric: tabular-nums;
-}
-
-.dashboard-balance-breakdown-label {
-  font-family: var(--font-family-ui);
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  margin: 0;
-}
-
-.dashboard-balance-breakdown-value {
-  font-family: var(--font-family-mono);
-  justify-self: end;
-  margin: 0;
-}
-
-.dashboard-balance-breakdown-row.is-locked .dashboard-balance-breakdown-value {
-  color: var(--accent-warm);
-}
-
-.dashboard-balance-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--space-sm) 0 0;
-}
-
-.dashboard-balance-empty-title {
-  font-size: var(--font-size-meta);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.dashboard-balance-empty-copy {
-  font-size: var(--font-size-meta);
-  color: var(--text-muted);
-}
-
-@container (max-width: 720px) {
-  .dashboard-summary-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .goal-progress-head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .dashboard-goal-card .goal-progress-target {
-    padding-left: 0;
-    border-left: 0;
-  }
-
-  .goal-progress-meta {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 768px) {
-  .dashboard-summary-grid,
-  .dashboard-metrics-grid {
-    gap: var(--space-md);
-  }
-
-  .dashboard-balance-panel-head {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-
-  .dashboard-balance-panel-badge {
-    align-self: flex-start;
-  }
-
-  .dashboard-balance-panel-grid {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-
-  .dashboard-balance-entry {
-    padding-top: 14px;
-  }
-
-  .dashboard-balance-entry-top {
-    flex-direction: column;
-  }
-
-  .dashboard-balance-total {
-    text-align: left;
-    justify-items: start;
-  }
-
-  .goal-progress-legend {
-    min-height: 36px;
-  }
+.dashboard-balance-locked.is-locked {
+  color: var(--ink);
 }

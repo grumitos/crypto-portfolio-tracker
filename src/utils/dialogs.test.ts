@@ -16,24 +16,6 @@ describe('dialogs', () => {
     document.body.innerHTML = '';
   });
 
-  it('shows alert dialog and resolves after confirm click', async () => {
-    const dialogs = await loadDialogs();
-    const pending = dialogs.showAlertDialog('Mensaje de prueba');
-    const root = getDialogRoot();
-
-    expect(root.style.display).toBe('flex');
-    expect((root.querySelector('#app-dialog-message') as HTMLElement).textContent).toBe(
-      'Mensaje de prueba',
-    );
-    expect((root.querySelector('#btn-app-dialog-cancel') as HTMLElement).style.display).toBe(
-      'none',
-    );
-
-    (root.querySelector('#btn-app-dialog-confirm') as HTMLButtonElement).click();
-    await expect(pending).resolves.toBeUndefined();
-    expect(root.style.display).toBe('none');
-  });
-
   it('resolves true when confirm dialog is accepted', async () => {
     const dialogs = await loadDialogs();
     const pending = dialogs.showConfirmDialog('Continuar?', {
@@ -69,15 +51,6 @@ describe('dialogs', () => {
 
     root.click();
     await expect(pending).resolves.toBe(false);
-  });
-
-  it('resolves alert dialog when closed from overlay click', async () => {
-    const dialogs = await loadDialogs();
-    const pending = dialogs.showAlertDialog('Overlay alert');
-    const root = getDialogRoot();
-
-    root.click();
-    await expect(pending).resolves.toBeUndefined();
   });
 
   it('closes previous pending dialog when opening a new one', async () => {

@@ -2,7 +2,7 @@
 
 > **Estado:** en desarrollo activo. La aplicacion local, el build y la suite automatizada son funcionales; las integraciones de exchange permanecen deliberadamente en modo de solo lectura.
 
-App web estatica para monitorear un portfolio crypto, gestionar posiciones Dual Investment, proyectar recuperacion por compound y calcular rendimiento de swing trade.
+App web estatica para monitorear un portfolio crypto, seguir las posiciones Dual Investment que reportan los exchanges conectados, proyectar recuperacion por compound y calcular rendimiento de swing trade.
 
 ![Dashboard local sin datos financieros cargados](./docs/screenshots/dashboard.png)
 
@@ -15,18 +15,18 @@ La captura muestra el estado inicial de una instalacion limpia. El repositorio n
 - Dependencias gestionadas con `pnpm`.
 - Persistencia local en `localStorage`.
 - Tabla de proyeccion mensual en la vista `Simulador`.
-- Import/export de backup en JSON.
 
 ## Documentacion tecnica
 
 - Guia tecnica del repo: `ENGINEERING_GUIDE.md`
+- Sistema visual y reglas de diseno: `docs/design-system.md`
 - Riesgos vigentes de diseno: `design-audit-findings.md`
 
 ## Requisitos
 
 - Bun 1.3+
 - pnpm 11+
-- Windows para guardar credenciales privadas en el vault DPAPI local. Sin DPAPI, la app sigue funcionando en modo manual y con datos publicos.
+- Windows para guardar credenciales privadas en el vault DPAPI local. Sin DPAPI no se pueden guardar credenciales, y la app queda limitada a datos publicos de mercado: sin credenciales no hay posiciones ni saldos que mostrar.
 - Python 3 solo para `pnpm run eth:analysis`.
 
 ## Inicio rapido
@@ -59,33 +59,28 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
 
 ## Flujo recomendado de uso
 
-1. Abrir `Configuracion` desde el engrane del shell y definir portfolio: invertido, meta, modo Manual/Auto y ahorros externos cuando aplique.
-2. En modo Manual, cargar posiciones en `Posiciones`; en modo Auto, conectar Binance o Bybit en solo lectura y sincronizar.
-3. Revisar proyecciones en `Simulador` (AUTO o MANUAL).
-4. Evaluar ciclos en `Calculadora Swing Trade`.
-5. Exportar backup JSON desde la seccion `Respaldo` del modal de configuracion.
+1. Abrir `Configuracion` desde el engrane del shell y conectar Binance o Bybit con claves de solo lectura.
+2. Definir en el mismo modal el invertido total y la meta; el saldo y las posiciones los aportan los exchanges.
+3. Sincronizar desde el shell y revisar `Dashboard` y `Posiciones`.
+4. Revisar proyecciones en `Simulador` (AUTO o MANUAL) y evaluar ciclos en `Calculadora Swing Trade`.
 
 ## Vistas y comportamiento
 
 ### 1) Dashboard
 
 - Resumen de portfolio: balance, P&L, progreso a breakeven (BE) y meta.
-- La configuracion de invertido, meta, modo de lectura y ahorros externos vive en el modal global `Configuracion`.
+- La configuracion de invertido y meta vive en el modal global `Configuracion`; el saldo se deriva de posiciones y saldos de exchange.
 - Barra de progreso con leyenda BE/Meta; el estado de la leyenda se persiste.
 - Tarjetas de capital/APR/rendimiento diario calculadas desde posiciones y precios de mercado.
-- En modo Auto con credenciales, muestra saldos por activo reportados por los exchanges configurados.
+- Con credenciales configuradas, muestra saldos por activo reportados por los exchanges.
+- Sin resumen de saldos de exchange y sin posiciones, conserva el ultimo saldo guardado en vez de reescribirlo a cero.
 
 ### 2) Posiciones
 
-- CRUD manual de posiciones Dual Investment.
-- Modo Auto con posiciones sincronizadas desde Binance y Bybit.
+- Vista de solo lectura: las posiciones Dual Investment llegan sincronizadas desde Binance y Bybit.
+- Sin exchanges conectados el estado vacio pide configurar credenciales; con exchanges conectados invita a sincronizar.
 - **Tira de precios spot**: muestra precio actual y cambio 24h de los activos con posiciones (BTC, ETH, BNB, SOL). Orden fijo, excluye stablecoins.
-- Modo `Editar` para eliminar rapido desde la tabla.
-- Importacion masiva con `Pegar y reemplazar`:
-  - Parsea texto de posiciones exportadas/copypasteadas desde Binance.
-  - Reemplaza la lista manual completa por las posiciones parseadas.
-- Parser manual estricto Binance-only; la lectura automatica de exchanges usa clientes separados.
-- Activo base permitido por defecto para parser: `BTC`, `ETH`, `BNB`, `SOL`, `USDT`, `USDC`.
+- La sincronizacion reemplaza la lista completa; no hay alta, edicion ni borrado de posiciones desde la UI.
 
 ### 3) Simulador
 
@@ -111,7 +106,7 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
 
 - Shell compartido extraido para header, navegacion y acciones globales.
 - Sistema visual consolidado alrededor de `src/styles/variables.css` y `src/utils/theme.ts`.
-- `dashboard`, `simulator` y `calculadora` siguen un patron modular; `positions` ya extrae constants/template/table/parser, pero conserva logica de coordinacion en `positions.ts`.
+- `dashboard`, `simulator` y `calculadora` siguen un patron modular; `positions` ya extrae constants/template/table, pero conserva logica de coordinacion en `positions.ts`.
 - Los colores de browser theme se derivan de tokens CSS para evitar drift entre tema y runtime.
 
 ## Datos de mercado
@@ -148,7 +143,7 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
   - `GET /v5/market/tickers` para precios spot publicos.
   - `GET /v5/market/time` para ajustar timestamps firmados.
 - El servidor local expone `/local-vault/credentials` y guarda API Key + Secret cifrados con Windows DPAPI en `.local/credentials.dpapi.json` (ignorado por git).
-- En `localStorage` solo se persiste la API Key; el Secret vive en memoria de sesion y se hidrata desde DPAPI al cargar o con `Cargar DPAPI`.
+- En `localStorage` solo se persiste la API Key; el Secret vive en memoria de sesion y se hidrata desde DPAPI al cargar la app y al abrir `Configuracion`.
 - Las credenciales de exchanges no se cargan desde `.env.local`: las variables `PUBLIC_*` de Bun pueden quedar expuestas al bundle del navegador. Configuralas solo desde el modal local de la app.
 - Dashboard puede sumar saldos de Binance y Bybit a la vez. Las posiciones automatizadas incluyen Binance Dual Investment, Bybit Dual Asset, Bybit Discount Buy y, solo si la key lo permite, posiciones derivadas abiertas de Bybit; el nocional derivado Bybit no se suma encima del wallet para evitar doble conteo.
 
@@ -160,65 +155,18 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
   - Se calculan por ventanas de corte Binance (no por fracciones de hora).
   - El minimo facturable es `1` dia.
 
-## Backup de datos
-
-La seccion `Respaldo` del modal de configuracion permite:
-
-- `Exportar JSON`
-- `Importar backup JSON`
-
-Formato actual exportado:
-
-```json
-{
-  "version": 2,
-  "exportedAt": "2026-02-23T00:00:00.000Z",
-  "app": {
-    "portfolio": {
-      "totalInvested": 0,
-      "currentBalance": 0,
-      "savings": 0,
-      "goalAmount": 0,
-      "lastUpdated": "2026-02-23",
-      "balanceHistory": []
-    },
-    "positions": [],
-    "manualPositions": [],
-    "autoPositions": [],
-    "positionsConfig": { "mode": "manual" }
-  },
-  "calculadora": {
-    "price": "",
-    "capital": "20000",
-    "trades": "200",
-    "sellPrice": "",
-    "sellPct": "2.30",
-    "rebuyPct": "1.70",
-    "feePreset": "spot",
-    "fdusdEnabled": false,
-    "sellSyncSource": null,
-    "purchases": []
-  }
-}
-```
-
-Compatibilidad de importacion:
-
-- Soporta formato actual (`version: 2`, con `app` y `calculadora`).
-- Soporta formato legacy (objeto raiz equivalente al estado `app`).
-
 ## Persistencia local (`localStorage`)
 
-| Key                          | Uso                                                  |
-| ---------------------------- | ---------------------------------------------------- |
-| `crypto-portfolio-tracker`   | Estado principal (`portfolio` + `positions`)         |
-| `crypto-calculadora`         | Estado de la calculadora                             |
-| `crypto-simulator-view`      | Estado de UI del simulador (valores + banderas AUTO) |
-| `crypto-dashboard-view`      | Preferencia de leyenda BE/Meta del dashboard         |
-| `crypto-api-last-updated-at` | Timestamp de ultima actualizacion de mercado exitosa |
-| `crypto-theme`               | Preferencia de tema (`light`, `dark`, `system`)      |
-| `crypto-binance-api`         | API Key Binance; el Secret no se persiste aqui       |
-| `crypto-bybit-api`           | API Key Bybit; el Secret no se persiste aqui         |
+| Key                          | Uso                                                        |
+| ---------------------------- | ---------------------------------------------------------- |
+| `crypto-portfolio-tracker`   | Estado principal (`portfolio` + `positions` sincronizadas) |
+| `crypto-calculadora`         | Estado de la calculadora                                   |
+| `crypto-simulator-view`      | Estado de UI del simulador (valores + banderas AUTO)       |
+| `crypto-dashboard-view`      | Preferencia de leyenda BE/Meta del dashboard               |
+| `crypto-api-last-updated-at` | Timestamp de ultima actualizacion de mercado exitosa       |
+| `crypto-theme`               | Preferencia de tema (`light`, `dark`, `system`)            |
+| `crypto-binance-api`         | API Key Binance; el Secret no se persiste aqui             |
+| `crypto-bybit-api`           | API Key Bybit; el Secret no se persiste aqui               |
 
 Vault local adicional:
 
@@ -263,9 +211,7 @@ Incluye `manifest.json`, iconos (192/512) y service worker basico (`public/sw.js
 - `No se pudo actualizar precios de mercado`:
   - Verifica conectividad y disponibilidad de Binance.
   - La app puede seguir mostrando valores de cache (stale) temporalmente.
-- Import JSON falla:
-  - Validar que el archivo sea JSON valido y tenga formato compatible.
 - Valores en `---` o `0` en cards:
-  - Revisar que existan posiciones activas con datos correctos.
+  - Revisar que haya un exchange conectado y posiciones activas reportadas por el.
 - Estado inconsistente:
-  - Reimportar ultimo backup valido.
+  - Revisar `localStorage` de la app y volver a definir portfolio en `Configuracion`.

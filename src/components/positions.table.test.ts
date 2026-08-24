@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from '#test';
 import type { DualPosition } from '../types';
-import {
-  formatTimeHHMM,
-  renderPositionGroup,
-  updateRemainingTimesInPlace,
-} from './positions.table';
+import { renderPositionGroup, updateRemainingTimesInPlace } from './positions.table';
 
 function makePosition(overrides: Partial<DualPosition>): DualPosition {
   return {
@@ -33,6 +29,16 @@ function makePosition(overrides: Partial<DualPosition>): DualPosition {
   };
 }
 
+/**
+ * El markup nuevo parte los valores en varios spans (par base/quote, unidad en
+ * .muted), asi que las aserciones de contenido se hacen sobre el texto visible.
+ */
+function textOf(html: string): string {
+  const host = document.createElement('div');
+  host.innerHTML = html;
+  return (host.textContent ?? '').replace(/\s+/g, ' ');
+}
+
 describe('positions table rendering', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -46,8 +52,8 @@ describe('positions table rendering', () => {
       makePosition({ id: 'sell1', direction: 'sell-high', subscriptionAsset: 'SOL' }),
     ]);
 
-    expect(buyGroup).toContain('ETH/USDT');
-    expect(sellGroup).toContain('SOL/USDT');
+    expect(textOf(buyGroup)).toContain('ETH/USDT');
+    expect(textOf(sellGroup)).toContain('SOL/USDT');
     expect(buyGroup).toContain('Ganancia');
     expect(buyGroup).not.toContain('Ganancia (Venc.)');
     expect(buyGroup).not.toContain('Valor USD');
@@ -58,6 +64,38 @@ describe('positions table rendering', () => {
     expect(buyGroup).not.toContain('Spot (USD)');
     expect(buyGroup).not.toContain('position-spot-buy1');
     expect(buyGroup).not.toContain('btn-del-pos');
+  });
+
+  it('renders both outcomes as peers and keeps the date/time hierarchy in the window cell', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderPositionGroup('Buy Low', [
+      makePosition({
+        id: 'outcome_pair',
+        direction: 'buy-low',
+        asset: 'ETH',
+        subscriptionAsset: 'USDC',
+        amount: 33000,
+        targetPrice: 2400,
+        entryTime: '08:45',
+      }),
+    ]);
+
+    const outcomeCell = host.querySelector('td[data-field="outcome"]') as HTMLElement;
+    const outcomeRows = Array.from(outcomeCell.querySelectorAll('.pos-outcome-row'));
+
+    expect(outcomeRows).toHaveLength(2);
+    // Ninguna de las dos filas puede caer en el estilo de marca de tiempo.
+    expect(outcomeCell.querySelector('.cell-sub')).toBeNull();
+    expect(
+      outcomeRows.every((row) =>
+        row.querySelector('.pos-outcome-amount')?.classList.contains('num'),
+      ),
+    ).toBe(true);
+    // La unica diferencia entre desenlaces es el enfasis de color.
+    expect(outcomeRows.filter((row) => row.classList.contains('is-converted'))).toHaveLength(1);
+
+    const windowCell = host.querySelector('td[data-field="window"]') as HTMLElement;
+    expect(windowCell.querySelector('.cell-sub')?.textContent).toContain('08:45');
   });
 
   it('adds time provenance hints for Binance-synced rows', () => {
@@ -91,13 +129,15 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(group).toContain('ETH/USDT');
+    expect(textOf(group)).toContain('ETH/USDT');
     expect(group).not.toContain('Discount');
     expect(group).not.toContain('10.00%');
     expect(group).toContain('Compra');
-    expect(group).not.toContain('+0.27 USDT');
+    // Comparte el patron de la celda de resultado dual.
+    expect(group).toContain('pos-outcome-row is-converted');
+    expect(textOf(group)).not.toContain('+0.27 USDT');
     expect(group).not.toContain('Sin KO');
-    expect(group).not.toContain('1,000.27 USDT');
+    expect(textOf(group)).not.toContain('1,000.27 USDT');
   });
 
   it('keeps both Sell High outcomes when Bybit reports an exact expected return', () => {
@@ -116,9 +156,9 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(group).toContain('20,158.71 USDT');
-    expect(group).toContain('8.764656 ETH');
-    expect(group).toContain('+54.22 USDT');
+    expect(textOf(group)).toContain('20,158.71 USDT');
+    expect(textOf(group)).toContain('8.764656 ETH');
+    expect(textOf(group)).toContain('+54.22 USDT');
   });
 
   it('renders sell-high USDT executed profit in USDT without mixing ETH units', () => {
@@ -135,12 +175,13 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(group).toContain('ETH/USDT');
-    expect(group).toContain('2,020 USDT');
-    expect(group).toContain('1.01 ETH');
-    expect(group).toContain('+20 USDT');
-    expect(group).not.toContain('2,000.01 USDT');
-    expect(group).not.toContain('+0.01 ETH');
+    const buyText = textOf(group);
+    expect(buyText).toContain('ETH/USDT');
+    expect(buyText).toContain('2,020 USDT');
+    expect(buyText).toContain('1.01 ETH');
+    expect(buyText).toContain('+20 USDT');
+    expect(buyText).not.toContain('2,000.01 USDT');
+    expect(buyText).not.toContain('+0.01 ETH');
   });
 
   it('includes projected yield in buy-low executed crypto outcome', () => {
@@ -156,9 +197,9 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(group).toContain('0.505 ETH');
-    expect(group).toContain('1,010 USDT');
-    expect(group).not.toContain('0.5 ETH');
+    expect(textOf(group)).toContain('0.505 ETH');
+    expect(textOf(group)).toContain('1,010 USDT');
+    expect(textOf(group)).not.toContain('0.5 ETH');
   });
 
   it('renders sell-high outcomes with the actual quote asset for non-stable pairs', () => {
@@ -175,9 +216,9 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(group).toContain('ETH/BTC');
-    expect(group).toContain('BTC');
-    expect(group).not.toContain('ETH/USDT');
+    expect(textOf(group)).toContain('ETH/BTC');
+    expect(textOf(group)).toContain('BTC');
+    expect(textOf(group)).not.toContain('ETH/USDT');
   });
 
   it('escapes imported asset symbols before rendering amount HTML', () => {
@@ -189,8 +230,8 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(group).toContain('ETH&lt;svg/onload=alert(1)&gt;/USDT&amp;X');
-    expect(group).toContain('100 USDT&amp;X');
+    expect(textOf(group)).toContain('ETH<svg/onload=alert(1)>/USDT&X');
+    expect(textOf(group)).toContain('100 USDT&X');
     expect(group).not.toContain('<svg/onload');
     expect(group).not.toContain('USDT&X');
   });
@@ -231,9 +272,10 @@ describe('positions table rendering', () => {
 
     expect(grouped).toContain('pos-components-summary');
     expect(grouped).toContain('▸');
-    expect(grouped).toContain('Ver desglose (2)');
+    expect(grouped).toContain('Desglose (2)');
+    expect(grouped).toContain('aria-label="Ver desglose de la posicion"');
     expect(grouped).toContain('pos-sub-row');
-    expect(grouped).toContain('186.148196 SOL');
+    expect(textOf(grouped)).toContain('186.148196 SOL');
     expect(grouped).toContain('397.80%');
     expect(grouped.match(/position-apr-/g)).toHaveLength(1);
   });
@@ -340,10 +382,5 @@ describe('positions table rendering', () => {
 
     expect(hasSubMinute).toBe(true);
     expect(remaining?.textContent).toContain('30s');
-  });
-
-  it('formats Date values as HH:mm', () => {
-    const value = new Date(2026, 1, 21, 4, 7, 30);
-    expect(formatTimeHHMM(value)).toBe('04:07');
   });
 });
