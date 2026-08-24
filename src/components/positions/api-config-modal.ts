@@ -1,5 +1,6 @@
 import { openModal, closeModal, bindModalEvents } from '../../utils/modal-manager';
 import {
+  loadApiCredentials,
   loadStoredApiKey,
   saveApiCredentials,
   clearApiCredentials,
@@ -9,6 +10,7 @@ import {
 import { testApiConnection, clearAllCaches } from '../../utils/binance-client';
 import {
   clearBybitApiCredentials,
+  loadBybitApiCredentials,
   loadStoredBybitApiKey,
   saveBybitApiCredentials,
 } from '../../utils/bybit-auth';
@@ -229,8 +231,9 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
   dialog.querySelector('#btn-bybit-api-config-test')?.addEventListener('click', async () => {
     const keyInput = dialog.querySelector('#input-bybit-api-key') as HTMLInputElement;
     const secretInput = dialog.querySelector('#input-bybit-api-secret') as HTMLInputElement;
-    const key = keyInput.value.trim();
-    const secret = secretInput.value.trim();
+    const stored = loadBybitApiCredentials();
+    const key = keyInput.value.trim() || stored?.apiKey || '';
+    const secret = secretInput.value.trim() || stored?.apiSecret || '';
 
     if (!key || !secret) {
       showStatus(statusEl, 'Ingresa API Key y Secret de Bybit.', 'error');
@@ -269,8 +272,11 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
   dialog.querySelector('#btn-api-config-test')?.addEventListener('click', async () => {
     const keyInput = dialog.querySelector('#input-api-key') as HTMLInputElement;
     const secretInput = dialog.querySelector('#input-api-secret') as HTMLInputElement;
-    const key = keyInput.value.trim();
-    const secret = secretInput.value.trim();
+    // El campo de secret nunca se rellena, asi que sin este fallback no se
+    // podrian probar las credenciales ya guardadas sin re-escribirlas.
+    const stored = loadApiCredentials();
+    const key = keyInput.value.trim() || stored?.apiKey || '';
+    const secret = secretInput.value.trim() || stored?.apiSecret || '';
 
     if (!key || !secret) {
       showStatus(statusEl, 'Ingresa API Key y Secret.', 'error');

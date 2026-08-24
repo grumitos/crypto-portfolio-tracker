@@ -181,6 +181,73 @@ describe('api config modal', () => {
     });
   });
 
+  it('tests the credentials already in session when the form is left empty', async () => {
+    // El campo de secret nunca se rellena: sin fallback a lo guardado, el boton
+    // de probar seria inutilizable tras recargar la pagina.
+    loadLocalVaultCredentialsMock.mockResolvedValue({
+      binance: { apiKey: 'vault-key', apiSecret: 'vault-secret' },
+      bybit: { apiKey: 'vault-bybit-key', apiSecret: 'vault-bybit-secret' },
+    });
+    testApiConnectionMock.mockResolvedValue({
+      success: true,
+      permissions: ['SPOT'],
+      readOnly: true,
+      permissionWarnings: [],
+    });
+    testBybitApiConnectionMock.mockResolvedValue({
+      success: true,
+      permissions: { Earn: ['Earn'] },
+      readOnly: true,
+      permissionWarnings: [],
+    });
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+
+    expect((document.querySelector('#input-api-secret') as HTMLInputElement).value).toBe('');
+
+    document.querySelector<HTMLButtonElement>('#btn-api-config-test')?.click();
+    await flushMicrotasks();
+    expect(testApiConnectionMock).toHaveBeenCalledWith({
+      apiKey: 'vault-key',
+      apiSecret: 'vault-secret',
+    });
+
+    document.querySelector<HTMLButtonElement>('#btn-bybit-api-config-test')?.click();
+    await flushMicrotasks();
+    expect(testBybitApiConnectionMock).toHaveBeenCalledWith({
+      apiKey: 'vault-bybit-key',
+      apiSecret: 'vault-bybit-secret',
+    });
+  });
+
+  it('prefers what is typed in the form over the stored credentials', async () => {
+    loadLocalVaultCredentialsMock.mockResolvedValue({
+      binance: { apiKey: 'vault-key', apiSecret: 'vault-secret' },
+    });
+    testApiConnectionMock.mockResolvedValue({
+      success: true,
+      permissions: ['SPOT'],
+      readOnly: true,
+      permissionWarnings: [],
+    });
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    await flushMicrotasks();
+    (document.querySelector('#input-api-key') as HTMLInputElement).value = 'typed-key';
+    (document.querySelector('#input-api-secret') as HTMLInputElement).value = 'typed-secret';
+
+    document.querySelector<HTMLButtonElement>('#btn-api-config-test')?.click();
+    await flushMicrotasks();
+
+    expect(testApiConnectionMock).toHaveBeenCalledWith({
+      apiKey: 'typed-key',
+      apiSecret: 'typed-secret',
+    });
+  });
+
   it('loads DPAPI credentials automatically on open, with no manual action', async () => {
     loadLocalVaultCredentialsMock.mockResolvedValue({
       binance: { apiKey: 'binance-key', apiSecret: 'binance-secret' },
