@@ -20,7 +20,11 @@ import {
   resolveAssetLogoSources,
 } from '../utils/asset-logos';
 import { onApiConfigChange } from './positions/api-config-modal';
-import { hasAnyExchangeApiCredentials, syncPositionsFromBinance } from '../utils/binance-sync';
+import {
+  hasAnyExchangeApiCredentials,
+  listConnectedExchanges,
+  syncPositionsFromBinance,
+} from '../utils/binance-sync';
 import {
   getCachedAutoPortfolioSnapshot,
   getPositionsCacheKey,
@@ -680,10 +684,8 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
   const buyLow = positions.filter((p) => p.direction === 'buy-low');
   const sellHigh = positions.filter((p) => p.direction === 'sell-high');
 
-  const hasApi = hasAnyExchangeApiCredentials();
-
   container.innerHTML = renderPositionsTemplate({
-    hasApi,
+    connectedExchanges: listConnectedExchanges(),
     activeCount,
     buyLowMarkup: buyLow.length > 0 ? renderPositionGroup(POSITIONS_COPY.buyLowTitle, buyLow) : '',
     sellHighMarkup:

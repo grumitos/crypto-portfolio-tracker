@@ -6,6 +6,7 @@ import type {
   BybitPosition,
   DualPosition,
   Direction,
+  ExchangeSource,
 } from '../types';
 import { hasApiCredentials } from './binance-auth';
 import { fetchDualPositions, fetchAccountBalances } from './binance-client';
@@ -227,6 +228,17 @@ function withExchangeTimeout<T>(request: Promise<T>, label: string): Promise<T> 
 
 export function hasAnyExchangeApiCredentials(): boolean {
   return hasApiCredentials() || hasBybitApiCredentials();
+}
+
+/**
+ * Exchanges que hoy alimentan la app, en orden estable. La interfaz nombra la
+ * fuente de los datos; cuando no hay ninguna, no hay nada que nombrar.
+ */
+export function listConnectedExchanges(): ExchangeSource[] {
+  const connected: ExchangeSource[] = [];
+  if (hasApiCredentials()) connected.push('Binance');
+  if (hasBybitApiCredentials()) connected.push('Bybit');
+  return connected;
 }
 
 function mapBybitBalance(

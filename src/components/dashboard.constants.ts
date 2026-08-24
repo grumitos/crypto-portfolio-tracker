@@ -24,8 +24,6 @@ export const PROGRESS_TICK_MIN_SEPARATION_PCT = 12;
 export const DASHBOARD_COPY = {
   sectionTitle: 'Resumen del portfolio',
   contextTitle: 'Resumen',
-  contextConnected: 'Exchanges conectados',
-  contextDisconnected: 'Sin exchanges conectados',
   investedTitle: 'Invertido total',
   balanceTitle: 'Saldo total',
   pnlContext: 'frente a lo invertido',
@@ -47,7 +45,6 @@ export const DASHBOARD_COPY = {
   activePositionsSub: 'suscripciones abiertas',
   accountBalanceTitle: 'Saldo en cuenta',
   accountBalanceCopy: 'Disponible y comprometido por activo',
-  accountBalanceBadge: 'Auto',
   emptyBalancesTitle: 'Sin activos disponibles',
   emptyBalancesCopy: 'No hay saldos reportados por los exchanges configurados.',
   assetLabel: 'Activo',

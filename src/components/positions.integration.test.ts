@@ -73,6 +73,12 @@ vi.mock('../utils/binance-sync', () => ({
     localStorage.getItem('crypto-binance-api') !== null ||
     localStorage.getItem('crypto-bybit-api') !== null,
   clearBinanceSyncCaches: vi.fn(),
+  listConnectedExchanges: () => {
+    const connected: string[] = [];
+    if (localStorage.getItem('crypto-binance-api') !== null) connected.push('Binance');
+    if (localStorage.getItem('crypto-bybit-api') !== null) connected.push('Bybit');
+    return connected;
+  },
 }));
 
 import { calculatePositionMetricsFromSnapshot, getAssetPriceSnapshot } from '../utils/market';
@@ -145,10 +151,37 @@ describe('positions integration', () => {
     await flushMicrotasks();
 
     expect(container.textContent).toContain('Conecta un exchange para ver tus posiciones');
-    expect(container.textContent).toContain('Sin exchanges conectados');
+    // La linea de contexto nombra la fuente de los datos: sin exchanges no hay
+    // fuente y el segmento no se pinta, en vez de anunciar la ausencia.
+    expect(container.querySelector('.context-meta')?.textContent?.trim()).toBe(
+      'Dual Investment · 0 activas',
+    );
     expect((container.querySelector('#positions-apr') as HTMLElement).textContent).toContain('---');
     expect(getAssetPriceSnapshot).not.toHaveBeenCalled();
     expect(calculatePositionMetricsFromSnapshot).not.toHaveBeenCalled();
+
+    dispose();
+    container.remove();
+  });
+
+  it('names the connected exchange in the context line', async () => {
+    seedState([]);
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: [],
+      count: 0,
+      balances: [],
+      totalUsdEstimate: 0,
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderPositions(container, vi.fn());
+    await flushMicrotasks();
+
+    expect(container.querySelector('.context-meta')?.textContent?.trim()).toBe(
+      'Dual Investment · 0 activas · Binance',
+    );
 
     dispose();
     container.remove();

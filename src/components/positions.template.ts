@@ -1,4 +1,5 @@
 import { escapeHtml, skeletonSpan } from '../utils/ui-helpers';
+import type { ExchangeSource } from '../types';
 import {
   POSITIONS_COPY,
   SPOT_CHANGE_SKELETON_WIDTH,
@@ -6,7 +7,7 @@ import {
 } from './positions.constants';
 
 interface PositionsTemplateInput {
-  hasApi: boolean;
+  connectedExchanges: ExchangeSource[];
   activeCount: number;
   buyLowMarkup: string;
   sellHighMarkup: string;
@@ -18,17 +19,20 @@ export function renderPositionsEmptyState(hasApi: boolean): string {
     <div class="empty positions-empty-state">
       <p class="empty-title">${hasApi ? POSITIONS_COPY.emptyTitle : POSITIONS_COPY.apiMissingTitle}</p>
       <p class="empty-copy">${hasApi ? POSITIONS_COPY.emptyBody : POSITIONS_COPY.apiMissingBody}</p>
-      <p class="empty-copy muted">${hasApi ? POSITIONS_COPY.emptyHint : POSITIONS_COPY.apiMissingHint}</p>
+      ${hasApi ? `<p class="empty-copy muted">${POSITIONS_COPY.emptyHint}</p>` : ''}
     </div>
   `;
 }
 
+/**
+ * Cierra la linea de contexto con la fuente de los datos. Sin exchanges el
+ * segmento simplemente no aparece: la vista vacia ya explica que falta conectar
+ * uno, y repetir la ausencia aqui solo resta.
+ */
 function resolveContextMeta(input: PositionsTemplateInput): string {
   const activity = `${input.activeCount} activa${input.activeCount === 1 ? '' : 's'}`;
-  const connection = input.hasApi
-    ? POSITIONS_COPY.contextConnected
-    : POSITIONS_COPY.contextDisconnected;
-  return `${POSITIONS_COPY.contextMetaPrefix} · ${activity} · ${connection}`;
+  const segments = [POSITIONS_COPY.contextMetaPrefix, activity, ...input.connectedExchanges];
+  return segments.join(' · ');
 }
 
 export function renderPositionsTemplate(input: PositionsTemplateInput): string {
@@ -73,7 +77,7 @@ export function renderPositionsTemplate(input: PositionsTemplateInput): string {
         ${
           input.hasPositions
             ? `${input.buyLowMarkup}${input.sellHighMarkup}`
-            : renderPositionsEmptyState(input.hasApi)
+            : renderPositionsEmptyState(input.connectedExchanges.length > 0)
         }
       </div>
     </section>

@@ -5,6 +5,7 @@ import { showApiErrorBanner } from '../utils/notifications';
 import {
   fetchBalanceSummary,
   hasAnyExchangeApiCredentials,
+  listConnectedExchanges,
   syncPositionsFromBinance,
 } from '../utils/binance-sync';
 import {
@@ -648,7 +649,7 @@ function renderInitialDashboard(container: HTMLElement, state: AppState): Dashbo
     invested: uiState.invested,
     lastUpdatedIso: state.portfolio.lastUpdated,
     positionsCount: state.positions.length,
-    hasApiCredentials: hasAnyExchangeApiCredentials(),
+    connectedExchanges: listConnectedExchanges(),
     firstMilestonePct: 0,
     secondMilestonePct: 0,
     progressFill: 0,

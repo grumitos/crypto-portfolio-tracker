@@ -22,7 +22,7 @@ export interface DashboardTemplateInput {
   invested: number;
   lastUpdatedIso: string;
   positionsCount: number;
-  hasApiCredentials: boolean;
+  connectedExchanges: ExchangeSource[];
   firstMilestonePct: number;
   secondMilestonePct: number;
   progressFill: number;
@@ -214,8 +214,16 @@ export function applyProgressTickLayout(
   if (head) head.className = progressHeadClassName(resolved);
 }
 
-function resolveContextMeta(hasApiCredentials: boolean): string {
-  return hasApiCredentials ? DASHBOARD_COPY.contextConnected : DASHBOARD_COPY.contextDisconnected;
+/**
+ * La barra de contexto nombra de donde vienen los datos. Sin exchanges no hay
+ * fuente que nombrar y el segmento desaparece entero: anunciar la ausencia no
+ * aporta nada que la vista vacia no diga ya, y mejor.
+ */
+function renderContextMeta(connectedExchanges: ExchangeSource[]): string {
+  if (connectedExchanges.length === 0) return '';
+  return `
+          <span class="context-sep"></span>
+          <span class="context-meta">${escapeHtml(connectedExchanges.join(' · '))}</span>`;
 }
 
 function renderBalanceRow(balance: BinanceAccountBalance): string {
@@ -324,9 +332,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
 
       <div class="context">
         <div class="context-left">
-          <span class="context-title">${DASHBOARD_COPY.contextTitle}</span>
-          <span class="context-sep"></span>
-          <span class="context-meta">${resolveContextMeta(input.hasApiCredentials)}</span>
+          <span class="context-title">${DASHBOARD_COPY.contextTitle}</span>${renderContextMeta(input.connectedExchanges)}
         </div>
       </div>
 
@@ -432,13 +438,12 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
       </div>
 
       ${
-        input.hasApiCredentials
+        input.connectedExchanges.length > 0
           ? `
       <section class="block" id="dashboard-balance-strip" hidden aria-labelledby="dashboard-balance-strip-title">
         <div class="table-head">
           <span class="table-title" id="dashboard-balance-strip-title">
             ${DASHBOARD_COPY.accountBalanceTitle}
-            <span class="chip"><span class="chip-dot" style="background:var(--cat-a)"></span>${DASHBOARD_COPY.accountBalanceBadge}</span>
           </span>
           <span class="block-note">${DASHBOARD_COPY.accountBalanceCopy}</span>
         </div>

@@ -27,7 +27,4 @@ export const POSITIONS_COPY = {
   emptyHint: 'Sincroniza para consultar posiciones activas.',
   apiMissingTitle: 'Conecta un exchange para ver tus posiciones',
   apiMissingBody: 'Usa Configuración para conectar Binance o Bybit y sincronizar datos.',
-  apiMissingHint: 'Sin exchanges conectados no hay posiciones que mostrar.',
-  contextConnected: 'Exchanges conectados',
-  contextDisconnected: 'Sin exchanges conectados',
 };
