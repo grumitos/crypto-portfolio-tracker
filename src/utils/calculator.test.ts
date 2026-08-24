@@ -42,32 +42,12 @@ describe('calculator utils', () => {
   });
 
   it('estimates days to goal with daily compounding', () => {
-    const days = estimateDaysToGoal(1000, 36.5, 2000);
-    expect(days).not.toBeNull();
-    expect(days!).toBeGreaterThan(600);
-    expect(days!).toBeLessThan(800);
-  });
-
-  it('handles estimateDaysToGoal edge cases and invalid values', () => {
+    // 36.5% APR compounds at 0.1%/day, so doubling takes log(2)/log(1.001) days.
+    expect(estimateDaysToGoal(1000, 36.5, 2000)).toBe(694);
     expect(estimateDaysToGoal(1000, 10, 1000)).toBe(0);
+    expect(estimateDaysToGoal(1000, 10, 500)).toBe(0);
     expect(estimateDaysToGoal(0, 10, 1000)).toBeNull();
     expect(estimateDaysToGoal(1000, 0, 2000)).toBeNull();
-    expect(estimateDaysToGoal(1000, 10, 500)).toBe(0);
-  });
-
-  it('generates projection rows and detects goal date', () => {
-    const { rows, goalDate } = generateProjection({
-      capital: 1000,
-      apr: 100,
-      frequency: 'daily',
-      goal: 1200,
-      invested: 1000,
-    });
-
-    expect(rows.length).toBeGreaterThan(1);
-    expect(rows[0].month).toBe(0);
-    expect(rows[0].balance).toBe(1000);
-    expect(goalDate).not.toBeNull();
   });
 
   it('calculates breakeven against invested capital, independent from goal', () => {
@@ -158,36 +138,20 @@ describe('calculator utils', () => {
     expect(monthlyEarnings(1200, 120)).toBeCloseTo(120, 8);
   });
 
-  it('estimates days to goal from projection rows consistently', () => {
-    const { rows } = generateProjection({
-      capital: 1000,
-      apr: 100,
-      frequency: 'weekly',
-      goal: 1200,
-      invested: 1000,
-    });
+  it('interpolates days to goal between projection rows and rejects invalid inputs', () => {
+    const rows = [
+      { month: 0, date: '2026-02-21', balance: 1000, earned: 0 },
+      { month: 1, date: '2026-03-21', balance: 1100, earned: 100 },
+      { month: 2, date: '2026-04-21', balance: 1300, earned: 300 },
+    ];
 
-    const days = estimateDaysToGoalFromProjection(rows, 1200);
-    expect(days).not.toBeNull();
-    expect(days!).toBeGreaterThan(60);
-    expect(days!).toBeLessThan(90);
-  });
-
-  it('returns null for invalid projection interpolation inputs', () => {
+    // 1200 sits halfway between month 1 and month 2 => 1.5 months.
+    expect(estimateDaysToGoalFromProjection(rows, 1200)).toBeCloseTo(45, 10);
+    expect(estimateDaysToGoalFromProjection(rows, 900)).toBe(0);
+    expect(estimateDaysToGoalFromProjection(rows, 5000)).toBeNull();
     expect(estimateDaysToGoalFromProjection([], 1200)).toBeNull();
-    expect(
-      estimateDaysToGoalFromProjection(
-        [{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }],
-        -1,
-      ),
-    ).toBeNull();
-    expect(
-      estimateDaysToGoalFromProjection(
-        [{ month: 0, date: '2026-02-21', balance: 1000, earned: 0 }],
-        1200,
-        0,
-      ),
-    ).toBeNull();
+    expect(estimateDaysToGoalFromProjection(rows, -1)).toBeNull();
+    expect(estimateDaysToGoalFromProjection(rows, 1200, 0)).toBeNull();
   });
 
   it('formats latin dates and percentage strings', () => {

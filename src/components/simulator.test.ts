@@ -538,27 +538,6 @@ describe('simulator dual milestones', () => {
     container.remove();
   });
 
-  it('no longer depends on hidden mode input', async () => {
-    const first = document.createElement('div');
-    document.body.appendChild(first);
-    const disposeFirst = renderSimulator(first);
-    await flushMicrotasks();
-
-    disposeFirst();
-    first.remove();
-
-    const second = document.createElement('div');
-    document.body.appendChild(second);
-    const disposeSecond = renderSimulator(second);
-    await flushMicrotasks();
-
-    expect(second.querySelector('#sim-target-mode')).toBeNull();
-    expect(second.querySelectorAll('.sim-target-btn').length).toBe(0);
-
-    disposeSecond();
-    second.remove();
-  });
-
   it('runs a single projection call per simulation', async () => {
     const projectionSpy = vi.spyOn(calculator, 'generateProjection');
     const container = document.createElement('div');

@@ -344,6 +344,11 @@ function stringValue(value: unknown): string {
 }
 
 function numberOrNull(value: unknown): number | null {
+  // `Number(null)`, `Number('')` and `Number([])` are all 0, so an absent
+  // Hyperliquid field would otherwise be normalized into a real 0 timestamp/APR.
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') {
+    return null;
+  }
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
