@@ -97,13 +97,19 @@ async function dpapiUnprotectMany(secretDpapiValues: string[]): Promise<string[]
       Add-Type -AssemblyName System.Security
       $plain = @()
       foreach ($secretDpapi in @($payload.secretDpapiValues)) {
-        $protected = [Convert]::FromBase64String([string]$secretDpapi)
-        $bytes = [Security.Cryptography.ProtectedData]::Unprotect(
-          $protected,
-          $null,
-          [Security.Cryptography.DataProtectionScope]::CurrentUser
-        )
-        $plain += [Text.Encoding]::UTF8.GetString($bytes)
+        try {
+          $protected = [Convert]::FromBase64String([string]$secretDpapi)
+          $bytes = [Security.Cryptography.ProtectedData]::Unprotect(
+            $protected,
+            $null,
+            [Security.Cryptography.DataProtectionScope]::CurrentUser
+          )
+          $plain += [Text.Encoding]::UTF8.GetString($bytes)
+        } catch {
+          # Blob ilegible (cifrado por otro usuario/equipo o corrupto): se descarta
+          # esa credencial en vez de tumbar la lectura completa del vault.
+          $plain += ''
+        }
       }
       [Console]::Out.Write(($plain | ConvertTo-Json -Compress))
     `,
@@ -244,7 +250,15 @@ async function handleLocalVaultCredentials(req: Request): Promise<Response> {
 
   try {
     if (req.method === 'GET') {
-      return sendJson(200, { available: true, ...(await readPlainLocalVault()) });
+      // Una lectura fallida no debe bloquear el arranque de la app: se responde
+      // sin credenciales y el usuario las vuelve a ingresar.
+      let stored: LocalVaultPlainPayload = {};
+      try {
+        stored = await readPlainLocalVault();
+      } catch (err) {
+        console.error('[local-vault] lectura fallida:', err);
+      }
+      return sendJson(200, { available: true, ...stored });
     }
 
     if (req.method === 'PUT') {
@@ -283,10 +297,9 @@ async function handleLocalVaultCredentials(req: Request): Promise<Response> {
 
     return sendJson(405, { available: true, error: 'Metodo no permitido.' });
   } catch (err) {
-    return sendJson(500, {
-      available: true,
-      error: err instanceof Error ? err.message : 'Error de vault local.',
-    });
+    // El detalle queda en el log del servidor; al cliente solo un mensaje generico.
+    console.error('[local-vault] error:', err);
+    return sendJson(500, { available: true, error: 'Error de vault local.' });
   }
 }
 
@@ -401,7 +414,8 @@ async function proxyRequest(req: Request, prefix: string, targetBase: string): P
   const upstream = await fetch(proxyTargetUrl(req, prefix, targetBase), {
     method: req.method,
     headers: copyProxyHeaders(req),
-    body: hasRequestBody(req.method) ? req.body : undefined,
+    // duplex: 'half' es obligatorio al reenviar un ReadableStream como body.
+    ...(hasRequestBody(req.method) ? { body: req.body, duplex: 'half' } : {}),
     redirect: 'manual',
   });
 
@@ -420,7 +434,9 @@ function resolvePort(): number {
 
 export function createServerOptions(): Bun.ServeOptions {
   return {
-    hostname: Bun.env.HOST ?? 'localhost',
+    // Fijo a localhost a proposito: los proxies de exchange y /local-vault/credentials
+    // (que devuelve secretos en claro) no deben quedar expuestos en la red.
+    hostname: 'localhost',
     port: resolvePort(),
     development: Bun.env.NODE_ENV !== 'production',
     routes: {

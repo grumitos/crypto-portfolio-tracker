@@ -112,15 +112,6 @@ function getOrCreateModal(): HTMLDialogElement {
           </div>
         </section>
 
-        <section class="modal-api-block modal-api-block--security" aria-labelledby="config-security-title">
-          <div class="modal-api-block-head">
-            <div class="modal-api-block-kicker" id="config-security-title">${iconLock(14)} Seguridad</div>
-          </div>
-          <div class="modal-api-inline-actions">
-            <button type="button" class="btn btn-sm" id="btn-api-vault-unlock">Cargar DPAPI</button>
-          </div>
-        </section>
-
         <section class="modal-api-block modal-api-block--binance" aria-labelledby="config-binance-title">
           <div class="modal-api-block-head">
             <div class="modal-api-block-kicker" id="config-binance-title">${iconLock(14)} Binance</div>
@@ -317,23 +308,17 @@ function bindApiConfigEvents(dialog: HTMLDialogElement): void {
     }
   });
 
-  dialog.querySelector('#btn-api-vault-unlock')?.addEventListener('click', async () => {
+  // El vault se carga solo al abrir el modal: no hay accion manual que hacer.
+  void (async () => {
     const credentials = await loadLocalVaultCredentials();
-    const binanceUnlocked = credentials?.binance !== undefined;
-    const bybitUnlocked = credentials?.bybit !== undefined;
+    if (!credentials?.binance && !credentials?.bybit) return;
 
-    if (credentials?.binance) saveApiCredentials(credentials.binance);
-    if (credentials?.bybit) saveBybitApiCredentials(credentials.bybit);
+    if (credentials.binance) saveApiCredentials(credentials.binance);
+    if (credentials.bybit) saveBybitApiCredentials(credentials.bybit);
 
-    if (binanceUnlocked || bybitUnlocked) {
-      showStatus(statusEl, 'Credenciales DPAPI cargadas para esta sesión.', 'success');
-      clearAllRuntimeCaches();
-      dispatchConfigChange();
-      return;
-    }
-
-    showStatus(statusEl, 'No se encontraron credenciales DPAPI guardadas.', 'error');
-  });
+    clearAllRuntimeCaches();
+    dispatchConfigChange();
+  })();
 
   dialog.querySelector('#btn-api-config-save')?.addEventListener('click', async () => {
     const keyInput = dialog.querySelector('#input-api-key') as HTMLInputElement;
