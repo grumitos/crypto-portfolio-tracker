@@ -271,11 +271,16 @@ describe('positions table rendering', () => {
       }),
     ]);
 
-    expect(grouped).toContain('pos-components-summary');
-    expect(grouped).toContain('▸');
-    expect(grouped).toContain('Desglose (2)');
-    expect(grouped).toContain('aria-label="Ver desglose de la posicion"');
+    // El control ocupa su propio canalon, la primera celda de la fila.
+    const firstCell = grouped.slice(grouped.indexOf('<td'), grouped.indexOf('</td>'));
+    expect(firstCell).toContain('data-field="expand"');
+    expect(firstCell).toContain('class="pos-expand"');
+    expect(firstCell).toContain('data-toggle-components');
+    expect(firstCell).toContain('>2</span>');
+    expect(grouped).toContain('aria-label="Ver las 2 suscripciones de SOL/USDT"');
     expect(grouped).toContain('pos-sub-row');
+    // Solo la ultima parte cierra el bloque con filete.
+    expect(grouped.match(/is-last-component/g)).toHaveLength(1);
     expect(textOf(grouped)).toContain('186.148196 SOL');
     expect(grouped).toContain('397.80%');
     expect(grouped.match(/position-apr-/g)).toHaveLength(1);

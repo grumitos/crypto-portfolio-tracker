@@ -1,4 +1,5 @@
 import { loadState } from '../utils/storage';
+import { countPositionSubscriptions } from '../utils/positions-grouping';
 import { formatUSD, formatUSDCompact } from '../utils/calculator';
 import {
   calculateDiscountBuyEffectiveApr,
@@ -678,7 +679,7 @@ async function performAutoSync(
 export function renderPositions(container: HTMLElement, onStateChange: () => void): () => void {
   const state = loadState();
   const { positions } = state;
-  const activeCount = positions.length;
+  const activeCount = countPositionSubscriptions(positions);
 
   // Separate by direction
   const buyLow = positions.filter((p) => p.direction === 'buy-low');

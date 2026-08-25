@@ -24,6 +24,7 @@ import {
   toggleDashboardLegend,
 } from '../utils/dashboard-goal';
 import { buildProjectionSnapshot } from '../utils/projection-milestones';
+import { countPositionSubscriptions } from '../utils/positions-grouping';
 import {
   combinePortfolioYieldMetrics,
   getAggregatedPortfolioMetrics,
@@ -656,7 +657,7 @@ function renderInitialDashboard(container: HTMLElement, state: AppState): Dashbo
     goalAmount: uiState.goal,
     invested: uiState.invested,
     lastUpdatedIso: state.portfolio.lastUpdated,
-    positionsCount: state.positions.length,
+    positionsCount: countPositionSubscriptions(state.positions),
     connectedExchanges: listConnectedExchanges(),
     firstMilestonePct: 0,
     secondMilestonePct: 0,
@@ -821,7 +822,7 @@ async function hydrateDashboardMarketStats(
 
   setStaticTextOutput(
     getDashboardElements(container).positionsCount,
-    String(effectivePositions.length),
+    String(countPositionSubscriptions(effectivePositions)),
   );
 
   if (effectivePositions.length === 0) {

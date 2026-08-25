@@ -13,9 +13,15 @@ import { formatTimeHHMMLocal } from '../utils/date';
 import { resolveAssetLogoSources, createAssetMonogram } from '../utils/asset-logos';
 import { escapeHtml } from '../utils/ui-helpers';
 import { POSITIONS_COPY } from './positions.constants';
+import {
+  componentPositions,
+  countPositionSubscriptions,
+  resolvePositionProjectedProfit,
+} from '../utils/positions-grouping';
 import type { DualPosition } from '../types';
 
 type PositionFieldId =
+  | 'expand'
   | 'asset'
   | 'amount'
   | 'apr'
@@ -64,7 +70,8 @@ interface PositionField {
 export function renderPositionGroup(title: string, positions: DualPosition[]): string {
   const isBuyLow = positions[0]?.direction !== 'sell-high';
   const safeTitle = escapeHtml(title);
-  const groupSummary = `${positions.length} posicion${positions.length > 1 ? 'es' : ''}`;
+  const subscriptions = countPositionSubscriptions(positions);
+  const groupSummary = `${subscriptions} posicion${subscriptions > 1 ? 'es' : ''}`;
   const fields = getPositionFields(!isBuyLow);
   const note = isBuyLow ? POSITIONS_COPY.buyLowNote : POSITIONS_COPY.sellHighNote;
   return `
@@ -106,10 +113,29 @@ export function renderPositionGroup(title: string, positions: DualPosition[]): s
 // Single source of truth for every rendered position field.
 const POSITION_FIELDS: PositionField[] = [
   {
+    id: 'expand',
+    heading: '<span class="visually-hidden">Desglose</span>',
+    label: 'Desglose',
+    width: { buyLow: '3%', sellHigh: '3%' },
+    cellClass: 'pos-expand-cell',
+    render: ({ position, rowKind, hasComponents }) => {
+      // En las partes la celda queda vacia salvo por el filete que las cose al
+      // grupo; el hilo lo pinta el CSS, no hace falta marcado.
+      if (rowKind === 'component' || !hasComponents) return { html: '' };
+
+      const count = position.components!.length;
+      const { base, quote } = productLabelParts(position);
+      const pair = `${base}${quote ? `/${quote}` : ''}`;
+      return {
+        html: `<button type="button" class="pos-expand" data-toggle-components aria-expanded="false" aria-label="Ver las ${count} suscripciones de ${escapeHtml(pair)}"><span class="pos-components-chevron" aria-hidden="true">▸</span><span class="pos-expand-count">${count}</span></button>`,
+      };
+    },
+  },
+  {
     id: 'asset',
     heading: 'Activo',
     label: 'Activo',
-    width: { buyLow: '16%', sellHigh: '15%' },
+    width: { buyLow: '14%', sellHigh: '13%' },
     render: ({ position, rowKind }) => ({
       html: rowKind === 'component' ? '' : productLabelHtml(position),
     }),
@@ -164,7 +190,7 @@ const POSITION_FIELDS: PositionField[] = [
     id: 'outcome',
     heading: 'Resultado',
     label: 'Resultado',
-    width: { buyLow: '17%', sellHigh: '15%' },
+    width: { buyLow: '16%', sellHigh: '14%' },
     align: 'right',
     cellClass: 'r',
     render: ({ position }) => ({ html: renderOutcomeCell(position) }),
@@ -188,7 +214,7 @@ const POSITION_FIELDS: PositionField[] = [
       const projectedEarned =
         position.positionKind === 'derivative'
           ? (position.unrealizedPnlUsd ?? 0)
-          : calculateDualProjectedProfit(position);
+          : resolvePositionProjectedProfit(position);
       const earningsCell = renderEarningsCell(position, projectedEarned);
       return {
         ...earningsCell,
@@ -203,25 +229,15 @@ const POSITION_FIELDS: PositionField[] = [
     width: { buyLow: '7%', sellHigh: '7%' },
     align: 'right',
     cellClass: 'r',
-    render: ({ position, parent, componentId, rowKind, hasComponents }) => {
+    render: ({ position, parent, componentId, rowKind }) => {
       const remainingId =
         rowKind === 'component'
           ? `position-remaining-${parent!.id}-comp-${componentId}`
           : `position-remaining-${position.id}`;
-      const toggle =
-        rowKind === 'main' && hasComponents
-          ? `
-            <button type="button" class="btn btn-ghost btn-sm pos-components-summary" data-toggle-components aria-expanded="false" aria-label="Ver desglose de la posicion">
-              <span class="pos-components-chevron" aria-hidden="true">▸</span>
-              Desglose (${position.components!.length})
-            </button>
-          `
-          : '';
       return {
         html: `
         <span class="cell-stack r">
           <span id="${escapeHtml(remainingId)}">${formatRemainingTime(position)}</span>
-          ${toggle}
         </span>
       `,
       };
@@ -319,25 +335,29 @@ function renderEarningsCell(
 }
 
 function renderComponentRows(parent: DualPosition, options: { showUsdColumn: boolean }): string {
-  const components = parent.components!;
-  const sorted = [...components].sort((a, b) => {
+  // Las partes se derivan con el mismo helper que usan los calculos: si se
+  // construyeran a mano heredarian `components` del padre y cada fila volveria a
+  // sumar el grupo entero en vez de mostrar lo suyo.
+  const sorted = componentPositions(parent).sort((a, b) => {
     const aKey = `${a.entryDate} ${normalizeTime(a.entryTime) ?? '00:00'}`;
     const bKey = `${b.entryDate} ${normalizeTime(b.entryTime) ?? '00:00'}`;
     return bKey.localeCompare(aKey);
   });
 
   const subRows = sorted
-    .map((c) => {
-      const tempPos: DualPosition = { ...parent, ...c };
+    .map((part, index) => {
+      // El filete solo lo lleva la ultima parte: asi el grupo entero se lee como
+      // un bloque y no como filas sueltas debajo de otra.
+      const isLast = index === sorted.length - 1;
 
       return `
-    <tr class="pos-sub-row" hidden data-ignore-row-edit="true">
+    <tr class="pos-sub-row${isLast ? ' is-last-component' : ''}" hidden data-ignore-row-edit="true">
       ${renderPositionCells({
-        position: tempPos,
+        position: part,
         showUsdColumn: options.showUsdColumn,
         rowKind: 'component',
         parent,
-        componentId: c.id,
+        componentId: part.id,
       })}
     </tr>
     `;
@@ -401,38 +421,54 @@ function renderOutcomeRows(rows: OutcomeRow[]): string {
   `;
 }
 
-function resolveOutcomeRows(position: DualPosition): OutcomeRow[] {
+/** Desenlaces de una unica suscripcion, con su propio strike y su propia ventana. */
+function resolveSingleOutcomeRows(position: DualPosition): OutcomeRow[] {
   const projectedProfit = calculateDualProjectedProfit(position);
+  const notExecuted = {
+    label: 'No ej.',
+    amount: position.amount + projectedProfit,
+    asset: position.subscriptionAsset,
+  };
 
   if (position.direction === 'buy-low') {
-    const executedAmount =
-      position.targetPrice > 0 ? (position.amount + projectedProfit) / position.targetPrice : 0;
-    return applyExpectedSettlementRow(position, [
-      { label: 'Ejec.', amount: executedAmount, asset: position.asset },
+    return [
       {
-        label: 'No ej.',
-        amount: position.amount + projectedProfit,
-        asset: position.subscriptionAsset,
+        label: 'Ejec.',
+        amount:
+          position.targetPrice > 0 ? (position.amount + projectedProfit) / position.targetPrice : 0,
+        asset: position.asset,
       },
-    ]);
+      notExecuted,
+    ];
   }
 
-  const quoteAsset = getQuoteAsset(position);
-  const executedAmount =
-    position.targetPrice > 0 ? (position.amount + projectedProfit) * position.targetPrice : 0;
-
-  return applyExpectedSettlementRow(position, [
+  return [
     {
       label: 'Ejec.',
-      amount: executedAmount,
-      asset: quoteAsset,
+      amount:
+        position.targetPrice > 0 ? (position.amount + projectedProfit) * position.targetPrice : 0,
+      asset: getQuoteAsset(position),
     },
-    {
-      label: 'No ej.',
-      amount: position.amount + projectedProfit,
-      asset: position.subscriptionAsset,
-    },
-  ]);
+    notExecuted,
+  ];
+}
+
+/**
+ * Desenlaces de una fila, sumando parte por parte cuando resume un grupo.
+ *
+ * Recalcular sobre la fila agregada seria mas corto y estaria mal: el strike
+ * medio no convierte el importe total en lo que convierten los strikes reales, y
+ * la entrada del grupo es la de su primera parte, asi que aplicarla a todo el
+ * capital factura dias que las suscripciones posteriores no vivieron.
+ */
+function resolveOutcomeRows(position: DualPosition): OutcomeRow[] {
+  const perPart = componentPositions(position).map(resolveSingleOutcomeRows);
+  const summed = perPart[0].map((row, index) => ({
+    ...row,
+    amount: perPart.reduce((total, rows) => total + (rows[index]?.amount ?? 0), 0),
+  }));
+
+  return applyExpectedSettlementRow(position, summed);
 }
 
 function applyExpectedSettlementRow(position: DualPosition, rows: OutcomeRow[]): OutcomeRow[] {
@@ -694,7 +730,9 @@ function productLabelHtml(position: DualPosition): string {
     : '';
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
-  return `<span class="asset"><span class="asset-logo-wrap" data-asset-logo-root><img class="asset-logo" data-asset-logo-img ${safePrimaryAttr} ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="asset-fallback" data-asset-logo-fallback>${safeMonogram}</span></span><span class="asset-pair">${safeBase}${safeQuote}</span></span>`;
+  const label = `<span class="asset-logo-wrap" data-asset-logo-root><img class="asset-logo" data-asset-logo-img ${safePrimaryAttr} ${safeFallbackAttr} alt="${safeAlt}" loading="lazy" decoding="async"><span class="asset-fallback" data-asset-logo-fallback>${safeMonogram}</span></span><span class="asset-pair">${safeBase}${safeQuote}</span>`;
+
+  return `<span class="asset">${label}</span>`;
 }
 
 export function updateRemainingTimesInPlace(

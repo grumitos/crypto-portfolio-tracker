@@ -983,14 +983,25 @@ input[type='number']::-webkit-inner-spin-button {
   border-bottom: none;
 }
 
+/* El resaltado de fila terminaba a ras del contenido y se leia como un corte.
+   La tabla se saca hacia el margen de pagina y se devuelve el mismo espacio como
+   relleno de las celdas de los extremos: el contenido no se mueve ni un pixel y
+   el resaltado respira a ambos lados. */
+.table-scroll,
+.tbl:not(.table-scroll *) {
+  margin-inline: calc(-1 * var(--table-bleed));
+  width: calc(100% + 2 * var(--table-bleed));
+  max-width: none;
+}
+
 .tbl th:first-child,
 .tbl td:first-child {
-  padding-left: 0;
+  padding-left: var(--table-bleed);
 }
 
 .tbl th:last-child,
 .tbl td:last-child {
-  padding-right: 0;
+  padding-right: var(--table-bleed);
 }
 
 .tbl .r {
@@ -1016,16 +1027,6 @@ input[type='number']::-webkit-inner-spin-button {
 
 .tbl-dense td {
   padding: 12px 9px;
-}
-
-.tbl-dense th:first-child,
-.tbl-dense td:first-child {
-  padding-left: 0;
-}
-
-.tbl-dense th:last-child,
-.tbl-dense td:last-child {
-  padding-right: 0;
 }
 
 .cell-stack {

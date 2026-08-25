@@ -58,6 +58,8 @@
   --radius-full: 50%;
 
   /* ── Layout ── */
+  /* Cuanto sobresale el resaltado de fila por fuera del contenido. */
+  --table-bleed: 12px;
   --app-max-width: 1200px;
   --page-padding-inline: 32px;
   --header-height: 60px;

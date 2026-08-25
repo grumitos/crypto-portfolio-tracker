@@ -46,21 +46,60 @@
   text-align: left;
 }
 
-/* ── Desglose de componentes ──
-   Restante es la columna mas estrecha de la tabla: el control se sale hacia el
-   canalon de la izquierda en una sola linea, que se lee mejor que plegarlo en
-   tres dentro de la celda. */
-.btn.pos-components-summary {
-  height: auto;
-  padding: 2px 0;
-  font-size: 11.5px;
-  color: var(--ink-3);
-  gap: 4px;
+/* ── Desglose de un grupo ──
+   El control vive en su propio canalon al inicio de la fila, como en Carbon o
+   Cloudscape: en la celda del activo competia con el logo y no dejaba donde
+   pulsar. El boton ocupa la celda entera, asi que el objetivo es toda la altura
+   de la fila y no un glifo de once pixeles. */
+.tbl .pos-expand-cell {
+  position: relative;
+  padding-right: 0;
 }
 
-.btn.pos-components-summary:hover {
+.pos-expand {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+  /* Se estira hasta el borde de la celda del activo para no dejar un hueco
+     muerto entre el numero y el logo, y sube al cuerpo del par: mas pequeno
+     pasaba desapercibido. */
+  padding: 13px 9px 13px 0;
+  margin: -13px 0;
+  border: none;
   background: transparent;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color var(--duration-ui) var(--ease-out);
+}
+
+.pos-expand:hover {
   color: var(--ink);
+}
+
+.pos-expand:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: var(--radius-xs);
+}
+
+/* El hilo que cose el grupo por dentro: sustituye a la banda de fondo, que era
+   una caja dentro de otra. Corre por el mismo canalon del control. */
+.tbl .pos-sub-row .pos-expand-cell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 15px;
+  width: 1px;
+  background: var(--line-2);
+}
+
+.tbl .pos-sub-row.is-last-component .pos-expand-cell::before {
+  bottom: 50%;
 }
 
 .pos-components-chevron {
@@ -72,11 +111,28 @@
   transform: rotate(90deg);
 }
 
-.tbl .pos-sub-row td {
-  padding-top: 8px;
-  padding-bottom: 8px;
-  background: var(--surface-2);
-  font-size: 12px;
+/* Las partes no son una tabla dentro de la tabla: sin fondo propio y sin
+   encoger el cuerpo, que es lo que las haria parecer datos de otra clase.
+   Se sangran, bajan un paso de tinta y el grupo queda cosido por dentro. */
+.tbl .pos-row-grouped.pos-toggle-expanded > td {
+  border-bottom-color: transparent;
+}
+
+.tbl .pos-sub-row > td {
+  padding-top: 9px;
+  padding-bottom: 9px;
+  border-bottom-color: transparent;
+  color: var(--ink-2);
+}
+
+.tbl .pos-sub-row.is-last-component > td {
+  border-bottom-color: var(--line);
+}
+
+/* El sangrado lo lleva el activo, no el canalon: es la columna donde el ojo
+   compara padre e hijos. */
+.tbl .pos-sub-row > td[data-field='asset'] {
+  padding-left: 13px;
 }
 
 @media (max-width: 720px) {

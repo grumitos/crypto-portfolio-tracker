@@ -21,6 +21,7 @@ import {
   fetchBybitWalletBalances,
 } from './bybit-client';
 import { replaceSyncedPositions } from './storage';
+import { countPositionSubscriptions, groupPositionsByLockWindow } from './positions-grouping';
 import { getAssetPriceSnapshot } from './market';
 import {
   parseBinanceDualSettlementUTC,
@@ -480,19 +481,22 @@ export async function fetchBinancePortfolioSnapshot(
       );
     }
 
-    const [positionSettled, { balances, totalUsdEstimate }] = await Promise.all([
+    const [positionSettled, { balances, totalUsdEstimate, walletIssues }] = await Promise.all([
       Promise.allSettled(positionRequests),
       fetchBalanceSummary(forceRefresh),
     ]);
-    const positions = positionSettled.flatMap((result) =>
-      result.status === 'fulfilled' ? result.value : [],
+    // El exchange devuelve una fila por suscripcion: se consolidan aqui, antes
+    // de persistir, para que toda la app vea el mismo modelo agrupado.
+    const positions = groupPositionsByLockWindow(
+      positionSettled.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
     );
 
     const snapshot = {
       positions,
-      count: positions.length,
+      count: countPositionSubscriptions(positions),
       balances,
       totalUsdEstimate,
+      walletIssues,
     };
 
     portfolioSnapshotCache = { value: snapshot, ts: Date.now() };
