@@ -58,8 +58,9 @@
   --radius-full: 50%;
 
   /* ── Layout ── */
-  /* Cuanto sobresale el resaltado de fila por fuera del contenido. */
-  --table-bleed: 12px;
+  /* Cuanto entra el contenido de las celdas extremas para que el resaltado de
+     fila no termine a ras de el. */
+  --table-inset: 12px;
   --app-max-width: 1200px;
   --page-padding-inline: 32px;
   --header-height: 60px;

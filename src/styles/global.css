@@ -983,25 +983,22 @@ input[type='number']::-webkit-inner-spin-button {
   border-bottom: none;
 }
 
-/* El resaltado de fila terminaba a ras del contenido y se leia como un corte.
-   La tabla se saca hacia el margen de pagina y se devuelve el mismo espacio como
-   relleno de las celdas de los extremos: el contenido no se mueve ni un pixel y
-   el resaltado respira a ambos lados. */
-.table-scroll,
-.tbl:not(.table-scroll *) {
-  margin-inline: calc(-1 * var(--table-bleed));
-  width: calc(100% + 2 * var(--table-bleed));
-  max-width: none;
+.tbl tbody tr:hover {
+  background-color: var(--hover);
 }
 
+/* El resaltado de fila terminaba a ras del contenido y se leia como un corte.
+   En vez de sacar la tabla hacia el margen, que la dejaba mas ancha que el resto
+   de la pagina, el contenido de las celdas extremas entra un poco: la fila
+   entera sigue midiendo lo que mide la pagina y el resaltado respira dentro. */
 .tbl th:first-child,
 .tbl td:first-child {
-  padding-left: var(--table-bleed);
+  padding-left: var(--table-inset);
 }
 
 .tbl th:last-child,
 .tbl td:last-child {
-  padding-right: var(--table-bleed);
+  padding-right: var(--table-inset);
 }
 
 .tbl .r {
@@ -1010,10 +1007,6 @@ input[type='number']::-webkit-inner-spin-button {
 
 .tbl .num {
   font-size: 13px;
-}
-
-.tbl tbody tr:hover td {
-  background: var(--hover);
 }
 
 .tbl-fixed {

@@ -804,10 +804,11 @@ async function hydratePositionMarketData(
 function bindPositionEvents(container: HTMLElement): void {
   // ── Component sub-row toggle ──
   container.querySelectorAll<HTMLElement>('[data-toggle-components]').forEach((toggle) => {
+    const toggleRow = toggle.closest('tr');
+    if (!toggleRow) return;
+
     const handleToggle = (e: Event) => {
       e.stopPropagation();
-      const toggleRow = toggle.closest('tr');
-      if (!toggleRow) return;
       let sibling = toggleRow.nextElementSibling;
       const isExpanding =
         sibling?.classList.contains('pos-sub-row') && (sibling as HTMLElement).hidden;
@@ -819,5 +820,14 @@ function bindPositionEvents(container: HTMLElement): void {
       toggleRow.classList.toggle('pos-toggle-expanded', isExpanding);
     };
     toggle.addEventListener('click', handleToggle);
+
+    // El par de monedas comparte el area pulsable con el canalon: lo que se
+    // despliega es la posicion, y esa es la parte de la fila que la nombra. El
+    // control accesible sigue siendo uno solo, el del canalon, que es quien
+    // lleva el aria-expanded.
+    const assetCell = toggleRow.querySelector<HTMLElement>('td[data-field="asset"]');
+    if (!assetCell) return;
+    assetCell.classList.add('is-toggle-target');
+    assetCell.addEventListener('click', handleToggle);
   });
 }

@@ -76,8 +76,13 @@
   transition: color var(--duration-ui) var(--ease-out);
 }
 
-.pos-expand:hover {
+.pos-expand:hover,
+.tbl tbody tr:hover .pos-expand {
   color: var(--ink);
+}
+
+.tbl td.is-toggle-target {
+  cursor: pointer;
 }
 
 .pos-expand:focus-visible {

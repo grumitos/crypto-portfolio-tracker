@@ -351,7 +351,7 @@ function renderComponentRows(parent: DualPosition, options: { showUsdColumn: boo
       const isLast = index === sorted.length - 1;
 
       return `
-    <tr class="pos-sub-row${isLast ? ' is-last-component' : ''}" hidden data-ignore-row-edit="true">
+    <tr class="pos-sub-row${isLast ? ' is-last-component' : ''}" hidden>
       ${renderPositionCells({
         position: part,
         showUsdColumn: options.showUsdColumn,
