@@ -30,8 +30,32 @@
 }
 
 @media (max-width: 720px) {
+  /* Las celdas intermedias ceden relleno lateral: a 360px la columna de precio
+     dejaba 39px utiles para un valor que pide 49 y lo cortaba ("$ 2838." en vez
+     de "$ 2838.10"). Las extremas conservan su sangria, que es la que hace
+     respirar el resaltado de fila. */
+  .tbl.calc-purchases-table th,
+  .tbl.calc-purchases-table td {
+    padding-inline: 6px;
+  }
+
+  /* Repartidas a lo que pide cada una en vez de a partes iguales: el precio
+     carga con el prefijo "$" y es la que menos sitio tenia, mientras que el
+     total es una cifra ya formateada que sobraba ancho. La tabla es de trazado
+     fijo, asi que el ancho lo fija la fila de cabecera. */
+  .tbl.calc-purchases-table th:nth-child(2) {
+    width: 33%;
+  }
+
+  .tbl.calc-purchases-table th:nth-child(3) {
+    width: 26%;
+  }
+
+  /* La columna de acciones mide 40px: un boton de 44 desbordaba la celda hasta
+     el borde mismo del viewport, fuera del margen de la pagina. Mantiene la
+     altura tactil y se ajusta al ancho que le da su columna. */
   .icon-btn.calc-remove-btn {
-    width: var(--touch-target-size);
+    width: 34px;
     height: var(--touch-target-size);
   }
 }

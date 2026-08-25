@@ -17,4 +17,11 @@
   .connbar .btn {
     width: 100%;
   }
+
+  /* Con 520px la columna de bloqueo se quedaba en 57px utiles y cortaba la
+     fecha ("21/09/2026" pide 77). La tabla ya se desplaza en horizontal, asi
+     que el ancho minimo puede crecer hasta que la fecha entre entera. */
+  .tbl.capital-vaults-table {
+    min-width: 680px;
+  }
 }

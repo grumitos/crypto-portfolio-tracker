@@ -143,7 +143,15 @@ async function init(): Promise<void> {
   renderView(app, getCurrentView());
 
   requestAnimationFrame(() => {
-    window.setTimeout(() => applyTypographyConfig(), 0);
+    window.setTimeout(() => {
+      applyTypographyConfig();
+      // La tipografia de la marca llega despues del primer render y ensancha
+      // las pestanas: hasta que no esta, el riel de vistas mide de menos y el
+      // desplazamiento hacia la pestana activa se queda corto. No vale
+      // fonts.ready, que resuelve antes de que la hoja recien insertada llegue
+      // a pedir ninguna fuente; el aviso bueno es el fin de cada carga.
+      document.fonts?.addEventListener('loadingdone', () => revealActiveNavButton(app));
+    }, 0);
   });
 
   // Re-render when another tab modifies localStorage
@@ -190,6 +198,31 @@ function updateActiveNavButton(app: HTMLElement, view: View): void {
       btn.removeAttribute('aria-current');
     }
   });
+  revealActiveNavButton(app);
+}
+
+/**
+ * A anchos de movil las cinco vistas no caben en una linea y el riel se
+ * desplaza en horizontal. Sin esto la pestana activa puede quedar fuera de la
+ * parte visible -- en Calculadora a 360px se sale entera, 93 de sus 95px -- y
+ * la vista en la que estas se queda sin indicador. Se ajusta scrollLeft del
+ * propio riel en vez de scrollIntoView para no arrastrar la pagina con el.
+ */
+function revealActiveNavButton(app: HTMLElement): void {
+  const nav = app.querySelector<HTMLElement>('.nav');
+  const activeBtn = app.querySelector<HTMLElement>('.nav-btn.active');
+  if (!nav || !activeBtn) return;
+
+  const hiddenWidth = nav.scrollWidth - nav.clientWidth;
+  if (hiddenWidth <= 0) return;
+
+  // Medido contra la caja del riel: el riel no esta posicionado, asi que su
+  // offsetParent no es el, y offsetLeft daria un origen equivocado.
+  const navBox = nav.getBoundingClientRect();
+  const buttonBox = activeBtn.getBoundingClientRect();
+  const relativeLeft = buttonBox.left - navBox.left + nav.scrollLeft;
+  const centered = relativeLeft - (nav.clientWidth - buttonBox.width) / 2;
+  nav.scrollLeft = Math.max(0, Math.min(centered, hiddenWidth));
 }
 
 function renderView(app: HTMLElement, view: View): void {

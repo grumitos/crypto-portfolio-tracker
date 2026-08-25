@@ -1596,6 +1596,52 @@ textarea:focus-visible {
     --page-padding-inline: 20px;
   }
 
+  /* ── La barra superior se apila aqui, no a 720 ──
+     En una sola fila la cabecera pide 864px: marca (184) + nav (469, que no
+     encoge) + los tres botones de utilidad (100) mas los dos huecos de 32 y la
+     sangria. Por debajo de eso los botones se salian del viewport y, como
+     `html` lleva overflow-x hidden, quedaban recortados y sin forma de
+     alcanzarlos, con el texto de estado aplastado a 13px. */
+  .app-header {
+    height: auto;
+    position: static;
+  }
+
+  .app-header-inner {
+    flex-wrap: wrap;
+    gap: 10px var(--space-md);
+    padding-block: 10px;
+  }
+
+  .nav {
+    order: 3;
+    flex: 1 0 100%;
+    height: auto;
+    gap: 0;
+    margin-bottom: -11px;
+  }
+
+  .nav-btn {
+    min-height: var(--touch-target-size);
+    padding: 0 10px;
+  }
+
+  .app-shell-actions {
+    gap: 10px;
+  }
+
+  .app-last-update {
+    font-size: 11px;
+  }
+
+  /* Solo los de la cabecera: .icon-btn se queda en 720 porque el tiro que lo
+     alinea en el modal vive alli. */
+  .utility-btn,
+  .theme-toggle {
+    width: var(--touch-target-size);
+    height: var(--touch-target-size);
+  }
+
   .rail-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1652,40 +1698,6 @@ textarea:focus-visible {
     --page-padding-inline: 16px;
   }
 
-  .app-header {
-    height: auto;
-    position: static;
-  }
-
-  .app-header-inner {
-    flex-wrap: wrap;
-    gap: 10px var(--space-md);
-    padding-block: 10px;
-  }
-
-  .nav {
-    order: 3;
-    flex: 1 0 100%;
-    height: auto;
-    gap: 0;
-    margin-bottom: -11px;
-  }
-
-  .nav-btn {
-    min-height: var(--touch-target-size);
-    padding: 0 10px;
-  }
-
-  .app-shell-actions {
-    gap: 10px;
-  }
-
-  .app-last-update {
-    font-size: 11px;
-  }
-
-  .utility-btn,
-  .theme-toggle,
   .icon-btn {
     width: var(--touch-target-size);
     height: var(--touch-target-size);

@@ -142,6 +142,15 @@
 
 @media (max-width: 720px) {
   .tbl.positions-table {
-    min-width: 760px;
+    min-width: 800px;
+  }
+
+  /* El canalon mide 3% de la tabla: a este ancho son 24px, y los 9px de tiro
+     derecho dejaban al contenido 12px de caja para los 19 que ocupa. Como el
+     boton alinea a la derecha, lo que sobraba se salia por la izquierda y el
+     scroller cortaba tres cuartos del galon. Sin ese tiro cabe entero; la
+     separacion con el logo la sigue poniendo el relleno de la celda del activo. */
+  .pos-expand {
+    padding-right: 0;
   }
 }
