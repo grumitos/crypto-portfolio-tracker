@@ -6,7 +6,6 @@ import {
   sanitizeISODate,
   parseBinanceDualSettlementUTC,
   resolveBinanceDualSettlementLocal,
-  isBinanceDualSettlementReached,
 } from './date';
 
 describe('date utils', () => {
@@ -41,17 +40,5 @@ describe('date utils', () => {
       date: '2026-02-19',
       time: '03:00',
     });
-  });
-
-  it('marks settlement reached only at or after 08:00 UTC', () => {
-    expect(isBinanceDualSettlementReached('2026-02-19', new Date('2026-02-19T07:59:59.999Z'))).toBe(
-      false,
-    );
-    expect(isBinanceDualSettlementReached('2026-02-19', new Date('2026-02-19T08:00:00.000Z'))).toBe(
-      true,
-    );
-    expect(isBinanceDualSettlementReached('2026-02-19', new Date('2026-02-19T10:00:00.000Z'))).toBe(
-      true,
-    );
   });
 });

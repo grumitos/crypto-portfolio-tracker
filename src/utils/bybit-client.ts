@@ -3,7 +3,6 @@ import type {
   BybitApiCredentials,
   BybitDiscountBuyPosition,
   BybitDualAssetPosition,
-  BybitPosition,
 } from '../types';
 import { loadBybitApiCredentials } from './bybit-auth';
 
@@ -19,13 +18,12 @@ const ALLOWED_SIGNED_GET_PATHS = new Set([
   '/account/wallet-balance',
   '/asset/transfer/query-account-coins-balance',
   '/asset/asset-overview',
-  '/position/list',
   '/earn/advance/position',
 ]);
 
 const ASSET_OVERVIEW_EXCLUDED_CATEGORY_RE = /dual|discount/i;
 
-const ALLOWED_PUBLIC_GET_PATHS = new Set(['/market/tickers', '/market/time']);
+const ALLOWED_PUBLIC_GET_PATHS = new Set(['/market/time']);
 
 let readOnlyCheckCache: { apiKey: string; ts: number; info: BybitApiKeyInfo } | null = null;
 let readOnlyCheckInFlight: { apiKey: string; request: Promise<BybitApiKeyInfo> } | null = null;
@@ -296,20 +294,6 @@ interface BybitAssetOverviewResponse {
   }>;
 }
 
-interface BybitPositionListResponse {
-  list: Array<{
-    symbol: string;
-    side: string;
-    size: string;
-    avgPrice?: string;
-    markPrice?: string;
-    positionValue?: string;
-    unrealisedPnl?: string;
-    updatedTime?: string;
-    createdTime?: string;
-  }>;
-}
-
 interface BybitDualAssetPositionResponse {
   nextPageCursor?: string;
   list: Array<{
@@ -322,7 +306,7 @@ interface BybitDualAssetPositionResponse {
     apyE8: string;
     direction: string;
     targetPrice: string;
-    settlementTime: string;
+    settlementTime?: string;
     status: string;
     orderId?: string;
     duration?: string;
@@ -350,20 +334,11 @@ interface BybitDiscountBuyPositionResponse {
     status: string;
     orderId?: string;
     duration?: string;
-    settlementTime: string;
+    settlementTime?: string;
     accountType?: string;
     toAccountType?: string;
     settleType?: string;
     expectReceiveAt?: string;
-  }>;
-}
-
-interface BybitTickerResponse {
-  category: string;
-  list: Array<{
-    symbol: string;
-    lastPrice: string;
-    price24hPcnt?: string;
   }>;
 }
 
@@ -393,7 +368,7 @@ function calculateBybitEffectiveApr(
   duration: unknown,
   yieldStartAt: number | undefined,
   yieldEndAt: number | undefined,
-  settlementTime: number,
+  settlementTime: number | undefined,
 ): number {
   const advertisedDays = parseBybitDurationDays(duration);
   const endAt = yieldEndAt ?? settlementTime;
@@ -401,6 +376,7 @@ function calculateBybitEffectiveApr(
     !Number.isFinite(apr) ||
     !advertisedDays ||
     !yieldStartAt ||
+    endAt === undefined ||
     !Number.isFinite(endAt) ||
     endAt <= yieldStartAt
   ) {
@@ -453,7 +429,7 @@ function calculateBybitAprFromProjectedProfit(
   projectedProfit: number | undefined,
   yieldStartAt: number | undefined,
   yieldEndAt: number | undefined,
-  settlementTime: number,
+  settlementTime: number | undefined,
 ): number | undefined {
   const endAt = yieldEndAt ?? settlementTime;
   if (
@@ -462,6 +438,7 @@ function calculateBybitAprFromProjectedProfit(
     !Number.isFinite(projectedProfit) ||
     (projectedProfit as number) < 0 ||
     !yieldStartAt ||
+    endAt === undefined ||
     !Number.isFinite(endAt) ||
     endAt <= yieldStartAt
   ) {
@@ -484,22 +461,15 @@ function calculateBybitCouponProjectedProfit(
   return amount * (apr / 100) * (durationDays / 365);
 }
 
-function deriveBybitYieldStartAt(settlementTime: number, duration: unknown): number | undefined {
+function deriveBybitYieldStartAt(
+  settlementTime: number | undefined,
+  duration: unknown,
+): number | undefined {
   const durationDays = parseBybitDurationDays(duration);
-  if (!Number.isFinite(settlementTime) || !durationDays) return undefined;
+  if (settlementTime === undefined || !Number.isFinite(settlementTime) || !durationDays) {
+    return undefined;
+  }
   return settlementTime - durationDays * DAY_MS;
-}
-
-function resolveBybitSymbolAssets(symbol: string): { baseAsset: string; quoteAsset: string } {
-  const normalized = symbol.toUpperCase();
-  const quoteAsset = ['USDT', 'USDC', 'USD', 'BTC', 'ETH'].find((quote) =>
-    normalized.endsWith(quote),
-  );
-  if (!quoteAsset) return { baseAsset: normalized, quoteAsset: 'USDT' };
-  return {
-    baseAsset: normalized.slice(0, -quoteAsset.length) || normalized,
-    quoteAsset,
-  };
 }
 
 function assertBybitOk<T>(payload: BybitEnvelope<T>): T {
@@ -710,61 +680,6 @@ export async function fetchBybitAssetOverviewBalances(): Promise<BybitAccountBal
   return mergeBybitAccountBalances(balances);
 }
 
-export async function fetchBybitOpenPositions(): Promise<BybitPosition[]> {
-  const creds = loadBybitApiCredentials();
-  if (!creds) throw new Error('Bybit API credentials not configured');
-  const info = await getCurrentBybitReadOnlyInfo(creds);
-  if (!info.permissions?.ContractTrade?.includes('Position')) {
-    return [];
-  }
-
-  const requests = [
-    { category: 'linear', settleCoin: 'USDT' },
-    { category: 'linear', settleCoin: 'USDC' },
-    { category: 'inverse' },
-    { category: 'option' },
-  ] as const;
-
-  const settled = await Promise.allSettled(
-    requests.map(async (params) => {
-      const payload = await fetchBybitSignedGet<BybitEnvelope<BybitPositionListResponse>>(
-        '/position/list',
-        params,
-        creds,
-      );
-      return assertBybitOk(payload).list;
-    }),
-  );
-
-  return settled
-    .filter(
-      (result): result is PromiseFulfilledResult<BybitPositionListResponse['list']> =>
-        result.status === 'fulfilled',
-    )
-    .flatMap((result) => result.value)
-    .filter((row) => row.side === 'Buy' || row.side === 'Sell')
-    .map((row) => {
-      const symbol = row.symbol.toUpperCase();
-      const { baseAsset, quoteAsset } = resolveBybitSymbolAssets(symbol);
-      const size = parseFiniteNumber(row.size);
-      return {
-        id: `bybit_${symbol}_${row.side}`,
-        symbol,
-        baseAsset,
-        quoteAsset,
-        side: row.side as 'Buy' | 'Sell',
-        size,
-        avgPrice: parseFiniteNumber(row.avgPrice),
-        markPrice: parseFiniteNumber(row.markPrice),
-        positionValue: parseFiniteNumber(row.positionValue),
-        unrealizedPnl: parseFiniteNumber(row.unrealisedPnl),
-        updatedTime: parseOptionalTimestamp(row.updatedTime),
-        createdTime: parseOptionalTimestamp(row.createdTime),
-      };
-    })
-    .filter((position) => position.size > 0);
-}
-
 export async function fetchBybitDualAssetPositions(): Promise<BybitDualAssetPosition[]> {
   const creds = loadBybitApiCredentials();
   if (!creds) throw new Error('Bybit API credentials not configured');
@@ -783,7 +698,7 @@ export async function fetchBybitDualAssetPositions(): Promise<BybitDualAssetPosi
     .filter((row) => row.direction === 'BuyLow' || row.direction === 'SellHigh')
     .map((row) => {
       const quotedApr = parseFiniteNumber(row.apyE8) / 1_000_000;
-      const settlementTime = parseOptionalTimestamp(row.settlementTime) ?? Date.now();
+      const settlementTime = parseOptionalTimestamp(row.settlementTime);
       const yieldStartAt = parseOptionalTimestamp(row.yieldStartAt);
       const yieldEndAt = parseOptionalTimestamp(row.yieldEndAt);
       const amount = parseFiniteNumber(row.amount);
@@ -851,7 +766,7 @@ export async function fetchBybitDiscountBuyPositions(): Promise<BybitDiscountBuy
     .map((row) => {
       const amount = parseFiniteNumber(row.amount);
       const apr = parseFiniteNumber(row.knockoutCouponE8) / 1_000_000;
-      const settlementTime = parseOptionalTimestamp(row.settlementTime) ?? Date.now();
+      const settlementTime = parseOptionalTimestamp(row.settlementTime);
       const yieldStartAt = deriveBybitYieldStartAt(settlementTime, row.duration);
       const projectedProfit = calculateBybitCouponProjectedProfit(amount, apr, row.duration);
       const expectReceiveAt = parseOptionalTimestamp(row.expectReceiveAt);
@@ -884,17 +799,4 @@ export function clearBybitClientCaches(): void {
   readOnlyCheckCache = null;
   readOnlyCheckInFlight = null;
   clearBybitServerTimeOffset();
-}
-
-export async function fetchBybitSpotTicker(
-  symbol: string,
-): Promise<BybitTickerResponse['list'][0]> {
-  const payload = await fetchBybitPublicGet<BybitEnvelope<BybitTickerResponse>>('/market/tickers', {
-    category: 'spot',
-    symbol: symbol.toUpperCase(),
-  });
-  const result = assertBybitOk(payload);
-  const ticker = result.list[0];
-  if (!ticker) throw new Error(`Bybit ticker not found: ${symbol}`);
-  return ticker;
 }

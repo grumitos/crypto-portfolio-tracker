@@ -10,7 +10,6 @@ vi.mock('./bybit-client', () => ({
   fetchBybitAssetOverviewBalances: vi.fn(),
   fetchBybitDiscountBuyPositions: vi.fn(),
   fetchBybitDualAssetPositions: vi.fn(),
-  fetchBybitOpenPositions: vi.fn(),
   fetchBybitWalletBalances: vi.fn(),
 }));
 
@@ -24,13 +23,13 @@ import {
   fetchBybitAssetOverviewBalances,
   fetchBybitDiscountBuyPositions,
   fetchBybitDualAssetPositions,
-  fetchBybitOpenPositions,
   fetchBybitWalletBalances,
 } from './bybit-client';
 import { saveApiCredentials, clearApiCredentials } from './binance-auth';
 import { saveBybitApiCredentials, clearBybitApiCredentials } from './bybit-auth';
 import { getAssetPriceSnapshot } from './market';
 import { createMemoryStorage } from '../test/test-utils';
+import { getPositionsCacheKey } from './api-runtime-cache';
 import {
   clearBinanceSyncCaches,
   fetchBalanceSummary,
@@ -85,7 +84,6 @@ describe('binance sync cache', () => {
     vi.mocked(fetchBybitAssetBalances).mockResolvedValue([]);
     vi.mocked(fetchBybitAssetOverviewBalances).mockResolvedValue([]);
     vi.mocked(fetchBybitWalletBalances).mockResolvedValue([]);
-    vi.mocked(fetchBybitOpenPositions).mockResolvedValue([]);
     vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([]);
     vi.mocked(fetchBybitDiscountBuyPositions).mockResolvedValue([]);
   });
@@ -228,38 +226,39 @@ describe('binance sync cache', () => {
     expect(fetchAccountBalances).toHaveBeenCalledTimes(1);
   });
 
-  it('includes Bybit derivative positions in the automatic snapshot', async () => {
+  // Fechar con `Date.now()` lo que el exchange no fecha convierte "no lo se" en
+  // "ahora mismo", y eso se renueva en cada sondeo: la posicion parecia otra
+  // cada 60s y la vista se rehacia entera. Ausente tiene que quedarse ausente.
+  it('leaves the dates empty when Bybit omits them, instead of stamping the clock', async () => {
     saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
-    vi.mocked(fetchBybitOpenPositions).mockResolvedValue([
-      {
-        id: 'bybit_BTCUSDT_Buy',
-        symbol: 'BTCUSDT',
-        baseAsset: 'BTC',
-        quoteAsset: 'USDT',
-        side: 'Buy',
-        size: 0.05,
-        avgPrice: 70000,
-        markPrice: 71000,
-        positionValue: 3550,
-        unrealizedPnl: 50,
-        updatedTime: Date.parse('2026-03-14T11:30:00.000Z'),
-      },
-    ]);
+    const undatedPosition = {
+      id: 'bybit_dual_undated',
+      productId: '36320',
+      baseCoin: 'ETH',
+      quoteCoin: 'USDT',
+      investCoin: 'USDT',
+      amount: 20,
+      apr: 902.7,
+      direction: 'BuyLow' as const,
+      targetPrice: 2325,
+      status: 'Active',
+    };
+    vi.mocked(fetchBybitDualAssetPositions).mockResolvedValue([undatedPosition]);
 
-    const snapshot = await fetchBinancePortfolioSnapshot(true);
+    const first = await fetchBinancePortfolioSnapshot(true);
+    const firstPosition = first.positions.find((p) => p.id === 'bybit_dual_undated');
+    expect(firstPosition).toBeDefined();
+    expect(firstPosition?.entryDate).toBe('');
+    expect(firstPosition?.entryTime).toBeUndefined();
+    expect(firstPosition?.settlementDate).toBe('');
+    expect(firstPosition?.settlementTime).toBeUndefined();
 
-    expect(snapshot.positions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'bybit_BTCUSDT_Buy',
-          source: 'Bybit',
-          positionKind: 'derivative',
-          displaySymbol: 'BTCUSDT',
-          notionalUsd: 3550,
-          unrealizedPnlUsd: 50,
-        }),
-      ]),
-    );
+    // Misma posicion un rato despues: su huella tiene que ser la misma, o el
+    // refresco la tomaria por una cartera distinta.
+    const before = getPositionsCacheKey(first.positions);
+    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+    const second = await fetchBinancePortfolioSnapshot(true);
+    expect(getPositionsCacheKey(second.positions)).toBe(before);
   });
 
   it('includes Bybit Dual Asset positions in the automatic snapshot', async () => {
@@ -304,7 +303,6 @@ describe('binance sync cache', () => {
           id: 'bybit_dual_19035',
           source: 'Bybit',
           positionKind: 'dual',
-          displaySymbol: 'ETHUSDT',
           direction: 'buy-low',
           subscriptionAsset: 'USDT',
           quoteAsset: 'USDT',
@@ -316,7 +314,6 @@ describe('binance sync cache', () => {
         // Crypto-cross products keep their own quote coin instead of defaulting to USDT.
         expect.objectContaining({
           id: 'bybit_dual_eth_btc',
-          displaySymbol: 'ETHBTC',
           direction: 'sell-high',
           asset: 'ETH',
           subscriptionAsset: 'ETH',
@@ -355,7 +352,6 @@ describe('binance sync cache', () => {
           id: 'bybit_discount_buy_11959',
           source: 'Bybit',
           positionKind: 'discount-buy',
-          displaySymbol: 'BTCUSDT',
           direction: 'buy-low',
           subscriptionAsset: 'USDT',
           amount: 200,

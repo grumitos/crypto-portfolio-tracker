@@ -20,12 +20,10 @@ function makePosition(overrides: Partial<DualPosition>): DualPosition {
     components: overrides.components,
     source: overrides.source,
     positionKind: overrides.positionKind,
-    displaySymbol: overrides.displaySymbol,
     projectedProfit: overrides.projectedProfit,
     expectedSettlementAsset: overrides.expectedSettlementAsset,
     expectedSettlementAmount: overrides.expectedSettlementAmount,
     quoteAsset: overrides.quoteAsset,
-    side: overrides.side,
   };
 }
 

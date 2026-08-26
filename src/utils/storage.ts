@@ -127,13 +127,21 @@ function sanitizeId(value: unknown, fallback: string): string {
   return clean || fallback;
 }
 
+/**
+ * Cadena vacia = fecha desconocida, y se conserva como tal.
+ *
+ * El respaldo de antes era la fecha de hoy, asi que una posicion sin fecha se
+ * volvia a fechar en cada carga y nunca se podia distinguir de una que si
+ * empezo hoy. El orden solo se corrige cuando ambas fechas se conocen: sin
+ * entrada no hay nada con que comparar la liquidacion.
+ */
 function sanitizeDateRange(
   entryRaw: unknown,
   settlementRaw: unknown,
 ): { entryDate: string; settlementDate: string } {
-  const entryDate = sanitizeISODate(entryRaw, todayISODateLocal());
-  const settlementDate = sanitizeISODate(settlementRaw, entryDate);
-  return settlementDate < entryDate
+  const entryDate = sanitizeISODate(entryRaw, '');
+  const settlementDate = sanitizeISODate(settlementRaw, '');
+  return entryDate && settlementDate && settlementDate < entryDate
     ? { entryDate, settlementDate: entryDate }
     : { entryDate, settlementDate };
 }
@@ -185,7 +193,6 @@ function sanitizeEntryTimeSource(value: unknown): PositionEntryTimeSource | unde
     case 'binance_purchase_time':
     case 'derived_settle_minus_duration':
     case 'derived_purchase_end_time':
-    case 'derived_now':
       return value;
     default:
       return undefined;
@@ -201,11 +208,7 @@ function sanitizePositionSource(value: unknown): DualPosition['source'] | undefi
 }
 
 function sanitizePositionKind(value: unknown): DualPosition['positionKind'] | undefined {
-  return value === 'dual' || value === 'derivative' || value === 'discount-buy' ? value : undefined;
-}
-
-function sanitizePositionSide(value: unknown): DualPosition['side'] | undefined {
-  return value === 'long' || value === 'short' ? value : undefined;
+  return value === 'dual' || value === 'discount-buy' ? value : undefined;
 }
 
 function sanitizeBalanceHistory(
@@ -295,16 +298,6 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
   const positionKind = sanitizePositionKind(record.positionKind);
   if (positionKind) position.positionKind = positionKind;
 
-  if (typeof record.displaySymbol === 'string') {
-    position.displaySymbol = sanitizeSymbol(record.displaySymbol, '');
-  }
-
-  const notionalUsd = sanitizeNonNegative(record.notionalUsd, NaN);
-  if (Number.isFinite(notionalUsd)) position.notionalUsd = notionalUsd;
-
-  const unrealizedPnlUsd = sanitizeNumber(record.unrealizedPnlUsd, NaN);
-  if (Number.isFinite(unrealizedPnlUsd)) position.unrealizedPnlUsd = unrealizedPnlUsd;
-
   const projectedProfit = sanitizeNumber(record.projectedProfit, NaN);
   if (Number.isFinite(projectedProfit)) position.projectedProfit = projectedProfit;
 
@@ -315,9 +308,6 @@ function sanitizePosition(rawPosition: unknown, index: number): DualPosition {
   if (Number.isFinite(expectedSettlementAmount)) {
     position.expectedSettlementAmount = expectedSettlementAmount;
   }
-
-  const side = sanitizePositionSide(record.side);
-  if (side) position.side = side;
 
   return position;
 }
@@ -579,9 +569,6 @@ function sanitizeNumericText(value: unknown, fallback: string): string {
 function sanitizeCalcState(raw: Partial<CalculadoraState> | null | undefined): CalculadoraState {
   const defaults = getDefaultCalcState();
   const merged = { ...defaults, ...(raw ?? {}) };
-  const feePreset = merged.feePreset === 'futures' ? 'futures' : 'spot';
-  const fdusdEnabled = feePreset === 'spot' && merged.fdusdEnabled === true;
-
   const sellSyncSource =
     merged.sellSyncSource === 'price' || merged.sellSyncSource === 'percent'
       ? merged.sellSyncSource
@@ -597,8 +584,7 @@ function sanitizeCalcState(raw: Partial<CalculadoraState> | null | undefined): C
     sellPrice: sanitizeNumericText(merged.sellPrice, defaults.sellPrice),
     sellPct: sanitizeNumericText(merged.sellPct, defaults.sellPct),
     rebuyPct: sanitizeNumericText(merged.rebuyPct, defaults.rebuyPct),
-    feePreset,
-    fdusdEnabled,
+    fdusdEnabled: merged.fdusdEnabled === true,
     sellSyncSource,
     purchases: sanitizePurchases(merged.purchases),
   };
@@ -681,7 +667,6 @@ export function getDefaultCalcState(): CalculadoraState {
     sellPrice: '',
     sellPct: DEFAULT_CALC_SELL_PCT,
     rebuyPct: DEFAULT_CALC_REBUY_PCT,
-    feePreset: 'spot',
     fdusdEnabled: false,
     sellSyncSource: null,
     purchases: [],

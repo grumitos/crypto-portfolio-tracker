@@ -1,12 +1,9 @@
-import type { FeePreset } from '../types';
-
 export const CALC_INPUT_DEBOUNCE_MS = 120;
 export const CALC_RESULT_ANIM_MS = 180;
 
-export const FEE_PRESETS: Record<FeePreset, { maker: number; label: string }> = {
-  spot: { maker: 0.075, label: 'Spot' },
-  futures: { maker: 0, label: 'Futuros' },
-};
+/** Comision maker de spot; pagando en FDUSD la casa no cobra. */
+export const SPOT_MAKER_FEE_PCT = 0.075;
+export const FDUSD_MAKER_FEE_PCT = 0;
 
 export const CALCULADORA_COPY = {
   title: 'Calculadora Swing Trade',

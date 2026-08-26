@@ -9,9 +9,6 @@ const CSS_FALLBACKS = {
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
-type ThemeChangeCallback = (theme: ResolvedTheme) => void;
-const listeners: ThemeChangeCallback[] = [];
-
 // ── Public API ──
 
 export function getThemePreference(): ThemePreference {
@@ -36,10 +33,6 @@ export function setTheme(preference: ThemePreference): void {
 export function toggleTheme(): void {
   const current = getResolvedTheme();
   setTheme(current === 'dark' ? 'light' : 'dark');
-}
-
-export function onThemeChange(callback: ThemeChangeCallback): void {
-  listeners.push(callback);
 }
 
 export function initTheme(): void {
@@ -77,11 +70,6 @@ function applyTheme(): void {
   const meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
   if (meta) {
     meta.content = browserThemeColor;
-  }
-
-  // Notify listeners
-  for (const cb of listeners) {
-    cb(resolved);
   }
 }
 

@@ -72,16 +72,27 @@ describe('groupPositionsByLockWindow', () => {
     expect(grouped.every((position) => position.components === undefined)).toBe(true);
   });
 
-  it('leaves derivatives untouched and preserves the original order', () => {
+  it('leaves an ungroupable position untouched and preserves the original order', () => {
     const grouped = groupPositionsByLockWindow([
-      makePosition({ id: 'perp', positionKind: 'derivative' }),
+      // Sin importe no hay nada que sumar, asi que pasa de largo sin fusionarse.
+      makePosition({ id: 'empty', amount: 0 }),
       makePosition({ id: 'binance_1' }),
       makePosition({ id: 'binance_2' }),
     ]);
 
-    expect(grouped.map((position) => position.id)).toEqual(['perp', 'binance_1']);
+    expect(grouped.map((position) => position.id)).toEqual(['empty', 'binance_1']);
     expect(grouped[0].components).toBeUndefined();
     expect(grouped[1].components).toHaveLength(2);
+  });
+
+  it('does not merge positions whose settlement window is unknown', () => {
+    const grouped = groupPositionsByLockWindow([
+      makePosition({ id: 'undated_1', settlementDate: '', settlementTime: undefined }),
+      makePosition({ id: 'undated_2', settlementDate: '', settlementTime: undefined }),
+    ]);
+
+    expect(grouped.map((position) => position.id)).toEqual(['undated_1', 'undated_2']);
+    expect(grouped.every((position) => position.components === undefined)).toBe(true);
   });
 
   it('does not attach components to a lone position', () => {

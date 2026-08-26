@@ -69,12 +69,3 @@ export function resolveBinanceDualSettlementLocal(
   if (!settlement) return null;
   return toLocalDateTimeParts(settlement);
 }
-
-export function isBinanceDualSettlementReached(
-  settlementDate: string,
-  now: Date = new Date(),
-): boolean {
-  const settlementAt = parseBinanceDualSettlementUTC(settlementDate);
-  if (!settlementAt) return false;
-  return now.getTime() >= settlementAt.getTime();
-}

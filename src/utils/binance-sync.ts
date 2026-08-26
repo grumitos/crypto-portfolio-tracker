@@ -3,7 +3,6 @@ import type {
   BinanceAccountBalance,
   BybitDiscountBuyPosition,
   BybitDualAssetPosition,
-  BybitPosition,
   DualPosition,
   Direction,
   ExchangeSource,
@@ -17,7 +16,6 @@ import {
   fetchBybitAssetOverviewBalances,
   fetchBybitDiscountBuyPositions,
   fetchBybitDualAssetPositions,
-  fetchBybitOpenPositions,
   fetchBybitWalletBalances,
 } from './bybit-client';
 import { replaceSyncedPositions } from './storage';
@@ -26,7 +24,6 @@ import { getAssetPriceSnapshot } from './market';
 import {
   parseBinanceDualSettlementUTC,
   resolveBinanceDualSettlementLocal,
-  todayISODateLocal,
   toLocalDateTimeParts,
 } from './date';
 
@@ -36,7 +33,16 @@ function isValidTimestamp(value: number | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
-function resolveEntryTimestamp(bp: BinanceDualPosition): number {
+/**
+ * Devuelve `null` cuando el exchange no da con que fecharla.
+ *
+ * Antes caia en `Date.now()`, y eso convertia "no se cuando entro" en "entro
+ * ahora mismo": una mentira que se renueva en cada sondeo. La posicion parecia
+ * cambiar cada 60s aunque no se hubiera tocado, la ventana empezaba de cero
+ * continuamente y los dias facturados nunca avanzaban. Sin fecha, la fila lo
+ * dice; inventarla no.
+ */
+function resolveEntryTimestamp(bp: BinanceDualPosition): number | null {
   if (isValidTimestamp(bp.purchaseTime)) {
     return bp.purchaseTime;
   }
@@ -51,7 +57,15 @@ function resolveEntryTimestamp(bp: BinanceDualPosition): number {
     return bp.purchaseEndTime;
   }
 
-  return Date.now();
+  return null;
+}
+
+/** Partes de fecha local de una marca de tiempo, o ninguna si no la hay. */
+function optionalDateTimeParts(
+  timestamp: number | null | undefined,
+): { date: string; time: string } | null {
+  if (timestamp === null || timestamp === undefined || !Number.isFinite(timestamp)) return null;
+  return toLocalDateTimeParts(new Date(timestamp));
 }
 
 function resolveEntryTimeSource(bp: BinanceDualPosition): DualPosition['entryTimeSource'] {
@@ -68,7 +82,7 @@ function resolveEntryTimeSource(bp: BinanceDualPosition): DualPosition['entryTim
     return 'derived_purchase_end_time';
   }
 
-  return 'derived_now';
+  return undefined;
 }
 
 // ── Map Binance position → local DualPosition ──
@@ -79,9 +93,7 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
   const subscriptionAsset = bp.investCoin;
   const quoteAsset = bp.optionType === 'CALL' ? bp.exercisedCoin : bp.investCoin;
 
-  const entryTimestamp = resolveEntryTimestamp(bp);
-  const entryAt = new Date(entryTimestamp);
-  const entry = toLocalDateTimeParts(entryAt);
+  const entry = optionalDateTimeParts(resolveEntryTimestamp(bp));
   const settlement = resolveBinanceDualSettlementLocal(bp.settleDate);
 
   return {
@@ -92,8 +104,8 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
     quoteAsset,
     amount: bp.amount,
     targetPrice: bp.strikePrice,
-    entryDate: entry.date,
-    entryTime: entry.time,
+    entryDate: entry?.date ?? '',
+    entryTime: entry?.time,
     entryTimeSource: resolveEntryTimeSource(bp),
     settlementDate: settlement?.date ?? bp.settleDate,
     settlementTime: settlement?.time,
@@ -104,35 +116,9 @@ function mapBinancePosition(bp: BinanceDualPosition): DualPosition {
   };
 }
 
-function mapBybitPosition(position: BybitPosition): DualPosition {
-  const timestamp = position.updatedTime ?? position.createdTime;
-  const entry = timestamp ? toLocalDateTimeParts(new Date(timestamp)) : null;
-  const today = todayISODateLocal();
-  return {
-    id: position.id,
-    asset: position.baseAsset,
-    direction: position.side === 'Sell' ? 'sell-high' : 'buy-low',
-    subscriptionAsset: position.baseAsset,
-    quoteAsset: position.quoteAsset,
-    amount: position.size,
-    targetPrice: position.markPrice || position.avgPrice,
-    entryDate: entry?.date ?? today,
-    entryTime: entry?.time,
-    settlementDate: today,
-    apr: 0,
-    source: 'Bybit',
-    positionKind: 'derivative',
-    displaySymbol: position.symbol,
-    notionalUsd: position.positionValue,
-    unrealizedPnlUsd: position.unrealizedPnl,
-    side: position.side === 'Sell' ? 'short' : 'long',
-  };
-}
-
 function mapBybitDualAssetPosition(position: BybitDualAssetPosition): DualPosition {
-  const entryTimestamp = position.yieldStartAt ?? Date.now();
-  const entry = toLocalDateTimeParts(new Date(entryTimestamp));
-  const settlement = toLocalDateTimeParts(new Date(position.settlementTime));
+  const entry = optionalDateTimeParts(position.yieldStartAt);
+  const settlement = optionalDateTimeParts(position.settlementTime);
   return {
     id: position.id,
     asset: position.baseCoin,
@@ -141,14 +127,13 @@ function mapBybitDualAssetPosition(position: BybitDualAssetPosition): DualPositi
     quoteAsset: position.quoteCoin,
     amount: position.amount,
     targetPrice: position.targetPrice,
-    entryDate: entry.date,
-    entryTime: entry.time,
-    settlementDate: settlement.date,
-    settlementTime: settlement.time,
+    entryDate: entry?.date ?? '',
+    entryTime: entry?.time,
+    settlementDate: settlement?.date ?? '',
+    settlementTime: settlement?.time,
     apr: position.apr,
     source: 'Bybit',
     positionKind: 'dual',
-    displaySymbol: `${position.baseCoin}${position.quoteCoin}`,
     projectedProfit: position.projectedProfit,
     expectedSettlementAsset: position.expectedSettlementAsset,
     expectedSettlementAmount: position.expectedSettlementAmount,
@@ -156,9 +141,8 @@ function mapBybitDualAssetPosition(position: BybitDualAssetPosition): DualPositi
 }
 
 function mapBybitDiscountBuyPosition(position: BybitDiscountBuyPosition): DualPosition {
-  const entryTimestamp = position.yieldStartAt ?? Date.now();
-  const entry = toLocalDateTimeParts(new Date(entryTimestamp));
-  const settlement = toLocalDateTimeParts(new Date(position.settlementTime));
+  const entry = optionalDateTimeParts(position.yieldStartAt);
+  const settlement = optionalDateTimeParts(position.settlementTime);
   return {
     id: position.id,
     asset: position.underlyingAsset,
@@ -167,14 +151,13 @@ function mapBybitDiscountBuyPosition(position: BybitDiscountBuyPosition): DualPo
     quoteAsset: position.coin,
     amount: position.amount,
     targetPrice: position.purchasePrice,
-    entryDate: entry.date,
-    entryTime: entry.time,
-    settlementDate: settlement.date,
-    settlementTime: settlement.time,
+    entryDate: entry?.date ?? '',
+    entryTime: entry?.time,
+    settlementDate: settlement?.date ?? '',
+    settlementTime: settlement?.time,
     apr: position.apr,
     source: 'Bybit',
     positionKind: 'discount-buy',
-    displaySymbol: `${position.underlyingAsset}${position.coin}`,
     projectedProfit: position.projectedProfit,
   };
 }
@@ -469,9 +452,6 @@ export async function fetchBinancePortfolioSnapshot(
     }
     if (hasBybitApiCredentials()) {
       positionRequests.push(
-        withExchangeTimeout(fetchBybitOpenPositions(), 'Bybit derivative positions').then(
-          (positions) => positions.map(mapBybitPosition),
-        ),
         withExchangeTimeout(fetchBybitDualAssetPositions(), 'Bybit Dual Asset positions').then(
           (positions) => positions.map(mapBybitDualAssetPosition),
         ),
@@ -511,12 +491,6 @@ export async function fetchBinancePortfolioSnapshot(
       portfolioSnapshotInFlight = null;
     }
   }
-}
-
-// ── Check if positions are from Binance sync ──
-
-export function isBinanceSyncedPosition(pos: DualPosition): boolean {
-  return pos.id.startsWith('binance_');
 }
 
 export function clearBinanceSyncCaches(): void {

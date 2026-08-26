@@ -12,12 +12,9 @@ import { calculateDualProjectedProfit, normalizeTime } from './dual-yield';
  * Lo que define un grupo es aquello que el usuario no puede cambiar sin abrir
  * otra posicion distinta: el par, la direccion y la ventana de bloqueo. El
  * exchange entra en la clave porque la columna "Fuente" tiene que seguir siendo
- * cierta, y el tipo de posicion porque un derivado no tiene ventana que
- * compartir.
+ * cierta, y el tipo de posicion porque una Dual y una Discount Buy del mismo par
+ * son productos distintos aunque venzan el mismo dia.
  */
-
-/** Solo los productos con ventana de liquidacion se agrupan. */
-const GROUPABLE_KINDS = new Set(['dual', 'discount-buy', undefined]);
 
 function groupKey(position: DualPosition): string {
   return [
@@ -51,10 +48,10 @@ function timestampKey(date: string, time: string | undefined): string {
 }
 
 function isGroupable(position: DualPosition): boolean {
+  // Sin ventana no hay con que decidir si dos suscripciones son la misma
+  // apuesta, y fusionarlas por descarte juntaria posiciones sin relacion.
   return (
-    GROUPABLE_KINDS.has(position.positionKind) &&
-    Number.isFinite(position.amount) &&
-    position.amount > 0
+    Boolean(position.settlementDate) && Number.isFinite(position.amount) && position.amount > 0
   );
 }
 
@@ -111,9 +108,6 @@ function mergeGroup(parts: DualPosition[]): DualPosition {
   if (expectedSettlementAmount !== undefined) {
     merged.expectedSettlementAmount = expectedSettlementAmount;
   }
-
-  const notionalUsd = sumOptional(parts, (part) => part.notionalUsd);
-  if (notionalUsd !== undefined) merged.notionalUsd = notionalUsd;
 
   return merged;
 }

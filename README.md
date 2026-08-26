@@ -139,13 +139,11 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
   - `GET /v5/asset/transfer/query-account-coins-balance` como respaldo de saldos con permisos de Activos.
   - `GET /v5/earn/advance/position` para posiciones activas de Advanced Earn Dual Asset cuando la key tiene permiso `Earn`.
   - `GET /v5/earn/advance/position` con categoria `DiscountBuy` para posiciones Discount Buy cuando la key tiene permiso `Earn`.
-  - `GET /v5/position/list` para posiciones abiertas `linear`, `inverse` y `option`.
-  - `GET /v5/market/tickers` para precios spot publicos.
   - `GET /v5/market/time` para ajustar timestamps firmados.
 - El servidor local expone `/local-vault/credentials` y guarda API Key + Secret cifrados con Windows DPAPI en `.local/credentials.dpapi.json` (ignorado por git).
 - En `localStorage` solo se persiste la API Key; el Secret vive en memoria de sesion y se hidrata desde DPAPI al cargar la app y al abrir `Configuracion`.
 - Las credenciales de exchanges no se cargan desde `.env.local`: las variables `PUBLIC_*` de Bun pueden quedar expuestas al bundle del navegador. Configuralas solo desde el modal local de la app.
-- Dashboard puede sumar saldos de Binance y Bybit a la vez. Las posiciones automatizadas incluyen Binance Dual Investment, Bybit Dual Asset, Bybit Discount Buy y, solo si la key lo permite, posiciones derivadas abiertas de Bybit; el nocional derivado Bybit no se suma encima del wallet para evitar doble conteo.
+- Dashboard puede sumar saldos de Binance y Bybit a la vez. Las posiciones automatizadas son Binance Dual Investment, Bybit Dual Asset y Bybit Discount Buy. Futuros, perpetuos y opciones quedan fuera del alcance.
 
 ## Regla de facturacion (Dual Binance)
 

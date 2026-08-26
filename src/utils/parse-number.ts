@@ -11,14 +11,6 @@ export function parseLooseNumber(value: unknown): number {
   return normalized ? Number.parseFloat(normalized) : Number.NaN;
 }
 
-export function parseStrictNumber(value: unknown): number {
-  if (typeof value !== 'number' && typeof value !== 'string') return Number.NaN;
-  const normalized = String(value).trim();
-  if (!/^[+-]?\d+(\.\d+)?$/.test(normalized)) return Number.NaN;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
-
 export function parseFlexibleNumber(raw: string): number {
   const cleaned = raw
     .trim()

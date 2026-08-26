@@ -211,11 +211,7 @@ const POSITION_FIELDS: PositionField[] = [
     width: { buyLow: '12%', sellHigh: '11%' },
     align: 'right',
     render: ({ position, rowKind }) => {
-      const projectedEarned =
-        position.positionKind === 'derivative'
-          ? (position.unrealizedPnlUsd ?? 0)
-          : resolvePositionProjectedProfit(position);
-      const earningsCell = renderEarningsCell(position, projectedEarned);
+      const earningsCell = renderEarningsCell(position, resolvePositionProjectedProfit(position));
       return {
         ...earningsCell,
         id: rowKind === 'main' ? `position-earn-${position.id}` : undefined,
@@ -294,10 +290,6 @@ function renderPositionRow(p: DualPosition, options: { showUsdColumn: boolean })
 function renderAprCell(position: DualPosition, rowKind: PositionRowKind): PositionCellRender {
   const id = rowKind === 'main' ? `position-apr-${position.id}` : undefined;
 
-  if (position.positionKind === 'derivative') {
-    return { className: 'r num', html: '---' };
-  }
-
   if (position.positionKind === 'discount-buy') {
     return {
       className: 'r num muted',
@@ -324,13 +316,9 @@ function renderEarningsCell(
     };
   }
 
-  const isDerivative = position.positionKind === 'derivative';
-  const projectedEarnedStr = isDerivative
-    ? formatUSDCompact(projectedEarned)
-    : formatPositionEarnings(position, projectedEarned);
   return {
     className: 'r num gain',
-    html: `${isDerivative && projectedEarned < 0 ? '' : '+'}${projectedEarnedStr}`,
+    html: `+${formatPositionEarnings(position, projectedEarned)}`,
   };
 }
 
@@ -371,17 +359,10 @@ function initialUsdCellHtml(position: DualPosition): string {
   if (position.direction === 'buy-low') {
     return '<span class="muted">---</span>';
   }
-  if (position.positionKind === 'derivative' && Number.isFinite(position.notionalUsd)) {
-    return formatUSDCompact(position.notionalUsd ?? 0);
-  }
   return '<span class="skeleton skeleton-number" style="width:60px"></span>';
 }
 
 function renderOutcomeCell(position: DualPosition): string {
-  if (position.positionKind === 'derivative') {
-    return '<span class="muted">Mercado abierto</span>';
-  }
-
   if (position.positionKind === 'discount-buy') {
     return renderDiscountBuyOutcomeCell(position);
   }
@@ -515,10 +496,6 @@ function renderMiniBar(position: DualPosition): string {
 }
 
 function formatRemainingTime(position: DualPosition): string {
-  if (position.positionKind === 'derivative') {
-    return '<span class="num soft">Abierta</span>';
-  }
-
   const remainingMs = getRemainingMsToSettlement(position);
   const isSettled = isDualSettlementReached(position);
 
@@ -582,6 +559,9 @@ function getContainedElementById(container: HTMLElement, id: string): HTMLElemen
 
 /** dd/mm sin año: la ventana muestra dos fechas en una sola linea. */
 function formatShortDate(value: string): string {
+  // Sin fecha la celda lo dice con el mismo hueco que la hora desconocida, en
+  // vez de dejar un blanco que se lee como un fallo de pintado.
+  if (!value) return '--/--';
   const [year, month, day] = value.split('-');
   if (year && month && day) return `${day}/${month}`;
   const parsed = new Date(value);
@@ -590,10 +570,6 @@ function formatShortDate(value: string): string {
 }
 
 function renderWindowCell(position: DualPosition, withHint: boolean): string {
-  if (position.positionKind === 'derivative') {
-    return `<span class="cell-stack"><span class="num">${escapeHtml(formatShortDate(position.entryDate))} &rarr; ---</span></span>`;
-  }
-
   const settlementAt = resolveDualSettlementAt(position);
   const entryTime = normalizeTime(position.entryTime) ?? '--:--';
   const settlementTime = settlementAt ? formatTimeHHMMLocal(settlementAt) : '--:--';
@@ -628,8 +604,6 @@ function getDateTimeHint(position: DualPosition, field: 'entry' | 'settlement'):
       return 'Hora de suscripción estimada por la app usando settleDate menos la duración del producto.';
     case 'derived_purchase_end_time':
       return 'Hora de suscripción estimada por la app usando purchaseEndTime.';
-    case 'derived_now':
-      return 'Hora de suscripción estimada por la app porque Binance no devolvió una marca de tiempo utilizable.';
     default:
       return null;
   }
@@ -702,11 +676,6 @@ function getQuoteAsset(position: DualPosition): string {
 }
 
 function productLabelParts(position: DualPosition): { base: string; quote: string | null } {
-  if (position.positionKind === 'derivative' && position.displaySymbol) {
-    const side = position.side === 'short' ? 'Short' : 'Long';
-    return { base: `${position.displaySymbol} ${side}`, quote: null };
-  }
-
   if (position.direction === 'sell-high' && position.positionKind !== 'discount-buy') {
     return { base: position.subscriptionAsset, quote: getQuoteAsset(position) };
   }

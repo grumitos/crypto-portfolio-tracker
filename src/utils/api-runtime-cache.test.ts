@@ -14,6 +14,7 @@ function makePosition(overrides: Partial<DualPosition> = {}): DualPosition {
     entryDate: overrides.entryDate ?? '2026-05-14',
     settlementDate: overrides.settlementDate ?? '2026-05-15',
     apr: overrides.apr ?? 120,
+    positionKind: overrides.positionKind,
     projectedProfit: overrides.projectedProfit,
     expectedSettlementAsset: overrides.expectedSettlementAsset,
     expectedSettlementAmount: overrides.expectedSettlementAmount,

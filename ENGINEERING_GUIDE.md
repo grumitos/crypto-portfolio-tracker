@@ -76,7 +76,8 @@ Estado actual:
 - Cualquier cliente de exchange debe mantenerse en modo lectura: endpoints firmados `GET`, whitelist explicita de paths y validacion de permisos antes de sincronizar datos privados.
 - Bybit Dual Asset vive en `GET /v5/earn/advance/position` y requiere permiso `Earn`; se mapea como posicion `dual`.
 - Bybit Discount Buy usa `GET /v5/earn/advance/position` con categoria `DiscountBuy`; se mapea como posicion `discount-buy`.
-- Las posiciones derivadas abiertas de Bybit requieren `ContractTrade: Position`; son opcionales y su nocional no debe sumarse al saldo del Dashboard encima del wallet.
+- El alcance son productos con ventana de liquidacion. Nada de futuros, perpetuos ni opciones: no se leen, no se modelan y no se piden sus permisos.
+- Un dato que el exchange no manda se queda ausente. Nunca se rellena con `Date.now()` ni con la fecha de hoy: un valor tomado del reloj cambia en cada sondeo, hace que la posicion parezca otra y arrastra a la vista a redibujarse entera. Fecha desconocida es `''`, y la fila la muestra como `--/--`.
 - Si `GET /v5/account/wallet-balance` no esta permitido, los saldos Bybit deben caer a `GET /v5/asset/transfer/query-account-coins-balance` con permisos de Activos.
 - Las credenciales de exchanges se configuran desde el modal local, no desde `.env.local`, porque Bun puede exponer las variables `PUBLIC_*` en el bundle del navegador.
 - Los secrets se guardan cifrados con Windows DPAPI en `.local/credentials.dpapi.json`, expuesto por `src/server.ts` y consumido desde `src/utils/local-vault.ts`; en `localStorage` solo deben persistir metadatos no secretos como la API key.

@@ -212,23 +212,6 @@ export function formatPct(n: number, decimals = 2): string {
 }
 
 /**
- * Estimate days remaining to reach goal based on current APR.
- * Uses compound interest with daily compounding.
- */
-export function estimateDaysToGoal(
-  currentBalance: number,
-  apr: number,
-  goal: number,
-): number | null {
-  if (currentBalance >= goal) return 0;
-  if (currentBalance <= 0 || apr <= 0 || goal <= currentBalance) return null;
-
-  const ratePerDay = apr / 100 / 365;
-  const days = Math.log(goal / currentBalance) / Math.log(1 + ratePerDay);
-  return Number.isFinite(days) && days <= 365 * 50 ? Math.ceil(days) : null;
-}
-
-/**
  * Estimate days to goal by interpolating the month-by-month projection rows.
  * Keeps simulator "months" output aligned with the exact projection engine.
  */

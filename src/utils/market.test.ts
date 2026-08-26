@@ -63,6 +63,20 @@ async function readAssetPriceUSD(
   return snapshot.priceByAsset[normalized] ?? 0;
 }
 
+/**
+ * El mismo par de llamadas que hace la app: un snapshot de precios y las
+ * metricas derivadas de el.
+ */
+async function readPositionMetrics(
+  market: typeof import('./market'),
+  positions: DualPosition[],
+  options: { forceRefresh?: boolean } = {},
+) {
+  const assets = positions.map((position) => position.subscriptionAsset);
+  const snapshot = await market.getAssetPriceSnapshot(assets, options);
+  return market.calculatePositionMetricsFromSnapshot(positions, snapshot);
+}
+
 describe('market utils', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
@@ -209,8 +223,8 @@ describe('market utils', () => {
     const market = await import('./market');
     const positions = [makePosition('p1', 'ETH', 1, 10)];
 
-    const first = await market.calculatePositionMetrics(positions);
-    const second = await market.calculatePositionMetrics(positions, { forceRefresh: true });
+    const first = await readPositionMetrics(market, positions);
+    const second = await readPositionMetrics(market, positions, { forceRefresh: true });
 
     expect(first.totalUsd).toBe(2000);
     expect(second.totalUsd).toBe(2100);
@@ -230,11 +244,11 @@ describe('market utils', () => {
     const market = await import('./market');
     const positions = [makePosition('p1', 'ETH', 2, 15)];
 
-    const initial = await market.calculatePositionMetrics(positions);
+    const initial = await readPositionMetrics(market, positions);
     expect(initial.totalUsd).toBe(3600);
 
     vi.setSystemTime(new Date('2026-02-21T00:01:01.000Z'));
-    const stale = await market.calculatePositionMetrics(positions);
+    const stale = await readPositionMetrics(market, positions);
 
     expect(stale.totalUsd).toBe(3600);
     expect(stale.hasStalePrices).toBe(true);
@@ -246,7 +260,7 @@ describe('market utils', () => {
     vi.stubGlobal('fetch', fetchMock);
     const market = await import('./market');
 
-    const metrics = await market.calculatePositionMetrics([makePosition('p1', 'ETH', 2, 15)]);
+    const metrics = await readPositionMetrics(market, [makePosition('p1', 'ETH', 2, 15)]);
 
     expect(metrics.totalUsd).toBe(0);
     expect(metrics.hasUnavailablePrices).toBe(true);

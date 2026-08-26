@@ -493,7 +493,7 @@ describe('positions integration', () => {
     rafSpy.mockRestore();
   });
 
-  it('keeps auto-synced rows mounted when only live values change', async () => {
+  it('keeps rows and the view mounted when only live values change', async () => {
     vi.useFakeTimers();
     mockMatchMedia(false);
 
@@ -508,88 +508,96 @@ describe('positions integration', () => {
     const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
     const numberSpy = vi.spyOn(animation, 'setAnimatedNumber');
 
-    const firstPosition: AppState['positions'][number] = {
-      id: 'bybit_derivative_btcusdt',
-      asset: 'BTC',
-      direction: 'sell-high',
-      subscriptionAsset: 'USDT',
-      amount: 1,
-      targetPrice: 0,
-      entryDate: '2026-02-20',
-      entryTime: '08:45',
-      settlementDate: '2026-02-23',
-      settlementTime: '03:00',
-      apr: 0,
-      positionKind: 'derivative',
-      displaySymbol: 'BTCUSDT',
-      side: 'long',
-      notionalUsd: 1000,
-      unrealizedPnlUsd: 12,
-    };
-    const firstPositions: AppState['positions'] = [firstPosition];
-    const secondPositions: AppState['positions'] = [
+    // La cartera no cambia entre sondeos: la misma suscripcion, las mismas
+    // condiciones. Lo unico que se mueve es el precio del activo, y con el el
+    // valor en USD de la fila.
+    const positions: AppState['positions'] = [
       {
-        ...firstPosition,
-        unrealizedPnlUsd: 24,
+        id: 'bybit_dual_eth',
+        asset: 'ETH',
+        direction: 'sell-high',
+        subscriptionAsset: 'ETH',
+        quoteAsset: 'USDT',
+        amount: 1,
+        targetPrice: 2400,
+        entryDate: '2026-02-20',
+        entryTime: '08:45',
+        settlementDate: '2026-02-23',
+        settlementTime: '03:00',
+        apr: 35,
+        positionKind: 'dual',
       },
     ];
 
-    seedState(firstPositions);
-    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
-    vi.mocked(syncPositionsFromBinance)
-      .mockImplementationOnce(async () => {
-        seedState(firstPositions);
-        return {
-          positions: firstPositions,
-          count: firstPositions.length,
-          balances: [],
-          totalUsdEstimate: 0,
-        };
-      })
-      .mockImplementationOnce(async () => {
-        seedState(secondPositions);
-        return {
-          positions: secondPositions,
-          count: secondPositions.length,
-          balances: [],
-          totalUsdEstimate: 0,
-        };
-      });
+    const metricsWithUsd = (usd: number) => ({
+      totalUsd: usd,
+      weightedApr: 35,
+      dailyEarningsUsd: 0.4,
+      usdByPositionId: { bybit_dual_eth: usd },
+      aprByPositionId: { bybit_dual_eth: 35 },
+      priceByAsset: { USDT: 1 },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+      priceSourceByAsset: { USDT: 'stable' as const },
+    });
+    vi.mocked(calculatePositionMetricsFromSnapshot)
+      .mockReturnValueOnce(metricsWithUsd(2000))
+      .mockReturnValue(metricsWithUsd(2100));
 
+    seedState(positions);
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockImplementation(async () => {
+      seedState(positions);
+      return {
+        positions,
+        count: positions.length,
+        balances: [],
+        totalUsdEstimate: 0,
+      };
+    });
+
+    const onStateChange = vi.fn();
     const container = document.createElement('div');
     document.body.appendChild(container);
-    const dispose = renderPositions(container, vi.fn());
+    const dispose = renderPositions(container, onStateChange);
 
     try {
       await vi.advanceTimersByTimeAsync(0);
       await Promise.resolve();
       await Promise.resolve();
 
-      const row = container.querySelector('[data-id="bybit_derivative_btcusdt"]');
-      const earn = container.querySelector('#position-earn-bybit_derivative_btcusdt');
+      const row = container.querySelector('[data-id="bybit_dual_eth"]');
+      const usd = container.querySelector('#position-usd-bybit_dual_eth');
       expect(row).not.toBeNull();
-      expect(earn?.textContent).toContain('+$12');
+      expect(usd?.textContent).toContain('$2,000');
       const callsAfterInitialHydration = numberSpy.mock.calls.length;
+      onStateChange.mockClear();
 
       await vi.advanceTimersByTimeAsync(MARKET_POLL_INTERVAL_MS);
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(container.querySelector('[data-id="bybit_derivative_btcusdt"]')).toBe(row);
-      expect(earn?.textContent).toContain('+$24');
       expect(syncPositionsFromBinance).toHaveBeenCalledTimes(2);
-      const postHydrationEarnCalls = numberSpy.mock.calls
+      // La misma fila y la misma celda, no unas nuevas con el mismo aspecto, y
+      // sin avisar al shell, que redibujaria la vista entera.
+      expect(container.querySelector('[data-id="bybit_dual_eth"]')).toBe(row);
+      expect(container.querySelector('#position-usd-bybit_dual_eth')).toBe(usd);
+      expect(usd?.textContent).toContain('$2,100');
+      expect(onStateChange).not.toHaveBeenCalled();
+
+      const postHydrationUsdCalls = numberSpy.mock.calls
         .slice(callsAfterInitialHydration)
         .filter((call) => {
           const el = call[1] as HTMLElement | null;
-          return el?.id === 'position-earn-bybit_derivative_btcusdt';
+          return el?.id === 'position-usd-bybit_dual_eth';
         });
-      const animatedEarnCall = postHydrationEarnCalls.some((call) => {
+      const animatedUsdCall = postHydrationUsdCalls.some((call) => {
         const options = call[4] as { enabled?: boolean } | undefined;
         return options?.enabled === true;
       });
-      expect(animatedEarnCall).toBe(true);
-      expect(earn?.querySelector('.skeleton')).toBeNull();
+      expect(animatedUsdCall).toBe(true);
+      expect(usd?.querySelector('.skeleton')).toBeNull();
     } finally {
       dispose();
       container.remove();

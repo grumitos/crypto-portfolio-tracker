@@ -55,9 +55,8 @@ export function renderCalculadoraTemplate(state: CalculadoraState, feeValue: num
           <div class="field">
             <span class="field-label">${CALCULADORA_COPY.feeLabel}</span>
             <span class="segmented" role="group" aria-label="${CALCULADORA_COPY.feeLabel}">
-              <button type="button" class="preset-btn ${state.feePreset === 'spot' && !state.fdusdEnabled ? 'active' : ''}" id="calc-fee-spot">Spot</button>
-              <button type="button" class="preset-btn ${state.feePreset === 'futures' ? 'active' : ''}" id="calc-fee-futures">Futuros</button>
-              <button type="button" class="preset-btn ${state.feePreset === 'spot' && state.fdusdEnabled ? 'active' : ''}" id="calc-fee-fdusd" ${state.feePreset !== 'spot' ? 'disabled' : ''}>FDUSD</button>
+              <button type="button" class="preset-btn ${state.fdusdEnabled ? '' : 'active'}" id="calc-fee-spot">Spot</button>
+              <button type="button" class="preset-btn ${state.fdusdEnabled ? 'active' : ''}" id="calc-fee-fdusd">FDUSD</button>
             </span>
             <span class="field-hint">
               ${CALCULADORA_COPY.feePrefix} <span id="calc-fee-display" class="num">${feeValue.toFixed(3)}%</span> ${CALCULADORA_COPY.feeSuffix}

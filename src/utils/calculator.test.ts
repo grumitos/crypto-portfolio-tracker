@@ -2,7 +2,6 @@ import { describe, it, expect } from '#test';
 import {
   compoundedRateMetrics,
   dailyEarnings,
-  estimateDaysToGoal,
   estimateDaysToGoalFromProjection,
   formatDateLatin,
   formatPct,
@@ -39,15 +38,6 @@ describe('calculator utils', () => {
     ];
 
     expect(weightedAverageAPR(positions)).toBe(25);
-  });
-
-  it('estimates days to goal with daily compounding', () => {
-    // 36.5% APR compounds at 0.1%/day, so doubling takes log(2)/log(1.001) days.
-    expect(estimateDaysToGoal(1000, 36.5, 2000)).toBe(694);
-    expect(estimateDaysToGoal(1000, 10, 1000)).toBe(0);
-    expect(estimateDaysToGoal(1000, 10, 500)).toBe(0);
-    expect(estimateDaysToGoal(0, 10, 1000)).toBeNull();
-    expect(estimateDaysToGoal(1000, 0, 2000)).toBeNull();
   });
 
   it('calculates breakeven against invested capital, independent from goal', () => {

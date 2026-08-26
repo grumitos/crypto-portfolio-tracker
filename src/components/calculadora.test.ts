@@ -33,7 +33,6 @@ describe('calculadora integration', () => {
       sellPrice: '',
       sellPct: '0.98',
       rebuyPct: '0.85',
-      feePreset: 'spot',
       fdusdEnabled: false,
       sellSyncSource: 'percent',
       purchases: [
@@ -64,7 +63,6 @@ describe('calculadora integration', () => {
       sellPrice: '',
       sellPct: '0.98',
       rebuyPct: '0.85',
-      feePreset: 'spot',
       fdusdEnabled: false,
       sellSyncSource: 'percent',
       purchases: [],
@@ -95,7 +93,7 @@ describe('calculadora integration', () => {
     expect(parseDisplayedNumber(sellPctInput.value)).toBeCloseTo(10, 4);
   });
 
-  it('updates output metrics when fee preset changes', () => {
+  it('updates output metrics when the fee changes', () => {
     saveCalcState({
       price: '100',
       capital: '1000',
@@ -103,7 +101,6 @@ describe('calculadora integration', () => {
       sellPrice: '',
       sellPct: '2',
       rebuyPct: '1',
-      feePreset: 'spot',
       fdusdEnabled: false,
       sellSyncSource: 'percent',
       purchases: [],
@@ -113,13 +110,14 @@ describe('calculadora integration', () => {
     renderCalculadora(container);
 
     const aprEl = container.querySelector('#calc-out-apr') as HTMLElement;
-    const futuresBtn = container.querySelector('#calc-fee-futures') as HTMLButtonElement;
+    const fdusdBtn = container.querySelector('#calc-fee-fdusd') as HTMLButtonElement;
     const spotApr = parseDisplayedNumber(aprEl.textContent);
 
-    futuresBtn.click();
+    // Pagando en FDUSD la comision maker es 0, asi que el ciclo rinde mas.
+    fdusdBtn.click();
 
-    const futuresApr = parseDisplayedNumber(aprEl.textContent);
-    expect(futuresApr).toBeGreaterThan(spotApr);
+    const fdusdApr = parseDisplayedNumber(aprEl.textContent);
+    expect(fdusdApr).toBeGreaterThan(spotApr);
   });
 
   it('resets execution fields back to defaults', () => {
@@ -130,7 +128,6 @@ describe('calculadora integration', () => {
       sellPrice: '120',
       sellPct: '5',
       rebuyPct: '2',
-      feePreset: 'spot',
       fdusdEnabled: false,
       sellSyncSource: 'price',
       purchases: [],
@@ -161,7 +158,6 @@ describe('calculadora integration', () => {
       sellPrice: '',
       sellPct: '0.98',
       rebuyPct: '0.85',
-      feePreset: 'spot',
       fdusdEnabled: false,
       sellSyncSource: 'percent',
       purchases: [],
@@ -183,7 +179,6 @@ describe('calculadora integration', () => {
       sellPrice: '',
       sellPct: '0.98',
       rebuyPct: '0.85',
-      feePreset: 'spot',
       fdusdEnabled: false,
       sellSyncSource: 'percent',
       purchases: [],

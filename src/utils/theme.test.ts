@@ -87,20 +87,4 @@ describe('theme utils', () => {
     );
     expect(favicon.href).toBe(faviconHref);
   });
-
-  it('notifies listeners on theme changes and reacts to system changes', async () => {
-    const media = installMatchMedia(false);
-    const theme = await import('./theme');
-    const listener = vi.fn();
-    theme.onThemeChange(listener);
-
-    theme.setTheme('dark');
-    expect(listener).toHaveBeenLastCalledWith('dark');
-
-    theme.setTheme('system');
-    theme.initTheme();
-    media.setMatches(true);
-
-    expect(listener).toHaveBeenLastCalledWith('dark');
-  });
 });

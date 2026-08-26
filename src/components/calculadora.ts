@@ -20,7 +20,8 @@ import {
   CALC_INPUT_DEBOUNCE_MS,
   CALC_RESULT_ANIM_MS,
   CALCULADORA_COPY,
-  FEE_PRESETS,
+  FDUSD_MAKER_FEE_PCT,
+  SPOT_MAKER_FEE_PCT,
 } from './calculadora.constants';
 import { renderCalculadoraTemplate, renderPurchaseRow } from './calculadora.template';
 
@@ -72,12 +73,8 @@ function save(): void {
   saveCalcState(state);
 }
 
-function getEffectiveFee(): { maker: number; label: string } {
-  const preset = FEE_PRESETS[state.feePreset] || FEE_PRESETS.spot;
-  if (state.feePreset === 'spot' && state.fdusdEnabled) {
-    return { maker: 0, label: preset.label };
-  }
-  return preset;
+function getEffectiveMakerFee(): number {
+  return state.fdusdEnabled ? FDUSD_MAKER_FEE_PCT : SPOT_MAKER_FEE_PCT;
 }
 
 // ── Render ──
@@ -87,7 +84,7 @@ export function renderCalculadora(container: HTMLElement): () => void {
   cancelScheduledRecalculate();
   loadAndInit();
 
-  container.innerHTML = renderCalculadoraTemplate(state, getEffectiveFee().maker);
+  container.innerHTML = renderCalculadoraTemplate(state, getEffectiveMakerFee());
 
   renderPurchaseRows(container);
   bindEvents(container, eventController.signal);
@@ -218,44 +215,21 @@ function bindEvents(container: HTMLElement, signal: AbortSignal): void {
   );
 
   // Fee preset buttons
-  container.querySelector('#calc-fee-spot')?.addEventListener(
-    'click',
-    () => {
-      state.feePreset = 'spot';
-      state.fdusdEnabled = false;
-      updateFeeUI(container);
-      cancelScheduledRecalculate();
-      recalculate(container, { animate: true });
-      save();
-    },
-    { signal },
-  );
+  const setFdusd = (enabled: boolean) => {
+    state.fdusdEnabled = enabled;
+    updateFeeUI(container);
+    cancelScheduledRecalculate();
+    recalculate(container, { animate: true });
+    save();
+  };
 
-  container.querySelector('#calc-fee-futures')?.addEventListener(
-    'click',
-    () => {
-      state.feePreset = 'futures';
-      state.fdusdEnabled = false;
-      updateFeeUI(container);
-      cancelScheduledRecalculate();
-      recalculate(container, { animate: true });
-      save();
-    },
-    { signal },
-  );
+  container.querySelector('#calc-fee-spot')?.addEventListener('click', () => setFdusd(false), {
+    signal,
+  });
 
-  container.querySelector('#calc-fee-fdusd')?.addEventListener(
-    'click',
-    () => {
-      if (state.feePreset !== 'spot') return;
-      state.fdusdEnabled = !state.fdusdEnabled;
-      updateFeeUI(container);
-      cancelScheduledRecalculate();
-      recalculate(container, { animate: true });
-      save();
-    },
-    { signal },
-  );
+  container.querySelector('#calc-fee-fdusd')?.addEventListener('click', () => setFdusd(true), {
+    signal,
+  });
 
   // Reset execution
   container.querySelector('#calc-reset-exec')?.addEventListener(
@@ -373,17 +347,13 @@ function bindPurchaseListEvents(container: HTMLElement, signal: AbortSignal): vo
 // ── Fee UI update ──
 
 function updateFeeUI(container: HTMLElement): void {
-  const fee = getEffectiveFee();
   const spotBtn = container.querySelector('#calc-fee-spot') as HTMLElement;
-  const futuresBtn = container.querySelector('#calc-fee-futures') as HTMLElement;
-  const fdusdBtn = container.querySelector('#calc-fee-fdusd') as HTMLButtonElement;
+  const fdusdBtn = container.querySelector('#calc-fee-fdusd') as HTMLElement;
   const feeDisplay = container.querySelector('#calc-fee-display') as HTMLElement;
 
-  spotBtn?.classList.toggle('active', state.feePreset === 'spot' && !state.fdusdEnabled);
-  futuresBtn?.classList.toggle('active', state.feePreset === 'futures');
-  fdusdBtn?.classList.toggle('active', state.feePreset === 'spot' && state.fdusdEnabled);
-  if (fdusdBtn) fdusdBtn.disabled = state.feePreset !== 'spot';
-  if (feeDisplay) feeDisplay.textContent = `${fee.maker.toFixed(3)}%`;
+  spotBtn?.classList.toggle('active', !state.fdusdEnabled);
+  fdusdBtn?.classList.toggle('active', state.fdusdEnabled);
+  if (feeDisplay) feeDisplay.textContent = `${getEffectiveMakerFee().toFixed(3)}%`;
 }
 
 function setCalcMetricText(el: HTMLElement | null, text: string, animate: boolean): void {
@@ -430,8 +400,7 @@ function scheduleRecalculate(container: HTMLElement): void {
 
 function recalculate(container: HTMLElement, options: { animate?: boolean } = {}): void {
   const animate = options.animate === true;
-  const fee = getEffectiveFee();
-  const makerPct = fee.maker;
+  const makerPct = getEffectiveMakerFee();
   const trades = parseNum(state.trades);
 
   // Purchase totals → auto-lock capital & price

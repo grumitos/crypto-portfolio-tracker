@@ -29,8 +29,7 @@ export interface DualPositionComponent {
 export type PositionEntryTimeSource =
   | 'binance_purchase_time'
   | 'derived_settle_minus_duration'
-  | 'derived_purchase_end_time'
-  | 'derived_now';
+  | 'derived_purchase_end_time';
 
 export type PositionSettlementTimeSource = 'binance_settle_date_rule';
 
@@ -51,14 +50,10 @@ export interface DualPosition {
   apr: number; // annual percentage rate
   components?: DualPositionComponent[]; // grouped source entries used for weighted aggregate rows
   source?: 'Binance' | 'Bybit';
-  positionKind?: 'dual' | 'derivative' | 'discount-buy';
-  displaySymbol?: string;
-  notionalUsd?: number;
-  unrealizedPnlUsd?: number;
+  positionKind?: 'dual' | 'discount-buy';
   projectedProfit?: number;
   expectedSettlementAsset?: string;
   expectedSettlementAmount?: number;
-  side?: 'long' | 'short';
 }
 
 // ── Simulator ──
@@ -81,7 +76,6 @@ export interface ProjectionRow {
 }
 
 // ── Swing Trade Calculator ──
-export type FeePreset = 'spot' | 'futures';
 
 export interface Purchase {
   id: number;
@@ -96,7 +90,6 @@ export interface CalculadoraState {
   sellPrice: string;
   sellPct: string;
   rebuyPct: string;
-  feePreset: FeePreset;
   fdusdEnabled: boolean;
   sellSyncSource: 'price' | 'percent' | null;
   purchases: Purchase[];
@@ -210,21 +203,6 @@ export interface BybitAccountBalance {
   usdValue: number;
 }
 
-export interface BybitPosition {
-  id: string;
-  symbol: string;
-  baseAsset: string;
-  quoteAsset: string;
-  side: 'Buy' | 'Sell';
-  size: number;
-  avgPrice: number;
-  markPrice: number;
-  positionValue: number;
-  unrealizedPnl: number;
-  updatedTime?: number;
-  createdTime?: number;
-}
-
 export interface BybitDualAssetPosition {
   id: string;
   productId: string;
@@ -235,7 +213,8 @@ export interface BybitDualAssetPosition {
   apr: number;
   direction: 'BuyLow' | 'SellHigh';
   targetPrice: number;
-  settlementTime: number;
+  /** Ausente si el exchange no la reporta: no se sustituye por la hora actual. */
+  settlementTime?: number;
   status: 'Active' | 'Redeeming' | string;
   orderId?: string;
   duration?: string;
@@ -255,7 +234,8 @@ export interface BybitDiscountBuyPosition {
   apr: number;
   purchasePrice: number;
   knockoutPrice: number;
-  settlementTime: number;
+  /** Ausente si el exchange no la reporta: no se sustituye por la hora actual. */
+  settlementTime?: number;
   status: 'Active' | 'Settling' | string;
   orderId?: string;
   duration?: string;

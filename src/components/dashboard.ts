@@ -576,23 +576,26 @@ function renderBalanceDetail(
   balanceStrip.hidden = false;
 
   if (relevant.length === 0) {
-    balanceStripItems.innerHTML = renderBalanceEmptyState();
+    if (!balanceStripItems.querySelector('.empty-row')) {
+      balanceStripItems.innerHTML = renderBalanceEmptyState();
+    }
     return;
   }
 
   updateBalanceDetailCards(balanceStripItems, relevant);
 }
 
-function sameBalanceCardStructure(
-  container: HTMLElement,
-  balances: BinanceAccountBalance[],
-): boolean {
-  const entries = [...container.querySelectorAll<HTMLElement>('.dashboard-balance-entry')];
-  if (entries.length !== balances.length) return false;
-
-  return entries.every((entry, index) => {
-    return entry.dataset.balanceKey === getDashboardBalanceKey(balances[index]);
+/**
+ * Las filas ya montadas, indexadas por su activo y su origen. Las de carga no
+ * llevan clave, asi que quedan fuera y obligan al primer render de verdad.
+ */
+function mapBalanceEntriesByKey(container: HTMLElement): Map<string, HTMLElement> {
+  const entriesByKey = new Map<string, HTMLElement>();
+  container.querySelectorAll<HTMLElement>('.dashboard-balance-entry').forEach((entry) => {
+    const key = entry.dataset.balanceKey;
+    if (key) entriesByKey.set(key, entry);
   });
+  return entriesByKey;
 }
 
 function setBalanceDetailNumber(
@@ -609,15 +612,28 @@ function setBalanceDetailNumber(
 }
 
 function updateBalanceDetailCards(container: HTMLElement, balances: BinanceAccountBalance[]): void {
-  if (!sameBalanceCardStructure(container, balances)) {
+  const entriesByKey = mapBalanceEntriesByKey(container);
+  const keys = balances.map((balance) => getDashboardBalanceKey(balance));
+
+  // La tira va ordenada por saldo, y el saldo se mueve: dos activos parecidos se
+  // adelantan el uno al otro sin que la lista haya cambiado. Mientras sean los
+  // mismos activos se recolocan las filas que ya estan puestas; rehacerlas
+  // volveria a pedir los logos y cortaria la animacion de las cifras.
+  const canReuse =
+    entriesByKey.size === balances.length && keys.every((key) => entriesByKey.has(key));
+
+  if (!canReuse) {
     renderBalanceDetailRows(container, balances);
     return;
   }
 
-  const entries = [...container.querySelectorAll<HTMLElement>('.dashboard-balance-entry')];
-  entries.forEach((entry, index) => {
-    const balance = balances[index];
-    if (!balance) return;
+  balances.forEach((balance, index) => {
+    const entry = entriesByKey.get(keys[index]);
+    if (!entry) return;
+
+    if (container.children[index] !== entry) {
+      container.insertBefore(entry, container.children[index] ?? null);
+    }
 
     const totalEl = entry.querySelector<HTMLElement>('.dashboard-balance-total-value');
     const breakdownValues = entry.querySelectorAll<HTMLElement>(
@@ -751,10 +767,7 @@ function sumBalanceContributingPositionUsd(
   positions: AppState['positions'],
   usdByPositionId: Record<string, number>,
 ): number {
-  return positions.reduce((total, position) => {
-    if (position.positionKind === 'derivative') return total;
-    return total + (usdByPositionId[position.id] ?? 0);
-  }, 0);
+  return positions.reduce((total, position) => total + (usdByPositionId[position.id] ?? 0), 0);
 }
 
 async function hydrateDashboardMarketStats(

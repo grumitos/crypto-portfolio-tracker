@@ -84,6 +84,54 @@ describe('storage', () => {
     expect(position.settlementDate).toBe(position.entryDate);
   });
 
+  // Fechar con "hoy" lo que no tiene fecha la vuelve a fechar en cada carga, y
+  // deja de poder distinguirse de una posicion que si empezo hoy.
+  it('keeps an unknown date empty instead of defaulting it to today', () => {
+    replaceSyncedPositions([
+      {
+        id: 'bybit_dual_undated',
+        asset: 'ETH',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 20,
+        targetPrice: 2325,
+        entryDate: '',
+        settlementDate: '',
+        apr: 900,
+        source: 'Bybit',
+        positionKind: 'dual',
+      },
+    ]);
+
+    const position = loadState().positions[0];
+    expect(position.entryDate).toBe('');
+    expect(position.settlementDate).toBe('');
+  });
+
+  // Sin entrada no hay con que comparar la liquidacion, asi que la correccion
+  // de orden no debe inventarse una igualandolas.
+  it('does not clamp a known settlement date against an unknown entry date', () => {
+    replaceSyncedPositions([
+      {
+        id: 'bybit_dual_half_dated',
+        asset: 'ETH',
+        direction: 'buy-low',
+        subscriptionAsset: 'USDT',
+        amount: 20,
+        targetPrice: 2325,
+        entryDate: '',
+        settlementDate: '2026-05-15',
+        apr: 900,
+        source: 'Bybit',
+        positionKind: 'dual',
+      },
+    ]);
+
+    const position = loadState().positions[0];
+    expect(position.entryDate).toBe('');
+    expect(position.settlementDate).toBe('2026-05-15');
+  });
+
   it('replaces stored positions with the synced list', () => {
     const original = loadState();
     expect(original.positions).toHaveLength(0);
@@ -230,7 +278,6 @@ describe('storage', () => {
         apr: 1,
         source: 'Bybit',
         positionKind: 'discount-buy',
-        displaySymbol: 'BTCUSDT',
         projectedProfit: 0.005479452054794521,
       },
     ]);
@@ -238,7 +285,6 @@ describe('storage', () => {
     const position = loadState().positions[0];
     expect(position.positionKind).toBe('discount-buy');
     expect(position.source).toBe('Bybit');
-    expect(position.displaySymbol).toBe('BTCUSDT');
     expect(position.projectedProfit).toBeCloseTo(0.005479452054794521, 12);
   });
 
@@ -257,13 +303,11 @@ describe('storage', () => {
         apr: 120,
         source: 'Bybit',
         positionKind: 'dual',
-        displaySymbol: 'ETHBTC',
       },
     ]);
 
     const position = loadState().positions[0];
     expect(position.quoteAsset).toBe('BTC');
-    expect(position.displaySymbol).toBe('ETHBTC');
   });
 
   it('preserves exact expected settlement fields for synced positions', () => {
@@ -281,7 +325,6 @@ describe('storage', () => {
         apr: 120,
         source: 'Bybit',
         positionKind: 'dual',
-        displaySymbol: 'ETHUSDT',
         projectedProfit: 0.002,
         expectedSettlementAsset: 'USDT',
         expectedSettlementAmount: 10174.53,

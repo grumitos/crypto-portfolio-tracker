@@ -206,11 +206,6 @@ function formatSignedUsdt(value: number): string {
   return `${sign}${formatUSDCompact(Math.abs(value)).replace('$', '')} USDT`;
 }
 
-function formatSignedUsdCompact(value: number): string {
-  if (value > 0) return `+${formatUSDCompact(value)}`;
-  return formatUSDCompact(value);
-}
-
 function formatAprPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
@@ -306,32 +301,6 @@ function updateDiscountBuyEarnings(
     if (profit > 0) {
       el.classList.add('text-gain');
     } else if (profit < 0) {
-      el.classList.add('text-loss');
-    } else {
-      el.classList.add('text-muted');
-    }
-  });
-}
-
-function updateDerivativeEarnings(container: HTMLElement, positions: DualPosition[]): void {
-  const doc = container.ownerDocument;
-  positions.forEach((position) => {
-    if (position.positionKind !== 'derivative') return;
-
-    const el = doc.getElementById(`position-earn-${position.id}`) as HTMLElement | null;
-    if (!el || !container.contains(el)) return;
-
-    const pnl = position.unrealizedPnlUsd ?? 0;
-    el.classList.remove('text-gain', 'text-loss', 'text-muted');
-    stopValueAnimation(textAnimationByElement, el);
-    setAnimatedNumber(positionEarnAnimationByElement, el, pnl, formatSignedUsdCompact, {
-      enabled: true,
-      durationMs: RESULT_NUMBER_ANIM_MS,
-    });
-
-    if (pnl > 0) {
-      el.classList.add('text-gain');
-    } else if (pnl < 0) {
       el.classList.add('text-loss');
     } else {
       el.classList.add('text-muted');
@@ -503,7 +472,7 @@ function updateSpotStrip(
   }
 
   stripEl.hidden = false;
-  const fragment = document.createDocumentFragment();
+  const cards: HTMLElement[] = [];
 
   if (snapshot) {
     hydratedAssets.forEach(({ asset, spotPrice, changePercent24h }) => {
@@ -513,7 +482,7 @@ function updateSpotStrip(
       const changeEl = card.querySelector(`#positions-spot-change-${asset}`) as HTMLElement | null;
       setSpotValue(valueEl, spotPrice);
       setSpotChange(changeEl, changePercent24h);
-      fragment.appendChild(card);
+      cards.push(card);
     });
   } else {
     orderedAssets.forEach((asset) => {
@@ -523,11 +492,17 @@ function updateSpotStrip(
       const changeEl = card.querySelector(`#positions-spot-change-${asset}`) as HTMLElement | null;
       setSpotLoading(valueEl);
       setSpotChangeLoading(changeEl);
-      fragment.appendChild(card);
+      cards.push(card);
     });
   }
 
-  stripEl.replaceChildren(fragment);
+  // Reinsertar una tarjeta que ya esta donde toca la saca y la vuelve a meter
+  // en el DOM, y eso reinicia sus transiciones justo cuando su cifra acaba de
+  // animarse. Solo se toca el riel cuando la lista cambia de verdad.
+  const current = [...stripEl.children];
+  const isUnchanged =
+    current.length === cards.length && cards.every((card, index) => current[index] === card);
+  if (!isUnchanged) stripEl.replaceChildren(...cards);
 }
 
 function createUnavailableSpotSnapshot(positions: DualPosition[]): AssetPriceSnapshot {
@@ -606,7 +581,6 @@ function applyPositionMarketData(
   updateDualPositionAprs(container, positions, metrics);
   updateDiscountBuyAprs(container, positions, snapshot);
   updateDiscountBuyEarnings(container, positions, snapshot);
-  updateDerivativeEarnings(container, positions);
 
   positions.forEach((position) => {
     const rowEl = container.querySelector(`#position-usd-${position.id}`) as HTMLElement | null;

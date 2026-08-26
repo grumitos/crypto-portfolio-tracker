@@ -9,7 +9,6 @@ const CACHE_TTL_MS = 60_000;
 const STALE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const PRICE_CACHE_MAX_ENTRIES = 256;
 const CHANGE_CACHE_MAX_ENTRIES = 256;
-const POSITION_METRICS_CACHE_MAX_ENTRIES = 32;
 const BINANCE_FETCH_TIMEOUT_MS = 6000;
 const DEFAULT_RATE_LIMIT_BLOCK_MS = 60_000;
 const DEFAULT_BINANCE_TICKER_ENDPOINTS = [
@@ -86,18 +85,6 @@ export interface PositionMetrics {
   hasUnavailablePrices: boolean;
   priceSourceByAsset: Record<string, PriceSource>;
 }
-
-export interface PositionMetricsOptions {
-  forceRefresh?: boolean;
-}
-
-interface PositionMetricsCacheEntry {
-  value: PositionMetrics;
-  ts: number;
-}
-
-const positionMetricsCache = new Map<string, PositionMetricsCacheEntry>();
-const positionMetricsInFlight = new Map<string, Promise<PositionMetrics>>();
 
 function isStable(asset: string): boolean {
   return STABLE_ASSETS.has(asset.toUpperCase());
@@ -552,50 +539,6 @@ function pruneChangePercent24hCache(now = Date.now()): void {
   pruneCache(changePercent24hCache, CHANGE_CACHE_MAX_ENTRIES, now);
 }
 
-function buildPositionMetricsCacheKey(positions: DualPosition[]): string {
-  return [...positions]
-    .map((position) =>
-      [
-        position.id,
-        normalizeAsset(position.asset),
-        normalizeAsset(position.subscriptionAsset),
-        resolveQuoteAsset(position),
-        position.amount.toFixed(8),
-        position.targetPrice.toFixed(8),
-        position.apr.toFixed(8),
-        position.entryDate,
-        position.entryTime ?? '',
-        position.settlementDate,
-        position.settlementTime ?? '',
-        position.positionKind ?? 'dual',
-        Number.isFinite(position.notionalUsd) ? String(position.notionalUsd) : '',
-        normalizeAsset(position.expectedSettlementAsset ?? ''),
-        Number.isFinite(position.expectedSettlementAmount)
-          ? String(position.expectedSettlementAmount)
-          : '',
-      ].join(':'),
-    )
-    .sort()
-    .join('|');
-}
-
-function prunePositionMetricsCache(now = Date.now()): void {
-  for (const [key, entry] of positionMetricsCache.entries()) {
-    if (now - entry.ts > CACHE_TTL_MS) {
-      positionMetricsCache.delete(key);
-    }
-  }
-
-  let overflow = positionMetricsCache.size - POSITION_METRICS_CACHE_MAX_ENTRIES;
-  if (overflow <= 0) return;
-
-  for (const key of positionMetricsCache.keys()) {
-    if (overflow <= 0) break;
-    positionMetricsCache.delete(key);
-    overflow -= 1;
-  }
-}
-
 function staleOrUnavailable(asset: string): ResolvedAssetPrice {
   const stale = priceCache.get(asset);
   if (stale) {
@@ -775,10 +718,7 @@ export function calculatePositionMetricsFromSnapshot(
 
   for (const position of positions) {
     const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
-    const usdValue =
-      position.positionKind === 'derivative' && Number.isFinite(position.notionalUsd)
-        ? Math.max(0, position.notionalUsd ?? 0)
-        : position.amount * (snapshot.priceByAsset[subscriptionAsset] ?? 0);
+    const usdValue = position.amount * (snapshot.priceByAsset[subscriptionAsset] ?? 0);
     const effectiveApr = resolveMetricsApr(position, snapshot);
     usdByPositionId[position.id] = usdValue;
     aprByPositionId[position.id] = effectiveApr;
@@ -787,17 +727,16 @@ export function calculatePositionMetricsFromSnapshot(
     weightedAprNumerator += effectiveApr * usdValue;
     dailyEarningsUsd += calculateDailyEarnings(usdValue, effectiveApr);
 
-    if (position.positionKind !== 'derivative') {
-      metricAssets.add(subscriptionAsset);
-      const quoteAsset = resolveQuoteAsset(position);
-      if (quoteAsset) {
-        metricAssets.add(quoteAsset);
-      }
-      const expectedSettlementAsset = normalizeAsset(position.expectedSettlementAsset ?? '');
-      if (expectedSettlementAsset) {
-        metricAssets.add(expectedSettlementAsset);
-      }
+    metricAssets.add(subscriptionAsset);
+    const quoteAsset = resolveQuoteAsset(position);
+    if (quoteAsset) {
+      metricAssets.add(quoteAsset);
     }
+    const expectedSettlementAsset = normalizeAsset(position.expectedSettlementAsset ?? '');
+    if (expectedSettlementAsset) {
+      metricAssets.add(expectedSettlementAsset);
+    }
+
     if (position.positionKind === 'discount-buy') {
       const underlyingAsset = normalizeAsset(position.asset);
       if (underlyingAsset) {
@@ -828,89 +767,9 @@ export function calculatePositionMetricsFromSnapshot(
   };
 }
 
-export async function calculatePositionMetrics(
-  positions: DualPosition[],
-  options: PositionMetricsOptions = {},
-): Promise<PositionMetrics> {
-  const forceRefresh = options.forceRefresh === true;
-  const cacheKey = buildPositionMetricsCacheKey(positions);
-  const now = Date.now();
-
-  prunePositionMetricsCache(now);
-
-  if (!forceRefresh) {
-    const cached = positionMetricsCache.get(cacheKey);
-    if (cached && now - cached.ts < CACHE_TTL_MS) {
-      positionMetricsCache.delete(cacheKey);
-      positionMetricsCache.set(cacheKey, cached);
-      return cached.value;
-    }
-
-    const inFlight = positionMetricsInFlight.get(cacheKey);
-    if (inFlight) {
-      return inFlight;
-    }
-  }
-
-  const request = (async (): Promise<PositionMetrics> => {
-    const snapshot = await getAssetPriceSnapshot(
-      buildPositionMetricsAssetUniverse(positions),
-      options,
-    );
-    const metrics = calculatePositionMetricsFromSnapshot(positions, snapshot);
-    positionMetricsCache.delete(cacheKey);
-    positionMetricsCache.set(cacheKey, { value: metrics, ts: Date.now() });
-    prunePositionMetricsCache();
-    return metrics;
-  })();
-
-  positionMetricsInFlight.set(cacheKey, request);
-  try {
-    return await request;
-  } finally {
-    if (positionMetricsInFlight.get(cacheKey) === request) {
-      positionMetricsInFlight.delete(cacheKey);
-    }
-  }
-}
-
-function buildPositionMetricsAssetUniverse(positions: DualPosition[]): string[] {
-  const assets = new Set<string>();
-
-  positions.forEach((position) => {
-    if (position.positionKind === 'derivative') return;
-
-    const subscriptionAsset = normalizeAsset(position.subscriptionAsset);
-    if (subscriptionAsset) {
-      assets.add(subscriptionAsset);
-    }
-
-    const quoteAsset = resolveQuoteAsset(position);
-    if (quoteAsset) {
-      assets.add(quoteAsset);
-    }
-
-    const expectedSettlementAsset = normalizeAsset(position.expectedSettlementAsset ?? '');
-    if (expectedSettlementAsset) {
-      assets.add(expectedSettlementAsset);
-    }
-
-    if (position.positionKind === 'discount-buy') {
-      const underlyingAsset = normalizeAsset(position.asset);
-      if (underlyingAsset) {
-        assets.add(underlyingAsset);
-      }
-    }
-  });
-
-  return Array.from(assets);
-}
-
 export function clearMarketCaches(): void {
   priceCache.clear();
   changePercent24hCache.clear();
-  positionMetricsCache.clear();
-  positionMetricsInFlight.clear();
   tickerInFlight.clear();
   tickerBatchInFlight.clear();
   ticker24hBatchInFlight.clear();
