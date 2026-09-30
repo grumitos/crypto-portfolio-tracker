@@ -1,29 +1,48 @@
 import {
-  DEFAULT_CALC_REBUY_PCT,
-  DEFAULT_CALC_SELL_PCT,
+  DEFAULT_CALC_REBUY,
+  DEFAULT_CALC_SELL,
   loadCalcState,
   saveCalcState,
 } from '../utils/storage';
 import { formatUSD } from '../utils/calculator';
-import type { AchievedResults, CalculadoraState, PurchaseTotals, StrategyResults } from '../types';
+import type { CalculadoraState, CycleResults, PriceUnit, PurchaseTotals } from '../types';
 import {
-  computeAchievedResults,
-  computeFeeMultiplier,
+  computeCycle,
   computePurchaseTotals,
-  computeStrategyResults,
   parseNum,
+  resolveRebuyPrice,
+  resolveSellPrice,
   roundTo,
 } from './calculadora.math';
 import { setAnimatedNumber, setAnimatedText, stopValueAnimation } from '../utils/animation';
 import { showConfirmDialog } from '../utils/dialogs';
 import {
   CALC_INPUT_DEBOUNCE_MS,
+  CALC_REBUY_HINT_PCT,
   CALC_RESULT_ANIM_MS,
+  CALC_SELL_HINT_PCT,
   CALCULADORA_COPY,
   FDUSD_MAKER_FEE_PCT,
   SPOT_MAKER_FEE_PCT,
 } from './calculadora.constants';
 import { renderCalculadoraTemplate, renderPurchaseRow } from './calculadora.template';
+
+/**
+ * Decimales que necesita un precio para no perder informacion util: dos bastan
+ * para ETH, pero un activo de $0.004 se veria como 0.00. Los importes en USD no
+ * usan esto; ahi el centavo es la unidad real.
+ */
+function priceDecimals(value: number): number {
+  const abs = Math.abs(value);
+  if (!Number.isFinite(abs) || abs === 0) return 2;
+  if (abs < 1) return 6;
+  if (abs < 100) return 4;
+  return 2;
+}
+
+function fmtPrice(value: number): string {
+  return fmtNum(value, priceDecimals(value));
+}
 
 function fmtNum(value: number, decimals: number): string {
   if (!Number.isFinite(value)) return '-';
@@ -37,18 +56,9 @@ function fmtNum(value: number, decimals: number): string {
 
 let state: CalculadoraState;
 let purchaseIdCounter = 1;
-let lastValidPrice = NaN;
 let recalcTimer: ReturnType<typeof setTimeout> | null = null;
 const calcValueAnimationByElement = new WeakMap<HTMLElement, number>();
 const calcTextAnimationByElement = new WeakMap<HTMLElement, number>();
-
-function inferSellSyncSource(): 'price' | 'percent' | null {
-  const sellPrice = parseNum(state.sellPrice);
-  if (Number.isFinite(sellPrice)) return 'price';
-  const sellPct = parseNum(state.sellPct);
-  if (Number.isFinite(sellPct)) return 'percent';
-  return null;
-}
 
 function loadAndInit(): void {
   state = loadCalcState();
@@ -60,13 +70,6 @@ function loadAndInit(): void {
   } else {
     purchaseIdCounter = 1;
   }
-
-  if (!state.sellSyncSource) {
-    state.sellSyncSource = inferSellSyncSource();
-  }
-
-  const parsedPrice = roundTo(parseNum(state.price), 2);
-  lastValidPrice = Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : NaN;
 }
 
 function save(): void {
@@ -138,17 +141,17 @@ function bindEvents(container: HTMLElement, signal: AbortSignal): void {
   const priceInput = container.querySelector('#calc-price') as HTMLInputElement;
   const capitalInput = container.querySelector('#calc-capital') as HTMLInputElement;
   const tradesInput = container.querySelector('#calc-trades') as HTMLInputElement;
-  const sellPriceInput = container.querySelector('#calc-sell-price') as HTMLInputElement;
-  const sellPctInput = container.querySelector('#calc-sell-pct') as HTMLInputElement;
-  const rebuyPctInput = container.querySelector('#calc-rebuy-pct') as HTMLInputElement;
+  const sellInput = container.querySelector('#calc-sell') as HTMLInputElement;
+  const rebuyInput = container.querySelector('#calc-rebuy') as HTMLInputElement;
 
-  // Input sync → state
-  type StringStateKey = 'price' | 'capital' | 'trades' | 'rebuyPct';
+  // Input sync -> state
+  type StringStateKey = 'price' | 'capital' | 'trades' | 'sell' | 'rebuy';
   const inputMap: Array<[HTMLInputElement, StringStateKey]> = [
     [priceInput, 'price'],
     [capitalInput, 'capital'],
     [tradesInput, 'trades'],
-    [rebuyPctInput, 'rebuyPct'],
+    [sellInput, 'sell'],
+    [rebuyInput, 'rebuy'],
   ];
 
   for (const [el, key] of inputMap) {
@@ -163,56 +166,18 @@ function bindEvents(container: HTMLElement, signal: AbortSignal): void {
     );
   }
 
-  // Sell price ↔ sell % bidirectional sync
-  sellPriceInput.addEventListener(
-    'focus',
-    () => {
-      state.sellSyncSource = 'price';
-      sellPriceInput.readOnly = false;
-      sellPctInput.readOnly = true;
-      sellPctInput.classList.add('calc-locked');
-      sellPriceInput.classList.remove('calc-locked');
-      cancelScheduledRecalculate();
-      recalculate(container, { animate: false });
-    },
-    { signal },
-  );
-
-  sellPctInput.addEventListener(
-    'focus',
-    () => {
-      state.sellSyncSource = 'percent';
-      sellPctInput.readOnly = false;
-      sellPriceInput.readOnly = true;
-      sellPriceInput.classList.add('calc-locked');
-      sellPctInput.classList.remove('calc-locked');
-      cancelScheduledRecalculate();
-      recalculate(container, { animate: false });
-    },
-    { signal },
-  );
-
-  sellPriceInput.addEventListener(
-    'input',
-    () => {
-      state.sellPrice = sellPriceInput.value;
-      state.sellSyncSource = 'price';
-      scheduleRecalculate(container);
-      scheduleSave();
-    },
-    { signal },
-  );
-
-  sellPctInput.addEventListener(
-    'input',
-    () => {
-      state.sellPct = sellPctInput.value;
-      state.sellSyncSource = 'percent';
-      scheduleRecalculate(container);
-      scheduleSave();
-    },
-    { signal },
-  );
+  // Selectores de unidad: $ o % para cada precio del ciclo
+  for (const key of ['sell', 'rebuy'] as const) {
+    for (const unit of ['usd', 'pct'] as const) {
+      container.querySelector(`#calc-${key}-unit-${unit}`)?.addEventListener(
+        'click',
+        () => {
+          changeUnit(container, key, unit);
+        },
+        { signal },
+      );
+    }
+  }
 
   // Fee preset buttons
   const setFdusd = (enabled: boolean) => {
@@ -235,17 +200,14 @@ function bindEvents(container: HTMLElement, signal: AbortSignal): void {
   container.querySelector('#calc-reset-exec')?.addEventListener(
     'click',
     () => {
-      state.sellPrice = '';
-      state.sellPct = DEFAULT_CALC_SELL_PCT;
-      state.rebuyPct = DEFAULT_CALC_REBUY_PCT;
-      state.sellSyncSource = 'percent';
-      sellPriceInput.value = '';
-      sellPctInput.value = DEFAULT_CALC_SELL_PCT;
-      rebuyPctInput.value = DEFAULT_CALC_REBUY_PCT;
-      sellPriceInput.readOnly = true;
-      sellPriceInput.classList.add('calc-locked');
-      sellPctInput.readOnly = false;
-      sellPctInput.classList.remove('calc-locked');
+      state.sell = DEFAULT_CALC_SELL;
+      state.sellUnit = 'pct';
+      state.rebuy = DEFAULT_CALC_REBUY;
+      state.rebuyUnit = 'pct';
+      sellInput.value = DEFAULT_CALC_SELL;
+      rebuyInput.value = DEFAULT_CALC_REBUY;
+      applyUnitUI(container, 'sell', 'pct');
+      applyUnitUI(container, 'rebuy', 'pct');
       cancelScheduledRecalculate();
       recalculate(container, { animate: true });
       save();
@@ -262,6 +224,8 @@ function bindEvents(container: HTMLElement, signal: AbortSignal): void {
       cancelScheduledRecalculate();
       recalculate(container, { animate: true });
       save();
+      const clearBtn = container.querySelector('#calc-clear-purchases') as HTMLButtonElement | null;
+      if (clearBtn) clearBtn.disabled = false;
     },
     { signal },
   );
@@ -398,6 +362,37 @@ function scheduleRecalculate(container: HTMLElement): void {
 
 // ── Recalculation ──
 
+/**
+ * Resuelve un campo que las compras pueden calcular solas. Cuando lo hacen, el
+ * input muestra el derivado y queda bloqueado, pero `state` conserva intacto lo
+ * que el usuario escribio a mano: al vaciar la tabla su valor vuelve tal cual.
+ * Por eso el valor de calculo sale de aqui y no de leer el DOM, que en ese rato
+ * esta ocupado por el derivado.
+ */
+function applyDerivedField(
+  container: HTMLElement,
+  key: 'price' | 'capital',
+  derived: number,
+): number {
+  const input = container.querySelector(`#calc-${key}`) as HTMLInputElement | null;
+  const lock = container.querySelector(`#calc-${key}-lock`) as HTMLElement | null;
+  const isDerived = Number.isFinite(derived) && derived > 0;
+
+  if (input) {
+    // Solo se reescribe si difiere: asignar mientras el usuario teclea le
+    // moveria el cursor al final.
+    const next = isDerived ? derived.toFixed(priceDecimals(derived)) : state[key];
+    if (input.value !== next) input.value = next;
+    input.readOnly = isDerived;
+    input.classList.toggle('calc-locked', isDerived);
+  }
+  if (lock) lock.hidden = !isDerived;
+
+  if (isDerived) return derived;
+  const manual = parseNum(state[key]);
+  return Number.isFinite(manual) && manual > 0 ? manual : NaN;
+}
+
 function recalculate(container: HTMLElement, options: { animate?: boolean } = {}): void {
   const animate = options.animate === true;
   const makerPct = getEffectiveMakerFee();
@@ -407,129 +402,137 @@ function recalculate(container: HTMLElement, options: { animate?: boolean } = {}
   const totals = computePurchaseTotals(state.purchases);
   updatePurchaseSummary(container, totals);
 
-  const priceInput = container.querySelector('#calc-price') as HTMLInputElement;
-  const capitalInput = container.querySelector('#calc-capital') as HTMLInputElement;
-  const priceLock = container.querySelector('#calc-price-lock') as HTMLElement;
+  const capital = applyDerivedField(container, 'capital', totals.totalUsd);
+  const basePrice = applyDerivedField(container, 'price', totals.avgPrice);
 
-  let capital: number;
-  if (Number.isFinite(totals.totalUsd) && totals.totalUsd > 0) {
-    capitalInput.value = totals.totalUsd.toFixed(2);
-    capitalInput.readOnly = true;
-    capitalInput.classList.add('calc-locked');
-    capital = totals.totalUsd;
-  } else {
-    capitalInput.readOnly = false;
-    capitalInput.classList.remove('calc-locked');
-    capital = roundTo(parseNum(capitalInput.value), 2);
-  }
-
-  let basePrice: number;
-  if (Number.isFinite(totals.avgPrice) && totals.validCount > 0) {
-    priceInput.value = totals.avgPrice.toFixed(2);
-    priceInput.readOnly = true;
-    priceInput.classList.add('calc-locked');
-    if (priceLock) priceLock.hidden = false;
-    basePrice = totals.avgPrice;
-  } else {
-    priceInput.readOnly = false;
-    priceInput.classList.remove('calc-locked');
-    if (priceLock) priceLock.hidden = true;
-    basePrice = roundTo(parseNum(priceInput.value), 2);
-  }
-
-  if (Number.isFinite(basePrice) && basePrice > 0) {
-    lastValidPrice = basePrice;
-  } else if (Number.isFinite(lastValidPrice) && lastValidPrice > 0) {
-    basePrice = lastValidPrice;
-  }
-
-  // Sell sync
-  syncSellInputs(container, basePrice);
-
-  // Resolve actual sell price for achieved calc
-  const sellPriceInput = container.querySelector('#calc-sell-price') as HTMLInputElement;
-  let sellPriceActual = roundTo(parseNum(sellPriceInput.value), 2);
-  const currentSellPct = parseNum(state.sellPct);
-  if (
-    state.sellSyncSource === 'percent' &&
-    Number.isFinite(currentSellPct) &&
-    Number.isFinite(basePrice) &&
-    basePrice > 0
-  ) {
-    const synced = roundTo(basePrice * (1 + currentSellPct / 100), 2);
-    if (Number.isFinite(synced)) sellPriceActual = synced;
-  }
+  const cycle = computeCycle({
+    basePrice,
+    capital,
+    trades,
+    makerFeePct: makerPct,
+    sellValue: parseNum(state.sell),
+    sellUnit: state.sellUnit,
+    rebuyValue: parseNum(state.rebuy),
+    rebuyUnit: state.rebuyUnit,
+  });
 
   updateSignalContext(container, trades, capital);
+  updateCycleHints(container, basePrice, cycle);
+  renderCycle(container, cycle, animate);
+}
 
-  // Achieved results
-  const achieved = computeAchievedResults(sellPriceActual, trades, capital, basePrice, makerPct);
-  renderAchieved(container, achieved, animate);
+// ── Unidades de captura ──
 
-  // Strategy results
-  const optSellPct = parseNum(state.sellPct);
-  const optRebuyPct = parseNum(state.rebuyPct);
-  const strategy = computeStrategyResults(basePrice, capital, optSellPct, optRebuyPct, makerPct);
-  renderStrategy(container, strategy, animate);
+/** Refleja la unidad activa en el afijo del input y en el segmentado. */
+function applyUnitUI(container: HTMLElement, key: 'sell' | 'rebuy', unit: PriceUnit): void {
+  const input = container.querySelector(`#calc-${key}`) as HTMLInputElement | null;
+  const prefix = container.querySelector(`#calc-${key}-prefix`) as HTMLElement | null;
+  const suffix = container.querySelector(`#calc-${key}-suffix`) as HTMLElement | null;
+  const usdBtn = container.querySelector(`#calc-${key}-unit-usd`) as HTMLElement | null;
+  const pctBtn = container.querySelector(`#calc-${key}-unit-pct`) as HTMLElement | null;
+  const isUsd = unit === 'usd';
 
-  // Fee total display
-  const feeMultiplier = computeFeeMultiplier(makerPct, 2);
-  let feeUsd: number;
-  if (
-    Number.isFinite(capital) &&
-    capital > 0 &&
-    Number.isFinite(achieved.achievedR) &&
-    Number.isFinite(feeMultiplier)
-  ) {
-    feeUsd = capital * (1 + achieved.achievedR) * (1 - feeMultiplier);
-  } else {
-    feeUsd = Number.isFinite(capital) ? capital * ((makerPct * 2) / 100) : NaN;
+  if (prefix) prefix.hidden = !isUsd;
+  if (suffix) suffix.hidden = isUsd;
+  if (input) {
+    input.classList.toggle('has-prefix', isUsd);
+    input.classList.toggle('has-suffix', !isUsd);
   }
-  const feeTotalEl = container.querySelector('#calc-fee-total') as HTMLElement;
-  if (feeTotalEl) {
-    if (Number.isFinite(feeUsd)) {
-      setCalcMetricNumber(feeTotalEl, feeUsd, (next) => formatUSD(next), animate);
+  usdBtn?.classList.toggle('active', isUsd);
+  pctBtn?.classList.toggle('active', !isUsd);
+}
+
+/**
+ * Cambia la unidad conservando el precio que el campo ya representaba: pasar de
+ * $2515 a % con base 2490 debe dar 1.0040, no interpretar 2515 como porcentaje.
+ */
+function changeUnit(container: HTMLElement, key: 'sell' | 'rebuy', unit: PriceUnit): void {
+  const currentUnit = key === 'sell' ? state.sellUnit : state.rebuyUnit;
+  if (currentUnit === unit) return;
+
+  const input = container.querySelector(`#calc-${key}`) as HTMLInputElement | null;
+  const basePrice = resolveBasePrice();
+  const sellPrice = resolveSellPrice(parseNum(state.sell), state.sellUnit, basePrice);
+  const reference = key === 'sell' ? basePrice : sellPrice;
+
+  const currentPrice =
+    key === 'sell'
+      ? sellPrice
+      : resolveRebuyPrice(parseNum(state.rebuy), state.rebuyUnit, sellPrice);
+
+  let converted = '';
+  if (Number.isFinite(currentPrice) && Number.isFinite(reference) && reference > 0) {
+    if (unit === 'usd') {
+      converted = currentPrice.toFixed(priceDecimals(currentPrice));
     } else {
-      setCalcMetricText(feeTotalEl, '-', animate);
+      const pct =
+        key === 'sell'
+          ? (currentPrice / reference - 1) * 100
+          : (1 - currentPrice / reference) * 100;
+      converted = pct.toFixed(4);
+    }
+  }
+
+  // Sin referencia no hay conversion posible: se vacia en vez de dejar un
+  // numero que pasaria a significar otra cosa al cambiar la unidad.
+  if (key === 'sell') {
+    state.sellUnit = unit;
+    state.sell = converted;
+  } else {
+    state.rebuyUnit = unit;
+    state.rebuy = converted;
+  }
+  if (input) input.value = converted;
+
+  applyUnitUI(container, key, unit);
+  cancelScheduledRecalculate();
+  recalculate(container, { animate: true });
+  save();
+}
+
+/** El precio de compra vigente: promedio de la tabla si la hay, si no el capturado. */
+function resolveBasePrice(): number {
+  const totals = computePurchaseTotals(state.purchases);
+  if (Number.isFinite(totals.avgPrice) && totals.validCount > 0) return totals.avgPrice;
+  const parsed = parseNum(state.price);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : NaN;
+}
+
+/** Pista bajo cada campo: el mismo precio expresado en la unidad contraria. */
+function updateCycleHints(container: HTMLElement, basePrice: number, cycle: CycleResults): void {
+  const sellHint = container.querySelector('#calc-sell-hint') as HTMLElement | null;
+  const rebuyHint = container.querySelector('#calc-rebuy-hint') as HTMLElement | null;
+  const baseValid = Number.isFinite(basePrice) && basePrice > 0;
+
+  if (sellHint) {
+    if (state.sellUnit === 'usd') {
+      sellHint.textContent =
+        baseValid && Number.isFinite(cycle.sellMovePct)
+          ? `${signed(cycle.sellMovePct, 4)} % ${CALC_SELL_HINT_PCT}`
+          : CALCULADORA_COPY.sellHintFallback;
+    } else {
+      sellHint.textContent = Number.isFinite(cycle.sellPrice)
+        ? `$ ${fmtPrice(cycle.sellPrice)}`
+        : CALCULADORA_COPY.sellHintFallback;
+    }
+  }
+
+  if (rebuyHint) {
+    if (state.rebuyUnit === 'usd') {
+      rebuyHint.textContent = Number.isFinite(cycle.rebuyDipPct)
+        ? `${signed(cycle.rebuyDipPct, 4)} % ${CALC_REBUY_HINT_PCT}`
+        : CALCULADORA_COPY.rebuyHintFallback;
+    } else {
+      rebuyHint.textContent = Number.isFinite(cycle.rebuyPrice)
+        ? `$ ${fmtPrice(cycle.rebuyPrice)}`
+        : CALCULADORA_COPY.rebuyHintFallback;
     }
   }
 }
 
-// ── Sell sync ──
-
-function syncSellInputs(container: HTMLElement, basePrice: number): void {
-  const sellPriceInput = container.querySelector('#calc-sell-price') as HTMLInputElement;
-  const sellPctInput = container.querySelector('#calc-sell-pct') as HTMLInputElement;
-  if (!sellPriceInput || !sellPctInput) return;
-
-  const baseValid = Number.isFinite(basePrice) && basePrice > 0;
-
-  if (state.sellSyncSource === 'price') {
-    const priceValue = roundTo(parseNum(sellPriceInput.value), 2);
-    if (Number.isFinite(priceValue) && baseValid) {
-      const pct = (priceValue / basePrice - 1) * 100;
-      if (Number.isFinite(pct)) sellPctInput.value = pct.toFixed(4);
-    }
-    sellPctInput.readOnly = true;
-    sellPctInput.classList.add('calc-locked');
-    sellPriceInput.readOnly = false;
-    sellPriceInput.classList.remove('calc-locked');
-  } else if (state.sellSyncSource === 'percent') {
-    const pctValue = parseNum(sellPctInput.value);
-    if (Number.isFinite(pctValue) && baseValid) {
-      const price = roundTo(basePrice * (1 + pctValue / 100), 2);
-      if (Number.isFinite(price)) sellPriceInput.value = price.toFixed(2);
-    }
-    sellPriceInput.readOnly = true;
-    sellPriceInput.classList.add('calc-locked');
-    sellPctInput.readOnly = false;
-    sellPctInput.classList.remove('calc-locked');
-  } else {
-    sellPriceInput.readOnly = false;
-    sellPriceInput.classList.remove('calc-locked');
-    sellPctInput.readOnly = false;
-    sellPctInput.classList.remove('calc-locked');
-  }
+function signed(value: number, decimals: number): string {
+  if (!Number.isFinite(value)) return '-';
+  return `${value > 0 ? '+' : ''}${fmtNum(value, decimals)}`;
 }
 
 // ── Render metrics ──
@@ -543,45 +546,47 @@ function setTone(el: HTMLElement, value: number): void {
   }
 }
 
-function renderAchieved(container: HTMLElement, achieved: AchievedResults, animate: boolean): void {
-  const aprEl = container.querySelector('#calc-out-apr') as HTMLElement;
-  const moveEl = container.querySelector('#calc-out-movement') as HTMLElement;
-  const profitEl = container.querySelector('#calc-out-profit-trade') as HTMLElement;
+/** Pinta una metrica numerica con su tono, o un guion si no hay dato. */
+function renderMetric(
+  container: HTMLElement,
+  selector: string,
+  value: number,
+  formatter: (next: number) => string,
+  animate: boolean,
+  tone = true,
+): void {
+  const el = container.querySelector(selector) as HTMLElement | null;
+  if (!el) return;
+  if (tone) setTone(el, value);
+  if (Number.isFinite(value)) {
+    setCalcMetricNumber(el, value, formatter, animate);
+  } else {
+    setCalcMetricText(el, '-', animate);
+  }
+}
 
-  if (aprEl) {
-    setTone(aprEl, achieved.achievedApr);
-    if (Number.isFinite(achieved.achievedApr)) {
-      setCalcMetricNumber(aprEl, achieved.achievedApr, (next) => `${fmtNum(next, 2)} %`, animate);
-    } else {
-      setCalcMetricText(aprEl, '-', animate);
-    }
+function renderCycle(container: HTMLElement, cycle: CycleResults, animate: boolean): void {
+  updateSignalStatus(container, cycle);
+
+  const pct = (decimals: number) => (next: number) => `${fmtNum(next, decimals)} %`;
+  const usd = (next: number) => `$ ${fmtNum(next, 2)}`;
+
+  renderMetric(container, '#calc-out-apr', cycle.apr, pct(2), animate);
+  // Un APR en verde sobre una venta que realiza perdida se lee como luz verde.
+  // El numero sigue siendo cierto (describe el ciclo), pero pierde el tono.
+  const aprEl = container.querySelector('#calc-out-apr') as HTMLElement | null;
+  if (aprEl && Number.isFinite(cycle.saleNetUsd) && cycle.saleNetUsd < 0) {
+    aprEl.classList.remove('text-gain', 'text-loss');
+    aprEl.classList.add('text-muted');
   }
-  if (moveEl) {
-    setTone(moveEl, achieved.achievedMovement);
-    if (Number.isFinite(achieved.achievedMovement)) {
-      setCalcMetricNumber(
-        moveEl,
-        achieved.achievedMovement,
-        (next) => `${fmtNum(next, 3)} %`,
-        animate,
-      );
-    } else {
-      setCalcMetricText(moveEl, '-', animate);
-    }
-  }
-  if (profitEl) {
-    setTone(profitEl, achieved.achievedProfitPerTrade);
-    if (Number.isFinite(achieved.achievedProfitPerTrade)) {
-      setCalcMetricNumber(
-        profitEl,
-        achieved.achievedProfitPerTrade,
-        (next) => `$ ${fmtNum(next, 2)}`,
-        animate,
-      );
-    } else {
-      setCalcMetricText(profitEl, '-', animate);
-    }
-  }
+  renderMetric(container, '#calc-out-net-cycle-pct', cycle.cycleNetPct, pct(4), animate);
+  renderMetric(container, '#calc-out-net-cycle-usd', cycle.cycleNetUsd, usd, animate);
+  renderMetric(container, '#calc-out-movement', cycle.sellMovePct, pct(3), animate);
+  renderMetric(container, '#calc-out-sale-net', cycle.saleNetUsd, usd, animate);
+  renderMetric(container, '#calc-fee-total', cycle.feeUsd, usd, animate, false);
+  const price = (next: number) => `$ ${fmtPrice(next)}`;
+  renderMetric(container, '#calc-out-sell-price', cycle.sellPrice, price, animate, false);
+  renderMetric(container, '#calc-out-rebuy-price', cycle.rebuyPrice, price, animate, false);
 }
 
 function updateSignalContext(container: HTMLElement, trades: number, capital: number): void {
@@ -594,75 +599,40 @@ function updateSignalContext(container: HTMLElement, trades: number, capital: nu
     el.textContent = '';
     return;
   }
-  const cycles = fmtNum(trades, 0);
+  const cycles = fmtNum(trades, Number.isInteger(trades) ? 0 : 2);
   el.textContent = `${cycles} ciclos por año sobre ${formatUSD(capital)}`;
 }
 
-function updateSignalStatus(container: HTMLElement, netUsdCycle: number): void {
+/**
+ * La senal mira las dos patas. El ciclo repetible puede rendir aunque la venta
+ * se ejecute muy por debajo de la compra (vender a 2 y recomprar a 1.97 sigue
+ * engordando la bolsa), y anunciar eso como "neto positivo" esconderia que la
+ * operacion realiza una perdida contra el coste de entrada.
+ */
+function updateSignalStatus(container: HTMLElement, cycle: CycleResults): void {
   const el = container.querySelector('#calc-signal-status') as HTMLElement | null;
   if (!el) return;
 
-  const isValid = Number.isFinite(netUsdCycle) && netUsdCycle !== 0;
-  const tone = !isValid ? '' : netUsdCycle > 0 ? ' chip-gain' : ' chip-loss';
-  const label = !isValid
-    ? CALCULADORA_COPY.signalFlat
-    : netUsdCycle > 0
-      ? CALCULADORA_COPY.signalPositive
-      : CALCULADORA_COPY.signalNegative;
+  // Cuelga del %, no de los dolares: el ciclo es computable sin posicion, y un
+  // APR en verde junto a un chip "Sin senal" se contradicen.
+  const cycleValid = Number.isFinite(cycle.cycleNetPct) && cycle.cycleNetPct !== 0;
+  const saleLoss = Number.isFinite(cycle.saleNetUsd) && cycle.saleNetUsd < 0;
+
+  let tone = '';
+  let label = CALCULADORA_COPY.signalFlat;
+  if (cycleValid && cycle.cycleNetPct < 0) {
+    tone = ' chip-loss';
+    label = CALCULADORA_COPY.signalNegative;
+  } else if (saleLoss) {
+    tone = ' chip-loss';
+    label = CALCULADORA_COPY.signalSaleLoss;
+  } else if (cycleValid) {
+    tone = ' chip-gain';
+    label = CALCULADORA_COPY.signalPositive;
+  }
+
   el.className = `chip${tone}`;
   el.innerHTML = `<span class="chip-dot"></span>${label}`;
-}
-
-function renderStrategy(container: HTMLElement, strategy: StrategyResults, animate: boolean): void {
-  const sellEl = container.querySelector('#calc-out-sell-price') as HTMLElement;
-  const rebuyEl = container.querySelector('#calc-out-rebuy-price') as HTMLElement;
-  const cyclePctEl = container.querySelector('#calc-out-net-cycle-pct') as HTMLElement;
-  const cycleUsdEl = container.querySelector('#calc-out-net-cycle-usd') as HTMLElement;
-
-  updateSignalStatus(container, strategy.netUsdCycle);
-
-  if (sellEl) {
-    setTone(sellEl, strategy.sellPrice);
-    if (Number.isFinite(strategy.sellPrice)) {
-      setCalcMetricNumber(sellEl, strategy.sellPrice, (next) => `$ ${fmtNum(next, 2)}`, animate);
-    } else {
-      setCalcMetricText(sellEl, '-', animate);
-    }
-  }
-  if (rebuyEl) {
-    setTone(rebuyEl, strategy.rebuyPrice);
-    if (Number.isFinite(strategy.rebuyPrice)) {
-      setCalcMetricNumber(rebuyEl, strategy.rebuyPrice, (next) => `$ ${fmtNum(next, 2)}`, animate);
-    } else {
-      setCalcMetricText(rebuyEl, '-', animate);
-    }
-  }
-  if (cyclePctEl) {
-    setTone(cyclePctEl, strategy.netPctCycle);
-    if (Number.isFinite(strategy.netPctCycle)) {
-      setCalcMetricNumber(
-        cyclePctEl,
-        strategy.netPctCycle,
-        (next) => `${fmtNum(next, 4)} %`,
-        animate,
-      );
-    } else {
-      setCalcMetricText(cyclePctEl, '-', animate);
-    }
-  }
-  if (cycleUsdEl) {
-    setTone(cycleUsdEl, strategy.netUsdCycle);
-    if (Number.isFinite(strategy.netUsdCycle)) {
-      setCalcMetricNumber(
-        cycleUsdEl,
-        strategy.netUsdCycle,
-        (next) => `$ ${fmtNum(next, 2)}`,
-        animate,
-      );
-    } else {
-      setCalcMetricText(cycleUsdEl, '-', animate);
-    }
-  }
 }
 
 function updatePurchaseSummary(container: HTMLElement, totals: PurchaseTotals): void {
@@ -677,7 +647,9 @@ function updatePurchaseSummary(container: HTMLElement, totals: PurchaseTotals): 
     el.textContent = CALCULADORA_COPY.purchasesIncomplete;
     return;
   }
-  el.textContent = `Total ${fmtNum(totals.totalQty, 6)} | Costo $ ${fmtNum(totals.totalUsd, 2)} | Promedio $ ${fmtNum(totals.avgPrice, 4)}`;
+  // Va en la linea del desplegable: tiene que caber plegado.
+  const rows = `${totals.validCount} ${totals.validCount === 1 ? 'compra' : 'compras'}`;
+  el.textContent = `${rows} · medio $ ${fmtPrice(totals.avgPrice)} · $ ${fmtNum(totals.totalUsd, 2)}`;
 }
 
 // ── Debounced save ──

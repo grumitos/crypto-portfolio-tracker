@@ -83,15 +83,20 @@ export interface Purchase {
   price: string;
 }
 
+/** Unidad en la que se captura un precio del ciclo: absoluto o relativo. */
+export type PriceUnit = 'usd' | 'pct';
+
 export interface CalculadoraState {
   price: string;
   capital: string;
   trades: string;
-  sellPrice: string;
-  sellPct: string;
-  rebuyPct: string;
+  /** Precio de venta: $ absoluto, o % sobre el precio base. */
+  sell: string;
+  sellUnit: PriceUnit;
+  /** Precio de recompra: $ absoluto, o % por debajo del precio de venta. */
+  rebuy: string;
+  rebuyUnit: PriceUnit;
   fdusdEnabled: boolean;
-  sellSyncSource: 'price' | 'percent' | null;
   purchases: Purchase[];
 }
 
@@ -102,22 +107,31 @@ export interface PurchaseTotals {
   validCount: number;
 }
 
-export interface AchievedResults {
-  achievedR: number;
-  achievedMovement: number;
-  achievedProfitPerTrade: number;
-  achievedAnnualProfit: number;
-  achievedApr: number;
-}
-
-export interface StrategyResults {
+/**
+ * Un unico ciclo base -> venta -> recompra. Distingue dos rendimientos que
+ * antes se mezclaban: el de esta venta contra el costo de entrada (ocurre una
+ * vez) y el del ciclo repetible (cuanto crece la bolsa al recomprar mas abajo),
+ * que es el unico que tiene sentido anualizar.
+ */
+export interface CycleResults {
+  /** Precio de venta resuelto en $. */
   sellPrice: number;
+  /** Precio de recompra resuelto en $. */
   rebuyPrice: number;
-  netPct: number;
-  netUsd: number;
-  netPctCycle: number;
-  netUsdCycle: number;
-  feeTotalPct: number;
+  /** Recorrido de la venta sobre el precio base, en %. */
+  sellMovePct: number;
+  /** Caida de la recompra bajo el precio de venta, en %. */
+  rebuyDipPct: number;
+  /** Resultado en USD de esta venta contra el costo de entrada. Una sola vez. */
+  saleNetUsd: number;
+  /** Crecimiento de la bolsa por ciclo, en %. Repetible. */
+  cycleNetPct: number;
+  /** Ese mismo crecimiento valorado sobre el capital, en USD. */
+  cycleNetUsd: number;
+  /** Anualizado del ciclo repetible, en %. */
+  apr: number;
+  /** Comision de las dos patas del ciclo, en USD. */
+  feeUsd: number;
 }
 
 // ── App State ──

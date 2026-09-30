@@ -5,6 +5,7 @@ import type {
   DualPositionComponent,
   BalanceSnapshot,
   CalculadoraState,
+  PriceUnit,
   Purchase,
   PositionEntryTimeSource,
   PositionSettlementTimeSource,
@@ -32,8 +33,8 @@ export const CALC_KEY = 'crypto-calculadora';
 export const SIMULATOR_VIEW_KEY = 'crypto-simulator-view';
 export const DASHBOARD_VIEW_KEY = 'crypto-dashboard-view';
 export const API_LAST_UPDATED_KEY = 'crypto-api-last-updated-at';
-export const DEFAULT_CALC_SELL_PCT = '2.30';
-export const DEFAULT_CALC_REBUY_PCT = '1.70';
+export const DEFAULT_CALC_SELL = '2.30';
+export const DEFAULT_CALC_REBUY = '1.70';
 const HHMM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function getDefaultPortfolio(): PortfolioData {
@@ -535,14 +536,6 @@ function sanitizeAppState(raw: Partial<AppState> | null | undefined): AppState {
   };
 }
 
-function inferSellSyncSource(sellPrice: string, sellPct: string): 'price' | 'percent' | null {
-  const parsedSellPrice = parseLooseNumber(sellPrice);
-  if (Number.isFinite(parsedSellPrice)) return 'price';
-  const parsedSellPct = parseLooseNumber(sellPct);
-  if (Number.isFinite(parsedSellPct)) return 'percent';
-  return null;
-}
-
 function sanitizePurchases(rawPurchases: unknown): Purchase[] {
   if (!Array.isArray(rawPurchases)) return [];
   return rawPurchases.map((item, index) => {
@@ -566,26 +559,47 @@ function sanitizeNumericText(value: unknown, fallback: string): string {
   return clean || fallback;
 }
 
+function sanitizeUnit(value: unknown, fallback: PriceUnit): PriceUnit {
+  return value === 'usd' || value === 'pct' ? value : fallback;
+}
+
+/**
+ * Migra el formato anterior, que guardaba el precio de venta y su porcentaje en
+ * campos separados mas un discriminador de cual mandaba. Ahora hay un solo valor
+ * por concepto con su unidad, asi que se conserva el lado que estaba activo y se
+ * descarta el derivado.
+ */
+function migrateLegacySell(
+  record: Record<string, unknown>,
+): { sell: string; sellUnit: PriceUnit } | null {
+  if (record.sell !== undefined) return null;
+  const legacyPrice = sanitizeNumericText(record.sellPrice, '');
+  const legacyPct = sanitizeNumericText(record.sellPct, '');
+  if (record.sellSyncSource === 'price' && legacyPrice) {
+    return { sell: legacyPrice, sellUnit: 'usd' };
+  }
+  if (legacyPct) return { sell: legacyPct, sellUnit: 'pct' };
+  if (legacyPrice) return { sell: legacyPrice, sellUnit: 'usd' };
+  return null;
+}
+
 function sanitizeCalcState(raw: Partial<CalculadoraState> | null | undefined): CalculadoraState {
   const defaults = getDefaultCalcState();
+  const record: Record<string, unknown> = isRecord(raw) ? raw : {};
   const merged = { ...defaults, ...(raw ?? {}) };
-  const sellSyncSource =
-    merged.sellSyncSource === 'price' || merged.sellSyncSource === 'percent'
-      ? merged.sellSyncSource
-      : inferSellSyncSource(
-          sanitizeNumericText(merged.sellPrice, defaults.sellPrice),
-          sanitizeNumericText(merged.sellPct, defaults.sellPct),
-        );
+
+  const legacySell = migrateLegacySell(record);
+  const legacyRebuy = record.rebuy === undefined ? sanitizeNumericText(record.rebuyPct, '') : '';
 
   return {
     price: sanitizeNumericText(merged.price, defaults.price),
     capital: sanitizeNumericText(merged.capital, defaults.capital),
     trades: sanitizeNumericText(merged.trades, defaults.trades),
-    sellPrice: sanitizeNumericText(merged.sellPrice, defaults.sellPrice),
-    sellPct: sanitizeNumericText(merged.sellPct, defaults.sellPct),
-    rebuyPct: sanitizeNumericText(merged.rebuyPct, defaults.rebuyPct),
+    sell: legacySell ? legacySell.sell : sanitizeNumericText(merged.sell, defaults.sell),
+    sellUnit: legacySell ? legacySell.sellUnit : sanitizeUnit(merged.sellUnit, defaults.sellUnit),
+    rebuy: legacyRebuy || sanitizeNumericText(merged.rebuy, defaults.rebuy),
+    rebuyUnit: legacyRebuy ? 'pct' : sanitizeUnit(merged.rebuyUnit, defaults.rebuyUnit),
     fdusdEnabled: merged.fdusdEnabled === true,
-    sellSyncSource,
     purchases: sanitizePurchases(merged.purchases),
   };
 }
@@ -664,11 +678,11 @@ export function getDefaultCalcState(): CalculadoraState {
     price: '',
     capital: '20000',
     trades: '200',
-    sellPrice: '',
-    sellPct: DEFAULT_CALC_SELL_PCT,
-    rebuyPct: DEFAULT_CALC_REBUY_PCT,
+    sell: DEFAULT_CALC_SELL,
+    sellUnit: 'pct',
+    rebuy: DEFAULT_CALC_REBUY,
+    rebuyUnit: 'pct',
     fdusdEnabled: false,
-    sellSyncSource: null,
     purchases: [],
   };
 }

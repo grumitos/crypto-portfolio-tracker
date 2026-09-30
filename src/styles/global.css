@@ -327,6 +327,27 @@ body {
   flex-wrap: wrap;
 }
 
+/* La cabecera mide lo mismo en todas las vistas. Un boton de accion (30px) es
+   mas alto que la linea del titulo (23px), asi que en simulador y calculadora
+   estiraba la barra 7px y bajaba con ella todo el contenido de la vista.
+   Sacandolo del flujo la altura la sigue fijando el titulo, como en dashboard,
+   posiciones y capital. Solo en escritorio: por debajo de 720px la cabecera se
+   apila en columna y ahi si debe ocupar su sitio. */
+@media (min-width: 721px) {
+  .context {
+    position: relative;
+  }
+
+  /* Solo el de la cabecera: la clase se reutiliza dentro de las tablas y ahi
+     debe seguir en flujo. */
+  .context > .context-actions {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────
    Controles
    ───────────────────────────────────────────────────────────── */
@@ -528,6 +549,19 @@ select:disabled {
   padding-left: 22px;
 }
 
+.input-affix > .input-suffix {
+  position: absolute;
+  right: 11px;
+  pointer-events: none;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+
+.input-affix input.has-suffix {
+  padding-right: 24px;
+}
+
 .input.input-sm {
   height: 32px;
   font-size: 13px;
@@ -588,6 +622,28 @@ input[type='number']::-webkit-inner-spin-button {
 .preset-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Segmentado reducido: el selector de unidad vive en la linea de la etiqueta,
+   asi que no puede pesar tanto como el de un campo entero. */
+.segmented-xs {
+  padding: 2px;
+  border-radius: 7px;
+}
+
+.segmented-xs .preset-btn {
+  min-width: 32px;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 24px;
 }
 
 /* ── Chips ── */
@@ -773,6 +829,10 @@ input[type='number']::-webkit-inner-spin-button {
 
 .rail-4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rail-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .rail-item {
@@ -1193,6 +1253,14 @@ input[type='number']::-webkit-inner-spin-button {
   padding: var(--space-xl) 0 0;
 }
 
+/* Ese padding separa un bloque del que tiene encima. Cuando el bloque es lo
+   primero de la vista no hay nada de lo que separarse y se lee como un hueco:
+   la calculadora arrancaba 32px mas abajo que el resto de pestañas, donde lo
+   primero tras la cabecera es un hero o un rail, que no lo llevan. */
+.context + .block {
+  padding-top: 0;
+}
+
 .block-note {
   font-size: 12px;
   color: var(--ink-3);
@@ -1333,6 +1401,12 @@ input[type='number']::-webkit-inner-spin-button {
 .grid-3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -1642,7 +1716,8 @@ textarea:focus-visible {
     height: var(--touch-target-size);
   }
 
-  .rail-4 {
+  .rail-4,
+  .rail-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1716,12 +1791,20 @@ textarea:focus-visible {
     min-height: var(--touch-target-size);
   }
 
+  /* El de unidad son dos opciones contiguas dentro de la fila de etiqueta:
+     subirlo a 44 partiria el campo en dos. Se queda en un tamano aun pulsable. */
+  .segmented-xs .preset-btn {
+    min-height: 34px;
+    min-width: 38px;
+  }
+
   button.chip {
     height: var(--touch-target-size);
     padding-inline: 12px;
   }
 
-  .grid-3 {
+  .grid-3,
+  .grid-2 {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1747,6 +1830,7 @@ textarea:focus-visible {
 
 @media (max-width: 520px) {
   .rail-4,
+  .rail-3,
   .spot {
     grid-template-columns: minmax(0, 1fr);
   }

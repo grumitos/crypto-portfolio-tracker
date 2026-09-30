@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from '#test';
 import {
-  DEFAULT_CALC_REBUY_PCT,
-  DEFAULT_CALC_SELL_PCT,
+  DEFAULT_CALC_REBUY,
+  DEFAULT_CALC_SELL,
   getDefaultCalcState,
   loadCalcState,
   loadState,
@@ -22,21 +22,38 @@ describe('storage', () => {
     });
   });
 
-  it('infers sell sync source and sanitizes purchases when loading calculadora state', () => {
+  it('migrates the legacy sell price / percent pair and sanitizes purchases', () => {
     localStorage.setItem(
       'crypto-calculadora',
       JSON.stringify({
         sellPrice: '615.50',
         sellPct: '0.98',
-        sellSyncSource: null,
+        sellSyncSource: 'price',
+        rebuyPct: '1.20',
         purchases: [{ id: 'bad', qty: '1.25<script>', price: '600.45"' }],
       }),
     );
 
     const state = loadCalcState();
 
-    expect(state.sellSyncSource).toBe('price');
+    // Mandaba el precio, asi que sobrevive el en dolares y se tira el derivado.
+    expect(state.sell).toBe('615.50');
+    expect(state.sellUnit).toBe('usd');
+    expect(state.rebuy).toBe('1.20');
+    expect(state.rebuyUnit).toBe('pct');
     expect(state.purchases[0]).toEqual({ id: 1, qty: '1.25', price: '600.45' });
+  });
+
+  it('keeps the legacy percent when it was the side driving the sell price', () => {
+    localStorage.setItem(
+      'crypto-calculadora',
+      JSON.stringify({ sellPrice: '615.50', sellPct: '0.98', sellSyncSource: 'percent' }),
+    );
+
+    const state = loadCalcState();
+
+    expect(state.sell).toBe('0.98');
+    expect(state.sellUnit).toBe('pct');
   });
 
   it('sanitizes malformed position values from persisted app state', () => {
@@ -407,8 +424,10 @@ describe('storage', () => {
 
     expect(appState.positions).toHaveLength(0);
     expect(appState.portfolio.goalAmount).toBe(0);
-    expect(calcState.sellPct).toBe(DEFAULT_CALC_SELL_PCT);
-    expect(calcState.rebuyPct).toBe(DEFAULT_CALC_REBUY_PCT);
+    expect(calcState.sell).toBe(DEFAULT_CALC_SELL);
+    expect(calcState.sellUnit).toBe('pct');
+    expect(calcState.rebuy).toBe(DEFAULT_CALC_REBUY);
+    expect(calcState.rebuyUnit).toBe('pct');
   });
 
   it('deduplicates and sorts balance history during sanitization', () => {

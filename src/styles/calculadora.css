@@ -1,21 +1,74 @@
 /* ── Calculadora ── */
 
+/* Compras es un accesorio del coste medio, no un bloque titular: su unica
+   funcion es promediar y sumar. Plegado, su peso visual equivale a lo que
+   aporta, y deja de competir con el ciclo, que es lo que responde la pantalla. */
+.calc-purchases {
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+
+.calc-purchases > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  cursor: pointer;
+  list-style: none;
+}
+
+.calc-purchases > summary::-webkit-details-marker {
+  display: none;
+}
+
+.calc-purchases-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.calc-purchases-title svg {
+  color: var(--ink-3);
+  transition: transform var(--duration-ui) var(--ease-out);
+}
+
+.calc-purchases[open] .calc-purchases-title svg {
+  transform: rotate(180deg);
+}
+
+.calc-purchases > summary:hover .calc-purchases-title,
+.calc-purchases > summary:hover .calc-purchases-title svg {
+  color: var(--ink);
+}
+
+.calc-purchases-body {
+  padding-top: 6px;
+}
+
+/* Segunda seccion del panel: lo que ocurre una sola vez. El borde de la fila
+   anterior ya hace de separador, asi que aqui solo hace falta el aire. */
+.calc-panel-section {
+  padding: 20px 0 6px;
+}
+
 /* Ancho fijo: los inputs de cada compra no deben saltar mientras se teclea */
 .tbl.calc-purchases-table {
   table-layout: fixed;
 }
 
-.calc-purchase-summary {
-  padding-top: 14px;
-}
-
 .calc-purchase-summary,
 .calc-signal-context {
   font-size: 12.5px;
+  color: var(--ink-3);
 }
 
 /* La cabecera del panel respira mas que la de una tabla suelta */
-.panel .table-head {
+.panel > .table-head {
   padding-bottom: 18px;
 }
 
