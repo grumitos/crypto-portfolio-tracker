@@ -7,3 +7,5 @@
 *.css text eol=lf
 *.html text eol=lf
 *.json text eol=lf
+# cmd.exe interpreta mal etiquetas y saltos con finales de línea LF
+*.bat text eol=crlf
