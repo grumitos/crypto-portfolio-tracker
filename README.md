@@ -1,217 +1,194 @@
 # Crypto Portfolio Tracker
 
-> **Estado:** en desarrollo activo. La aplicacion local, el build y la suite automatizada son funcionales; las integraciones de exchange permanecen deliberadamente en modo de solo lectura.
+App web local en TypeScript para seguir un portafolio cripto con datos de solo lectura de
+Binance, Bybit e Hyperliquid.
 
-App web estatica para monitorear un portfolio crypto, seguir las posiciones Dual Investment que reportan los exchanges conectados, proyectar recuperacion por compound y calcular rendimiento de swing trade.
+Sirve en local una app de una sola página, instalable como PWA, que suma los saldos y las
+posiciones de Binance y Bybit, sigue los vaults de Hyperliquid, proyecta el crecimiento por
+interés compuesto y calcula ciclos de swing trade. Las claves de los exchanges se guardan
+cifradas con Windows DPAPI y los exchanges solo se consultan en modo lectura.
 
-![Dashboard local sin datos financieros cargados](./docs/screenshots/dashboard.png)
-
-La captura muestra el estado inicial de una instalacion limpia. El repositorio no incluye credenciales ni datos de cartera.
-
-## Alcance
-
-- Frontend: `Bun + TypeScript` con HTML imports.
-- Servidor local Bun para assets, proxy de exchanges y vault DPAPI local en Windows.
-- Dependencias gestionadas con `pnpm`.
-- Persistencia local en `localStorage`.
-- Tabla de proyeccion mensual en la vista `Simulador`.
-
-## Documentacion tecnica
-
-- Guia tecnica del repo: `ENGINEERING_GUIDE.md`
-- Sistema visual y reglas de diseno: `docs/design-system.md`
-- Riesgos vigentes de diseno: `design-audit-findings.md`
+![Dashboard de una instalación limpia, sin datos de cartera](docs/screenshots/dashboard.png)
 
 ## Requisitos
 
-- Bun 1.3+
-- pnpm 11+
-- Windows para guardar credenciales privadas en el vault DPAPI local. Sin DPAPI no se pueden guardar credenciales, y la app queda limitada a datos publicos de mercado: sin credenciales no hay posiciones ni saldos que mostrar.
-- Python 3 solo para `pnpm run eth:analysis`.
+- Windows: las claves se guardan cifradas con DPAPI. Sin DPAPI no se pueden guardar claves, y la
+  app queda limitada a los datos públicos de mercado.
+- [Bun](https://bun.sh/) 1.3 o superior en el `PATH`. Para ejecutar la app no hace falta instalar
+  dependencias.
+- Opcional: claves de API de solo lectura de Binance o Bybit, y la dirección pública de una wallet
+  de Hyperliquid para la vista Capital.
+- Solo para desarrollo: pnpm 11 (o `corepack pnpm`) para las dependencias de desarrollo, y
+  Python 3 para el análisis ETH de `scripts/`.
 
-## Inicio rapido
+## Instalación y uso
 
-```bash
-pnpm install
-pnpm run dev
+Ejecuta `run.bat` (con doble clic o desde una terminal): sirve la app en `http://localhost:5176`
+y la abre en el navegador en cuanto responde. La ventana de la consola es el servidor: ciérrala o
+pulsa Ctrl+C para detenerlo. Luego, en la app:
+
+1. Abre Configuración (el engrane) y conecta Binance o Bybit con claves de solo lectura; en el
+   mismo modal define el total invertido y la meta.
+2. Sincroniza y revisa Dashboard y Posiciones.
+3. En Capital, indica la wallet de Hyperliquid para sincronizar sus vaults.
+4. Proyecta en Simulador y evalúa ciclos en Calculadora.
+
+Sin el lanzador:
+
+```bat
+set NODE_ENV=production
+set PUBLIC_APP_ENV=production
+bun src/server.ts
 ```
 
-Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
+`run.bat` acepta un argumento:
 
-## Scripts
+| Opción | Efecto |
+| --- | --- |
+| `5180` | sirve la app en ese puerto (por defecto, `5176`) |
 
-| Comando                  | Descripcion                  |
-| ------------------------ | ---------------------------- |
-| `pnpm run dev`           | Desarrollo con hot reload    |
-| `pnpm run build`         | Build de produccion Bun      |
-| `pnpm run preview`       | Servir build local           |
-| `pnpm run test`          | Tests en modo watch          |
-| `pnpm run test:run`      | Tests una sola vez           |
-| `pnpm run test:coverage` | Tests + reporte de coverage  |
-| `pnpm run typecheck`     | Validacion TypeScript        |
-| `pnpm run lint`          | Lint con ESLint              |
-| `pnpm run lint:fix`      | Lint + autofix               |
-| `pnpm run format`        | Formatear con Prettier       |
-| `pnpm run format:check`  | Verificar formato            |
-| `pnpm run eth:analysis`  | Ejecutar analisis ETH Python |
-| `pnpm run check`         | Typecheck + coverage + build |
-| `pnpm run check:ci`      | Alias CI de `check`          |
+El lanzador termina con código de salida 1 si falta Bun o si el puerto ya está en uso.
 
-## Flujo recomendado de uso
+## Vistas
 
-1. Abrir `Configuracion` desde el engrane del shell y conectar Binance o Bybit con claves de solo lectura.
-2. Definir en el mismo modal el invertido total y la meta; el saldo y las posiciones los aportan los exchanges.
-3. Sincronizar desde el shell y revisar `Dashboard` y `Posiciones`.
-4. Revisar proyecciones en `Simulador` (AUTO o MANUAL) y evaluar ciclos en `Calculadora Swing Trade`.
-
-## Vistas y comportamiento
-
-### 1) Dashboard
-
-- Resumen de portfolio: balance, P&L, progreso a breakeven (BE) y meta.
-- La configuracion de invertido y meta vive en el modal global `Configuracion`; el saldo se deriva de posiciones y saldos de exchange.
-- Barra de progreso con leyenda BE/Meta; el estado de la leyenda se persiste.
-- Tarjetas de capital/APR/rendimiento diario calculadas desde posiciones y precios de mercado.
-- Con credenciales configuradas, muestra saldos por activo reportados por los exchanges.
-- Sin resumen de saldos de exchange y sin posiciones, conserva el ultimo saldo guardado en vez de reescribirlo a cero.
-
-### 2) Posiciones
-
-- Vista de solo lectura: las posiciones Dual Investment llegan sincronizadas desde Binance y Bybit.
-- Sin exchanges conectados el estado vacio pide configurar credenciales; con exchanges conectados invita a sincronizar.
-- **Tira de precios spot**: muestra precio actual y cambio 24h de los activos con posiciones (BTC, ETH, BNB, SOL). Orden fijo, excluye stablecoins.
-- La sincronizacion reemplaza la lista completa; no hay alta, edicion ni borrado de posiciones desde la UI.
-
-### 3) Simulador
-
-- Proyeccion de compound con frecuencia `Diaria`, `Semanal` o `Quincenal`.
-- Modos `AUTO/MANUAL` para:
-  - Capital (AUTO: total en posiciones).
-  - APR (AUTO: promedio ponderado USD de posiciones).
-  - Meta (AUTO: meta del dashboard).
-- Boton `Resetear AUTO` para restaurar sincronizacion automatica.
-- Resultado con hitos de BE/meta y tabla de proyeccion mensual.
-- Arquitectura interna refactorizada en `constants`, `template`, `dom` y `state`.
-
-### 4) Calculadora Swing Trade
-
-- Evalua resultados reales y estrategia objetivo por ciclo.
-- Soporta tabla de compras parciales (`Agregar`/`Borrar`).
-- Cuando hay compras validas:
-  - Capital y precio base se bloquean en modo AUTO usando totales de compras.
-- Presets de fee: `spot` y `futures` (con switch FDUSD en spot).
-- Arquitectura interna refactorizada para separar copy/presets y template del flujo de calculo.
-
-## Arquitectura UI
-
-- Shell compartido extraido para header, navegacion y acciones globales.
-- Sistema visual consolidado alrededor de `src/styles/variables.css` y `src/utils/theme.ts`.
-- `dashboard`, `simulator` y `calculadora` siguen un patron modular; `positions` ya extrae constants/template/table, pero conserva logica de coordinacion en `positions.ts`.
-- Los colores de browser theme se derivan de tokens CSS para evitar drift entre tema y runtime.
-
-## Datos de mercado
-
-- Endpoints publicos Binance usados por defecto (con fallback):
-  - `https://api.binance.com/api/v3/ticker/price`
-  - `https://api.binance.us/api/v3/ticker/price`
-- Para cambio 24h se deriva el endpoint `/ticker/24hr`.
-- `PUBLIC_BINANCE_ENDPOINTS` puede reemplazar la lista de endpoints publicos en builds locales.
-- Estrategia de precio:
-  - Par directo `ASSETUSDT`.
-  - Fallback via `ASSETBTC` x `BTCUSDT`.
-- Polling central: cada 60s (`MARKET_POLL_INTERVAL_MS = 60000`).
-- Cache en memoria de precios: TTL 60s.
-- Si no hay precio fresco:
-  - Usa `cache-stale` cuando exista cache anterior.
-  - Marca `unavailable` cuando no hay forma de resolver precio.
-- Ante fallo/parcialidad:
-  - Se registra estado de error de API.
-  - Se muestra banner `No se pudo actualizar precios de mercado`.
-  - El header pasa a estado de error con ultimo dato valido relativo.
+- **Dashboard**: invertido total, saldo, P&L, progreso hacia el breakeven (BE) y la meta, APR
+  promedio, capital en posiciones, run-rate diario y saldos por activo de los exchanges. Sin
+  saldos ni posiciones, conserva el último saldo guardado en lugar de reescribirlo a cero.
+- **Posiciones**: vista de solo lectura de las posiciones Binance Dual Investment, Bybit Dual
+  Asset y Bybit Discount Buy. Cada sincronización reemplaza la lista completa. La tira de precios
+  spot (BTC, ETH, BNB y SOL) solo aparece cuando hay posiciones.
+- **Capital**: vaults de Hyperliquid de una wallet: equity, capital neto aportado, PnL histórico,
+  XIRR anualizado por flujos y movimientos. Es una consulta pública: no pide claves.
+- **Simulador**: proyección por interés compuesto con frecuencia diaria, semanal o quincenal.
+  Capital, APR y meta pueden ser automáticos (tomados de las posiciones y del dashboard) o
+  manuales, con hitos de BE y meta y una tabla de proyección mensual.
+- **Calculadora**: ciclos de swing trade de venta y recompra. Separa la posición (coste medio y
+  capital, automáticos si se agregan compras parciales) del ciclo; los precios del ciclo se
+  capturan en dólares o en porcentaje, y la comisión se elige entre spot y FDUSD.
 
 ## Integraciones de exchange
 
-- Binance usa endpoints firmados `GET` para lectura de cuenta y posiciones.
-- La prueba de credenciales Binance valida `GET /sapi/v1/account/apiRestrictions` para detectar permisos de ejecucion, retiro o transferencia.
-- Bybit V5 esta preparado con cliente separado y whitelist de endpoints `GET`:
-  - `GET /v5/user/query-api` para confirmar `readOnly: 1`.
-  - `GET /v5/account/wallet-balance` para saldos `UNIFIED`, `CONTRACT` y `SPOT`.
-  - `GET /v5/asset/transfer/query-account-coins-balance` como respaldo de saldos con permisos de Activos.
-  - `GET /v5/earn/advance/position` para posiciones activas de Advanced Earn Dual Asset cuando la key tiene permiso `Earn`.
-  - `GET /v5/earn/advance/position` con categoria `DiscountBuy` para posiciones Discount Buy cuando la key tiene permiso `Earn`.
-  - `GET /v5/market/time` para ajustar timestamps firmados.
-- El servidor local expone `/local-vault/credentials` y guarda API Key + Secret cifrados con Windows DPAPI en `.local/credentials.dpapi.json` (ignorado por git).
-- En `localStorage` solo se persiste la API Key; el Secret vive en memoria de sesion y se hidrata desde DPAPI al cargar la app y al abrir `Configuracion`.
-- Las credenciales de exchanges no se cargan desde `.env.local`: las variables `PUBLIC_*` de Bun pueden quedar expuestas al bundle del navegador. Configuralas solo desde el modal local de la app.
-- Dashboard puede sumar saldos de Binance y Bybit a la vez. Binance agrega al saldo total Wallet/Spot/Funding/Simple Earn, USDⓈ-M, COIN-M, Opciones, Margin, Portfolio Margin, staking, BFUSD/RWUSD, On-chain Yields, Soft Staking, Discount Buy, Crypto Loan/VIP Loan y recompensas acreditadas, evitando contar dos veces los productos que liquidan en Wallet o que ya se muestran como posiciones.
-- Binance se consulta exclusivamente con endpoints firmados `GET`: el cliente mantiene una whitelist cerrada y el proxy local rechaza `POST`, `PUT`, `PATCH` y `DELETE` hacia cualquier exchange. No se crean órdenes, suscripciones, transferencias, retiros ni préstamos, ni se ejecutan acciones de configuración; los préstamos solo se consultan para calcular colateral neto/deuda.
-- El `PnL diario` del Dashboard suma el rendimiento live de posiciones activas con el PnL/reward explícito que Binance reporta en el refresco actual, sin sumarlo dos veces al saldo. El run-rate y el APR de cuenta son live; no dependen de una base local acumulada.
+- **Solo lectura.** Binance y Bybit se consultan con endpoints firmados `GET` de una lista
+  cerrada, y el proxy local rechaza `POST`, `PUT`, `PATCH`, `DELETE` y cualquier ruta
+  desconocida. No se crean órdenes, suscripciones, transferencias, retiros ni préstamos.
+- **Permisos.** Antes de guardar, la app comprueba que la clave no tenga permisos de ejecución,
+  retiro ni transferencia (`GET /sapi/v1/account/apiRestrictions` en Binance, `readOnly: 1` en
+  Bybit).
+- **Saldo de Binance.** Suma Wallet, Spot, Funding, Simple Earn, USDⓈ-M, COIN-M, Opciones,
+  Margin, Portfolio Margin, staking, BFUSD/RWUSD, On-chain Yields, Soft Staking, Discount Buy,
+  préstamos (como colateral neto) y recompensas acreditadas, sin contar dos veces lo que liquida
+  en Wallet o ya aparece como posición.
+- **Saldo de Bybit.** Cuentas `UNIFIED`, `CONTRACT` y `SPOT` (`GET /v5/account/wallet-balance`),
+  con `GET /v5/asset/transfer/query-account-coins-balance` como respaldo; las posiciones Dual
+  Asset y Discount Buy requieren el permiso `Earn`.
+- **PnL diario.** Suma el rendimiento live de las posiciones activas y el PnL que reporta Binance
+  en el refresco actual, una sola vez. El run-rate y el APR de cuenta son live.
+- **Hyperliquid.** El servidor local consulta la API pública con la dirección de la wallet; no hay
+  claves.
 
-## Regla de facturacion (Dual Binance)
+## Datos de mercado
 
-- Liquidacion de referencia: `08:00 UTC` (`03:00 UTC-5`) para la fecha de settlement.
-- Corte de ventana Binance: `15:59 UTC` (`10:59 UTC-5`).
-- Dias facturados:
-  - Se calculan por ventanas de corte Binance (no por fracciones de hora).
-  - El minimo facturable es `1` dia.
+- Precios de los endpoints públicos de Binance (`api.binance.com`, con `api.binance.us` como
+  respaldo); el cambio de 24 h sale de `/ticker/24hr`. `PUBLIC_BINANCE_ENDPOINTS` reemplaza la
+  lista en builds locales.
+- Precio directo `ASSETUSDT`, o `ASSETBTC` × `BTCUSDT` si no existe el par.
+- Sondeo cada 60 s y caché en memoria de 60 s. Si no hay precio nuevo se usa el de la caché
+  (`cache-stale`) y, si tampoco lo hay, se marca como `unavailable`; ante un fallo aparece el aviso
+  "No se pudo actualizar precios de mercado".
 
-## Persistencia local (`localStorage`)
+## Regla de facturación (Dual Binance)
 
-| Key                          | Uso                                                        |
-| ---------------------------- | ---------------------------------------------------------- |
-| `crypto-portfolio-tracker`   | Estado principal (`portfolio` + `positions` sincronizadas) |
-| `crypto-calculadora`         | Estado de la calculadora                                   |
-| `crypto-simulator-view`      | Estado de UI del simulador (valores + banderas AUTO)       |
-| `crypto-dashboard-view`      | Preferencia de leyenda BE/Meta del dashboard               |
-| `crypto-api-last-updated-at` | Timestamp de ultima actualizacion de mercado exitosa       |
-| `crypto-theme`               | Preferencia de tema (`light`, `dark`, `system`)            |
-| `crypto-binance-api`         | API Key Binance; el Secret no se persiste aqui             |
-| `crypto-bybit-api`           | API Key Bybit; el Secret no se persiste aqui               |
+- Liquidación de referencia: `08:00 UTC` (`03:00 UTC-5`) en la fecha de liquidación.
+- Corte de ventana de Binance: `15:59 UTC` (`10:59 UTC-5`).
+- Los días facturados se cuentan por ventanas de corte, no por fracciones de hora, con un mínimo
+  de 1 día.
 
-Vault local adicional:
+## Persistencia local
 
-- `.local/credentials.dpapi.json`: credenciales Binance/Bybit cifradas con Windows DPAPI; el directorio esta ignorado por git.
+| Clave de `localStorage` | Uso |
+| --- | --- |
+| `crypto-portfolio-tracker` | estado principal: portafolio y posiciones sincronizadas |
+| `crypto-calculadora` | estado de la calculadora |
+| `crypto-simulator-view` | valores del simulador y modos automáticos |
+| `crypto-dashboard-view` | preferencia de la leyenda BE/Meta |
+| `crypto-api-last-updated-at` | última actualización de mercado correcta |
+| `crypto-theme` | tema: `light`, `dark` o `system` |
+| `crypto-binance-api` | API Key de Binance (el Secret no se guarda aquí) |
+| `crypto-bybit-api` | API Key de Bybit (el Secret no se guarda aquí) |
 
-## Tema y paleta
+Los Secret se guardan cifrados con DPAPI en `.local/credentials.dpapi.json`; en el navegador solo
+viven en memoria durante la sesión.
 
-La app soporta `light`, `dark` y `system`.
-El tema se aplica al inicio para evitar FOUC y tambien actualiza `meta[name="theme-color"]`.
+## Tema, accesibilidad y PWA
 
-Referencia de paleta activa en `src/styles/variables.css`:
+- Temas `light`, `dark` y `system`, aplicados antes de pintar la página. Los tokens de color están
+  en `src/styles/variables.css` y las reglas del sistema visual, en `docs/design-system.md`.
+- Foco visible, `aria-current`, `aria-expanded` y `aria-pressed` donde corresponde, soporte de
+  `prefers-reduced-motion` y objetivos táctiles de 44 px como mínimo.
+- `manifest.json`, iconos de 192 y 512 px y un service worker básico (`public/sw.js`) para
+  instalarla como app.
 
-| Modo  | Fondo     | Texto     | Borde fuerte | Focus     |
-| ----- | --------- | --------- | ------------ | --------- |
-| Light | `#F8F8F6` | `#121212` | `#1F1F1E4D`  | `#2977D6` |
-| Dark  | `#1F1F1E` | `#F8F8F6` | `#E2E1DA4D`  | `#3886E5` |
+## Desarrollo
 
-Los tokens semanticos activos cubren superficie, texto, borde, accent, success, danger, warning y focus.
+```bat
+corepack pnpm install
+corepack pnpm run dev
+```
 
-## Accesibilidad
+| Comando | Efecto |
+| --- | --- |
+| `pnpm run dev` | servidor con recarga en caliente |
+| `pnpm run build` / `pnpm run preview` | build de producción en `dist/` y servirlo |
+| `pnpm run typecheck` | comprobación de tipos con `tsc` |
+| `pnpm run lint` / `pnpm run format:check` | ESLint y Prettier |
+| `pnpm run test:run` / `pnpm run test:coverage` | pruebas, una vez o con cobertura |
+| `pnpm run check` | tipos, pruebas con cobertura y build |
+| `pnpm run eth:analysis` | análisis ETH en Python (`scripts/`) |
 
-- `:focus-visible` en todos los elementos interactivos.
-- `aria-current="page"` en la navegacion activa.
-- `aria-expanded` y `aria-pressed` en toggles y leyendas.
-- Soporte `prefers-reduced-motion` para animaciones.
-- Targets tactiles minimos de 44px.
+La guía técnica (arquitectura y criterios de calidad) está en `docs/engineering-guide.md`.
 
-## Checklist de PR
+## Privacidad
 
-- Ejecutar `pnpm run check`.
-- Verificar estados `light` y `dark`.
-- Revisar shell en mobile y desktop.
-- Confirmar que no se introduzcan nuevos hardcodeos visuales en TypeScript.
-- Confirmar que cualquier nueva vista grande siga el patron modular del repo.
+Las claves (`.local/`), el build (`dist/`) y la cobertura (`coverage/`) permanecen en local y
+están fuera de Git; el repositorio no incluye claves ni datos de cartera, y la captura muestra una
+instalación limpia. Las peticiones firmadas solo van a Binance y Bybit, a través del proxy local, y
+el Secret nunca sale del equipo: solo firma. La dirección de la wallet solo se envía a la API
+pública de Hyperliquid. Las variables
+`PUBLIC_*` de Bun pueden acabar en el código del navegador, por eso las claves nunca se leen de
+`.env`: se configuran desde la app.
 
-## PWA
+## Pruebas
 
-Incluye `manifest.json`, iconos (192/512) y service worker basico (`public/sw.js`) para instalacion como app.
+Las pruebas usan `bun test` con jsdom y clientes simulados: no llaman a los exchanges ni leen el
+vault. Están junto al código que prueban (`*.test.ts`), como es habitual en TypeScript. El
+análisis ETH tiene sus propias pruebas con `unittest`.
 
-## Troubleshooting rapido
+```bat
+corepack pnpm install
+bun test --isolate
+python -m unittest scripts/eth_analysis_runner_test.py
+```
 
-- `No se pudo actualizar precios de mercado`:
-  - Verifica conectividad y disponibilidad de Binance.
-  - La app puede seguir mostrando valores de cache (stale) temporalmente.
-- Valores en `---` o `0` en cards:
-  - Revisar que haya un exchange conectado y posiciones activas reportadas por el.
-- Estado inconsistente:
-  - Revisar `localStorage` de la app y volver a definir portfolio en `Configuracion`.
+## Estructura
+
+```text
+src/                app: TypeScript sin framework
+  main.ts           arranque: shell, rutas por hash y sondeo de precios
+  server.ts         servidor local: app, proxy de solo lectura, vault DPAPI e Hyperliquid
+  index.html        página de entrada
+  components/       vistas (dashboard, positions, capital, simulator, calculadora) y shell
+  utils/            clientes de exchanges, mercado, almacenamiento, tema y animación
+  styles/           tokens del sistema visual y estilos por vista
+  types/            tipos compartidos
+  assets/           logos de criptoactivos
+  test/             configuración de bun test (jsdom)
+public/             manifest, service worker e iconos de la PWA
+scripts/            análisis ETH en Python y sus pruebas
+docs/               guía técnica, sistema visual y captura
+package.json        scripts de desarrollo y dependencias de desarrollo (pnpm)
+run.bat             lanzador para Windows: sirve la app y abre el navegador
+```
+
+## Licencia
+
+[MIT](LICENSE).

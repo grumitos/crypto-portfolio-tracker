@@ -95,7 +95,15 @@ Estado actual:
   - navegación por teclado
 - Cualquier refactor relevante debe cerrar con `pnpm run check`.
 
+Lista de comprobación antes de integrar un cambio:
+
+- Ejecutar `pnpm run check`.
+- Verificar los temas `light` y `dark`.
+- Revisar el shell en móvil y en escritorio.
+- Confirmar que no se introducen colores ni valores visuales nuevos escritos a mano en TypeScript.
+- Confirmar que cualquier vista grande nueva sigue el patrón modular del repo.
+
 ## Archivos de referencia
 
 - Producto y uso: `README.md`
-- Riesgos vigentes de diseno: `design-audit-findings.md`
+- Sistema visual y reglas de diseño: `docs/design-system.md`
