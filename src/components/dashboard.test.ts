@@ -966,6 +966,28 @@ describe('dashboard legends', () => {
         { asset: 'USDT', free: 250, locked: 10 },
         { asset: 'ETH', free: 0.25, locked: 0 },
       ],
+      accountReport: {
+        fetchedAt: Date.now(),
+        products: [
+          {
+            product: 'coin-m-futures',
+            label: 'Futuros COIN-M',
+            status: 'ok',
+            balanceUsd: null,
+            balanceAmounts: [{ asset: 'BTC', amount: 0.01 }],
+            unrealizedPnl: [],
+            dailyPnl: [],
+            dailyRewards: [],
+            positionCount: 1,
+            includedInTotal: true,
+          },
+        ],
+        dailyPnl: [],
+        dailyRewards: [],
+        externalFlows: [],
+        issues: [],
+        isPartial: false,
+      },
     });
 
     const container = document.createElement('div');
@@ -982,9 +1004,114 @@ describe('dashboard legends', () => {
     expect(container.querySelector('#dashboard-balance-strip-items')?.textContent).toContain(
       'USDT',
     );
+    expect(container.querySelector('#dashboard-balance-strip-items')?.textContent).toContain('BTC');
     expect(container.querySelector('#dashboard-balance-strip-items')?.textContent).toContain(
       '260.00',
     );
+
+    dispose();
+    container.remove();
+  });
+
+  it('uses the consolidated account daily PnL in the existing dashboard rail', async () => {
+    seedState({ positions: [] });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: [],
+      count: 0,
+      totalUsdEstimate: 260,
+      balances: [{ asset: 'USDT', free: 260, locked: 0 }],
+      accountReport: {
+        fetchedAt: Date.now(),
+        products: [],
+        dailyPnl: [],
+        dailyRewards: [],
+        externalFlows: [],
+        issues: [],
+        explicitDailyPnlUsd: -3,
+        dailyBalanceChangeUsd: -3,
+        isPartial: false,
+      },
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect(container.querySelector('#dashboard-daily')?.textContent).toContain('-$3.00');
+    expect(container.querySelector('#dashboard-apr')?.textContent).toContain('-421.15%');
+
+    dispose();
+    container.remove();
+  });
+
+  it('adds live active-position run-rate to Binance product PnL without double counting the balance', async () => {
+    seedState({ positions: [] });
+    saveApiCredentials({ apiKey: 'key', apiSecret: 'secret' });
+    vi.mocked(syncPositionsFromBinance).mockResolvedValue({
+      positions: [
+        {
+          id: 'auto-1',
+          asset: 'ETH',
+          direction: 'buy-low',
+          subscriptionAsset: 'USDT',
+          amount: 100,
+          targetPrice: 2000,
+          entryDate: '2026-02-20',
+          settlementDate: '2026-02-23',
+          apr: 36.5,
+          source: 'Binance',
+          positionKind: 'dual',
+        },
+      ],
+      count: 1,
+      totalUsdEstimate: 900,
+      balances: [{ asset: 'USDT', free: 900, locked: 0 }],
+      accountReport: {
+        fetchedAt: Date.now(),
+        products: [],
+        dailyPnl: [],
+        dailyRewards: [],
+        externalFlows: [],
+        issues: [],
+        explicitDailyPnlUsd: 2,
+        dailyBalanceChangeUsd: 2,
+        isPartial: false,
+      },
+    });
+    vi.mocked(getSharedMarketData).mockResolvedValue({
+      positionsKey: 'auto-1',
+      snapshot: {
+        priceByAsset: { USDT: 1, ETH: 2000 },
+        sourceByAsset: { USDT: 'stable', ETH: 'live' },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        changePercent24hByAsset: { USDT: 0, ETH: 0 },
+      },
+      metrics: {
+        totalUsd: 100,
+        weightedApr: 36.5,
+        dailyEarningsUsd: 0.1,
+        usdByPositionId: { 'auto-1': 100 },
+        aprByPositionId: { 'auto-1': 36.5 },
+        priceByAsset: { USDT: 1 },
+        marketLastUpdatedAt: Date.now(),
+        hasStalePrices: false,
+        hasUnavailablePrices: false,
+        priceSourceByAsset: { USDT: 'stable' },
+      },
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const dispose = renderDashboard(container);
+    await flushMicrotasks();
+
+    expect(container.querySelector('#dashboard-daily')?.textContent).toContain('$2.10');
+    // APR = (2.10 / (900 + 100)) * 365 * 100, using total account value.
+    expect(container.querySelector('#dashboard-apr')?.textContent).toContain('76.65%');
 
     dispose();
     container.remove();

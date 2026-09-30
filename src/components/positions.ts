@@ -26,6 +26,7 @@ import {
   listConnectedExchanges,
   syncPositionsFromBinance,
 } from '../utils/binance-sync';
+import type { BinancePortfolioSnapshot } from '../utils/binance-sync';
 import {
   getCachedAutoPortfolioSnapshot,
   getPositionsCacheKey,
@@ -417,6 +418,21 @@ function renderPositionTablesMarkup(positions: DualPosition[]): string {
   `;
 }
 
+interface ExchangeSyncEventDetail {
+  snapshot: BinancePortfolioSnapshot;
+  previousPositionsKey?: string;
+}
+
+function readExchangeSyncEventDetail(event: Event): ExchangeSyncEventDetail | null {
+  const detail = (event as CustomEvent<unknown>).detail;
+  if (!detail || typeof detail !== 'object') return null;
+  const candidate = detail as Partial<ExchangeSyncEventDetail>;
+  const snapshot = candidate.snapshot;
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  if (!Array.isArray(snapshot.positions) || !Array.isArray(snapshot.balances)) return null;
+  return candidate as ExchangeSyncEventDetail;
+}
+
 function shouldRenderPositionTables(
   tablesContainer: Element,
   positions: DualPosition[],
@@ -603,11 +619,23 @@ function applyPositionMarketData(
   return hasSubMinuteCountdown;
 }
 
-async function performAutoSync(
+async function applySyncedPositionSnapshot(
   container: HTMLElement,
-  onStateChange: () => void,
-  forceRefresh = false,
+  snapshot: BinancePortfolioSnapshot,
+  previousPositionsKey: string,
+  forceRefresh: boolean,
 ): Promise<void> {
+  const { positions: synced, count } = snapshot;
+  const nextPositionsKey = getPositionsCacheKey(synced);
+  setPositionsCount(container.querySelector('#positions-count'), count, true);
+  updatePositionTables(container, synced, {
+    forceRender: previousPositionsKey !== nextPositionsKey,
+    hasApi: hasAnyExchangeApiCredentials(),
+  });
+  await hydratePositionMarketData(container, synced, forceRefresh);
+}
+
+async function performAutoSync(container: HTMLElement, forceRefresh = false): Promise<void> {
   const syncBtn = document.getElementById('btn-sync-positions') as HTMLButtonElement | null;
   if (syncBtn) {
     syncBtn.disabled = true;
@@ -621,22 +649,10 @@ async function performAutoSync(
     rememberBalanceSummary({
       balances: snapshot.balances,
       totalUsdEstimate: snapshot.totalUsdEstimate,
+      accountReport: snapshot.accountReport,
     });
 
-    const { positions: synced, count } = snapshot;
-    const nextPositionsKey = getPositionsCacheKey(synced);
-
-    setPositionsCount(container.querySelector('#positions-count'), count, true);
-    updatePositionTables(container, synced, {
-      forceRender: previousPositionsKey !== nextPositionsKey,
-      hasApi: hasAnyExchangeApiCredentials(),
-    });
-
-    await hydratePositionMarketData(container, synced, forceRefresh);
-
-    if (previousPositionsKey !== nextPositionsKey) {
-      onStateChange();
-    }
+    await applySyncedPositionSnapshot(container, snapshot, previousPositionsKey, forceRefresh);
   } catch (err) {
     if (typeof process !== 'undefined' ? process.env.PUBLIC_APP_ENV !== 'production' : true)
       console.warn('[positions] Auto-sync failed:', err);
@@ -701,11 +717,57 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
     remainingTicker = null;
   };
 
+  const handleExchangeSyncComplete = (event: Event): void => {
+    const detail = readExchangeSyncEventDetail(event);
+    if (!detail || disposed) return;
+    const previousKey = detail.previousPositionsKey ?? getPositionsCacheKey(latestKnownPositions);
+    void applySyncedPositionSnapshot(container, detail.snapshot, previousKey, false).then(() => {
+      latestKnownPositions = detail.snapshot.positions;
+      syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
+    });
+  };
+
+  const handlePortfolioStateUpdated = (): void => {
+    if (disposed) return;
+    const latestPositions = loadState().positions;
+    const previousKey = getPositionsCacheKey(latestKnownPositions);
+    const nextKey = getPositionsCacheKey(latestPositions);
+    setPositionsCount(
+      container.querySelector('#positions-count'),
+      countPositionSubscriptions(latestPositions),
+      true,
+    );
+    updatePositionTables(container, latestPositions, {
+      forceRender: previousKey !== nextKey,
+      hasApi: hasAnyExchangeApiCredentials(),
+    });
+    latestKnownPositions = latestPositions;
+    void hydratePositionMarketData(container, latestPositions, false).then((hasSubMinute) => {
+      syncRemainingTicker(hasSubMinute);
+    });
+  };
+
+  const handlePortfolioTabVisible = (): void => {
+    if (disposed) return;
+    if (!hasAnyExchangeApiCredentials()) {
+      handlePortfolioStateUpdated();
+      return;
+    }
+    void performAutoSync(container, true).then(() => {
+      latestKnownPositions = loadState().positions;
+      syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
+    });
+  };
+
+  window.addEventListener('exchange-sync-complete', handleExchangeSyncComplete);
+  window.addEventListener('portfolio-state-updated', handlePortfolioStateUpdated);
+  window.addEventListener('portfolio-tab-visible', handlePortfolioTabVisible);
+
   const runInitialHydration = async (): Promise<void> => {
     if (disposed || !container.isConnected) return;
 
     if (hasAnyExchangeApiCredentials() && !getCachedAutoPortfolioSnapshot()) {
-      await performAutoSync(container, onStateChange, false);
+      await performAutoSync(container, false);
       latestKnownPositions = loadState().positions;
       syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
       return;
@@ -721,7 +783,7 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
     if (disposed || !container.isConnected) return;
 
     if (hasAnyExchangeApiCredentials()) {
-      await performAutoSync(container, onStateChange, forceRefresh);
+      await performAutoSync(container, forceRefresh);
       const { positions: syncedPositions } = loadState();
       latestKnownPositions = syncedPositions;
       syncRemainingTicker(updateRemainingTimesInPlace(container, latestKnownPositions));
@@ -737,6 +799,9 @@ export function renderPositions(container: HTMLElement, onStateChange: () => voi
     disposed = true;
     unsubscribeMarket();
     unsubConfig();
+    window.removeEventListener('exchange-sync-complete', handleExchangeSyncComplete);
+    window.removeEventListener('portfolio-state-updated', handlePortfolioStateUpdated);
+    window.removeEventListener('portfolio-tab-visible', handlePortfolioTabVisible);
     if (remainingTicker) clearInterval(remainingTicker);
   };
 }

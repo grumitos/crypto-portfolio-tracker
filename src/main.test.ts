@@ -58,6 +58,7 @@ vi.mock('./utils/router', () => ({
 }));
 
 vi.mock('./utils/storage', () => ({
+  loadState: vi.fn(() => ({ positions: [] })),
   onStorageChange: vi.fn(),
 }));
 
@@ -109,6 +110,7 @@ vi.mock('./utils/local-vault', () => ({
 
 vi.mock('./utils/api-runtime-cache', () => ({
   clearApiRuntimeCache: vi.fn(),
+  getPositionsCacheKey: vi.fn(() => 'positions'),
   rememberAutoPortfolioSnapshot: vi.fn(),
   rememberBalanceSummary: vi.fn(),
 }));

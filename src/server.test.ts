@@ -94,6 +94,90 @@ describe('server proxy headers', () => {
     expect(headers.get('transfer-encoding')).toBeNull();
     expect(headers.get('content-type')).toBe('application/json');
   });
+
+  it('rejects mutating methods on every exchange proxy before reaching Binance', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const routes = createServerOptions().routes as Record<string, unknown>;
+    const route = routes['/binance-fapi/*'];
+    expect(typeof route).toBe('function');
+
+    const response = await (route as (req: Request) => Response | Promise<Response>)(
+      new Request('http://localhost:5176/binance-fapi/v1/order', {
+        method: 'POST',
+        body: 'symbol=BTCUSDT',
+      }),
+    );
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('GET, HEAD');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects Binance GET switches that change account state', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const routes = createServerOptions().routes as Record<string, unknown>;
+    const route = routes['/binance-sapi/*'];
+
+    const response = await (route as (req: Request) => Response | Promise<Response>)(
+      new Request('http://localhost:5176/binance-sapi/v1/soft-staking/set', {
+        method: 'GET',
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects encoded Binance GET switches that change account state', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const routes = createServerOptions().routes as Record<string, unknown>;
+    const route = routes['/binance-sapi/*'];
+
+    const response = await (route as (req: Request) => Response | Promise<Response>)(
+      new Request('http://localhost:5176/binance-sapi/v1/soft-staking/%73et?softStaking=true', {
+        method: 'GET',
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown GET paths on the exchange proxy', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const routes = createServerOptions().routes as Record<string, unknown>;
+    const route = routes['/binance-sapi/*'];
+
+    const response = await (route as (req: Request) => Response | Promise<Response>)(
+      new Request('http://localhost:5176/binance-sapi/v1/account/unknown', {
+        method: 'GET',
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate derivative API prefixes when forwarding reads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const routes = createServerOptions().routes as Record<string, unknown>;
+    const route = routes['/binance-fapi/*'];
+
+    await (route as (req: Request) => Response | Promise<Response>)(
+      new Request('http://localhost:5176/binance-fapi/fapi/v3/account?timestamp=1'),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://fapi.binance.com/fapi/v3/account?timestamp=1',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
 });
 
 describe('public asset request guards', () => {

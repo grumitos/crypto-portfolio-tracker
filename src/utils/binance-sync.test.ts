@@ -98,6 +98,83 @@ describe('binance sync cache', () => {
     expect(getAssetPriceSnapshot).toHaveBeenCalledTimes(1);
   });
 
+  it('adds independent Binance product equity once and keeps its PnL report available', async () => {
+    vi.mocked(fetchAccountBalances).mockResolvedValueOnce({
+      balances: [{ asset: 'USDT', free: 100, locked: 0 }],
+      issues: [],
+      report: {
+        fetchedAt: Date.now(),
+        products: [
+          {
+            product: 'usd-m-futures',
+            label: 'Futuros USDⓈ-M',
+            status: 'ok',
+            balanceUsd: 500,
+            balanceAmounts: [{ asset: 'USDT', amount: 500 }],
+            unrealizedPnl: [{ asset: 'USDT', amount: 4 }],
+            dailyPnl: [{ asset: 'USDT', amount: 8 }],
+            dailyRewards: [],
+            positionCount: 1,
+            includedInTotal: true,
+          },
+        ],
+        dailyPnl: [{ asset: 'USDT', amount: 8 }],
+        dailyRewards: [],
+        externalFlows: [],
+        issues: [],
+        isPartial: false,
+      },
+    });
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(summary.totalUsdEstimate).toBe(600);
+    expect(summary.accountReport?.products[0].balanceUsdEstimate).toBe(500);
+    expect(summary.accountReport?.explicitDailyPnlUsd).toBe(8);
+  });
+
+  it('values COIN-M assets from product holdings without adding them to wallet balances', async () => {
+    vi.mocked(fetchAccountBalances).mockResolvedValueOnce({
+      balances: [{ asset: 'USDT', free: 100, locked: 0 }],
+      issues: [],
+      report: {
+        fetchedAt: Date.now(),
+        products: [
+          {
+            product: 'coin-m-futures',
+            label: 'Futuros COIN-M',
+            status: 'ok',
+            balanceUsd: null,
+            balanceAmounts: [{ asset: 'BTC', amount: 0.01 }],
+            unrealizedPnl: [],
+            dailyPnl: [],
+            dailyRewards: [],
+            positionCount: 1,
+            includedInTotal: true,
+          },
+        ],
+        dailyPnl: [],
+        dailyRewards: [],
+        externalFlows: [],
+        issues: [],
+        isPartial: false,
+      },
+    });
+    vi.mocked(getAssetPriceSnapshot).mockResolvedValueOnce({
+      priceByAsset: { BTC: 60000 },
+      sourceByAsset: { BTC: 'live' },
+      marketLastUpdatedAt: Date.now(),
+      hasStalePrices: false,
+      hasUnavailablePrices: false,
+    });
+
+    const summary = await fetchBalanceSummary(true);
+
+    expect(summary.totalUsdEstimate).toBe(700);
+    expect(summary.balances).toEqual([{ asset: 'USDT', free: 100, locked: 0, source: 'Binance' }]);
+    expect(summary.accountReport?.products[0].balanceUsdEstimate).toBe(600);
+  });
+
   it('combines Binance and Bybit balances when both exchanges are configured', async () => {
     saveBybitApiCredentials({ apiKey: 'bybit-key', apiSecret: 'bybit-secret' });
     vi.mocked(fetchBybitWalletBalances).mockResolvedValue([

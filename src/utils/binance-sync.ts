@@ -9,7 +9,12 @@ import type {
 } from '../types';
 import { hasApiCredentials } from './binance-auth';
 import { fetchDualPositions, fetchAccountBalances } from './binance-client';
-import type { WalletIssue } from './binance-client';
+import type {
+  BinanceAccountReadReport,
+  BinanceAssetAmount,
+  BinanceProductReport,
+  WalletIssue,
+} from './binance-client';
 import { hasBybitApiCredentials } from './bybit-auth';
 import {
   fetchBybitAssetBalances,
@@ -183,6 +188,8 @@ export interface BalanceSummary {
    * resumenes cacheados de versiones anteriores no lo traen: ausente es "ninguno".
    */
   walletIssues?: WalletIssue[];
+  /** Reporte de todos los productos de la cuenta Binance, si está conectada. */
+  accountReport?: BinanceAccountReadReport;
 }
 
 export interface BinancePortfolioSnapshot extends BalanceSummary {
@@ -190,7 +197,7 @@ export interface BinancePortfolioSnapshot extends BalanceSummary {
   count: number;
 }
 
-const STABLECOINS = new Set(['USDT', 'USDC', 'BUSD', 'DAI', 'FDUSD']);
+const STABLECOINS = new Set(['USD', 'USDT', 'USDC', 'BUSD', 'DAI', 'FDUSD', 'BFUSD', 'RWUSD']);
 const AUTO_BINANCE_CACHE_TTL_MS = 60_000;
 const AUTO_EXCHANGE_REQUEST_TIMEOUT_MS = 12_000;
 
@@ -215,6 +222,52 @@ function withExchangeTimeout<T>(request: Promise<T>, label: string): Promise<T> 
   return Promise.race([request, timeout]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
   });
+}
+
+function valueAssetAmount(
+  amount: BinanceAssetAmount,
+  priceByAsset: Record<string, number>,
+): number {
+  if (!Number.isFinite(amount.amount)) return 0;
+  if (STABLECOINS.has(amount.asset)) return amount.amount;
+  return amount.amount * (priceByAsset[amount.asset] ?? 0);
+}
+
+function valueProductBalance(
+  product: BinanceProductReport,
+  priceByAsset: Record<string, number>,
+): number {
+  if (!product.includedInTotal) return 0;
+  if (product.balanceUsd !== null && Number.isFinite(product.balanceUsd)) {
+    return product.balanceUsd;
+  }
+  return product.balanceAmounts.reduce(
+    (total, row) => total + valueAssetAmount(row, priceByAsset),
+    0,
+  );
+}
+
+function valueAmountList(rows: BinanceAssetAmount[], priceByAsset: Record<string, number>): number {
+  return rows.reduce((total, row) => total + valueAssetAmount(row, priceByAsset), 0);
+}
+
+function valueAccountReport(
+  report: BinanceAccountReadReport,
+  priceByAsset: Record<string, number>,
+): BinanceAccountReadReport {
+  return {
+    ...report,
+    products: report.products.map((product) => ({
+      ...product,
+      balanceUsdEstimate:
+        product.balanceUsd !== null && Number.isFinite(product.balanceUsd)
+          ? product.balanceUsd
+          : valueAmountList(product.balanceAmounts, priceByAsset),
+      dailyPnlUsdEstimate: valueAmountList(product.dailyPnl, priceByAsset),
+      dailyRewardsUsdEstimate: valueAmountList(product.dailyRewards, priceByAsset),
+      unrealizedPnlUsdEstimate: valueAmountList(product.unrealizedPnl, priceByAsset),
+    })),
+  };
 }
 
 export function hasAnyExchangeApiCredentials(): boolean {
@@ -310,6 +363,7 @@ interface ExchangeBalancesResult {
   balances: BinanceAccountBalance[];
   knownUsdByAsset: Record<string, number>;
   walletIssues: WalletIssue[];
+  accountReport?: BinanceAccountReadReport;
 }
 
 async function fetchExchangeBalances(forceRefresh: boolean): Promise<ExchangeBalancesResult> {
@@ -318,10 +372,11 @@ async function fetchExchangeBalances(forceRefresh: boolean): Promise<ExchangeBal
   if (hasApiCredentials()) {
     requests.push(
       withExchangeTimeout(fetchAccountBalances(forceRefresh), 'Binance balances').then(
-        ({ balances, issues }) => ({
+        ({ balances, issues, report }) => ({
           balances: balances.map((balance) => ({ ...balance, source: 'Binance' as const })),
           knownUsdByAsset: {},
           walletIssues: issues,
+          accountReport: report,
         }),
       ),
     );
@@ -345,19 +400,25 @@ async function fetchExchangeBalances(forceRefresh: boolean): Promise<ExchangeBal
   const balances: BinanceAccountBalance[] = [];
   const knownUsdByAsset: Record<string, number> = {};
   const walletIssues: WalletIssue[] = [];
+  let accountReport: BinanceAccountReadReport | undefined;
 
   for (const result of settled) {
     if (result.status !== 'fulfilled') continue;
     balances.push(...result.value.balances);
     Object.assign(knownUsdByAsset, result.value.knownUsdByAsset);
     walletIssues.push(...result.value.walletIssues);
+    if (result.value.accountReport) accountReport = result.value.accountReport;
   }
 
-  if (balances.length === 0 && settled.some((result) => result.status === 'rejected')) {
+  if (
+    balances.length === 0 &&
+    !accountReport &&
+    settled.some((result) => result.status === 'rejected')
+  ) {
     throw new Error('No se pudieron leer saldos de exchanges configurados.');
   }
 
-  return { balances, knownUsdByAsset, walletIssues };
+  return { balances, knownUsdByAsset, walletIssues, accountReport };
 }
 
 export async function fetchBalanceSummary(forceRefresh = false): Promise<BalanceSummary> {
@@ -374,26 +435,55 @@ export async function fetchBalanceSummary(forceRefresh = false): Promise<Balance
   }
 
   const request = (async (): Promise<BalanceSummary> => {
-    const { balances, knownUsdByAsset, walletIssues } = await fetchExchangeBalances(forceRefresh);
+    const {
+      balances,
+      knownUsdByAsset,
+      walletIssues,
+      accountReport: rawAccountReport,
+    } = await fetchExchangeBalances(forceRefresh);
 
+    const reportAssets = rawAccountReport
+      ? rawAccountReport.products
+          .flatMap((product) => [
+            ...product.balanceAmounts,
+            ...product.dailyPnl,
+            ...product.dailyRewards,
+          ])
+          .concat(rawAccountReport.externalFlows)
+      : [];
     // Price all assets: stablecoins at face value, others via market prices
-    const nonStableAssets = balances
-      .filter(
-        (b) =>
-          !STABLECOINS.has(b.asset) &&
-          knownUsdByAsset[`${b.source ?? 'Binance'}:${b.asset}`] === undefined,
-      )
-      .map((b) => b.asset);
+    const nonStableAssets = new Set(
+      balances
+        .filter(
+          (b) =>
+            !STABLECOINS.has(b.asset) &&
+            knownUsdByAsset[`${b.source ?? 'Binance'}:${b.asset}`] === undefined,
+        )
+        .map((b) => b.asset),
+    );
+    reportAssets.forEach((row) => {
+      if (!STABLECOINS.has(row.asset)) nonStableAssets.add(row.asset);
+    });
 
     let priceByAsset: Record<string, number> = {};
-    if (nonStableAssets.length > 0) {
+    if (nonStableAssets.size > 0) {
       try {
-        const snapshot = await getAssetPriceSnapshot(nonStableAssets, { forceRefresh });
+        const snapshot = await getAssetPriceSnapshot([...nonStableAssets], { forceRefresh });
         priceByAsset = snapshot.priceByAsset;
       } catch {
         // If prices fail, non-stablecoin balances will be counted as 0
       }
     }
+
+    // Binance products with their own equity (Futures, Options, Margin, PM and
+    // structured holdings) are added exactly once here. Spot/Funding/Earn are
+    // already represented by `balances` and explicitly opt out above.
+    const directProductBalanceUsd = rawAccountReport
+      ? rawAccountReport.products.reduce(
+          (total, product) => total + valueProductBalance(product, priceByAsset),
+          0,
+        )
+      : 0;
 
     let totalUsdEstimate = 0;
     for (const b of balances) {
@@ -411,7 +501,24 @@ export async function fetchBalanceSummary(forceRefresh = false): Promise<Balance
       }
     }
 
-    const summary = { balances, totalUsdEstimate, walletIssues };
+    totalUsdEstimate += directProductBalanceUsd;
+
+    let accountReport = rawAccountReport
+      ? valueAccountReport(rawAccountReport, priceByAsset)
+      : undefined;
+    if (accountReport) {
+      const explicitDailyPnlUsd = [...accountReport.dailyPnl, ...accountReport.dailyRewards].reduce(
+        (total, row) => total + valueAssetAmount(row, priceByAsset),
+        0,
+      );
+      accountReport = {
+        ...accountReport,
+        explicitDailyPnlUsd: Math.round(explicitDailyPnlUsd * 100) / 100,
+        dailyBalanceChangeUsd: Math.round(explicitDailyPnlUsd * 100) / 100,
+      };
+    }
+
+    const summary = { balances, totalUsdEstimate, walletIssues, accountReport };
     balanceSummaryCache = { value: summary, ts: Date.now() };
     return summary;
   })();
@@ -461,10 +568,8 @@ export async function fetchBinancePortfolioSnapshot(
       );
     }
 
-    const [positionSettled, { balances, totalUsdEstimate, walletIssues }] = await Promise.all([
-      Promise.allSettled(positionRequests),
-      fetchBalanceSummary(forceRefresh),
-    ]);
+    const [positionSettled, { balances, totalUsdEstimate, walletIssues, accountReport }] =
+      await Promise.all([Promise.allSettled(positionRequests), fetchBalanceSummary(forceRefresh)]);
     // El exchange devuelve una fila por suscripcion: se consolidan aqui, antes
     // de persistir, para que toda la app vea el mismo modelo agrupado.
     const positions = groupPositionsByLockWindow(
@@ -477,6 +582,7 @@ export async function fetchBinancePortfolioSnapshot(
       balances,
       totalUsdEstimate,
       walletIssues,
+      accountReport,
     };
 
     portfolioSnapshotCache = { value: snapshot, ts: Date.now() };

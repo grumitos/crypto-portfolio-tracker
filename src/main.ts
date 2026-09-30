@@ -9,7 +9,7 @@ import { syncApiLastUpdatedLabel } from './utils/api-status';
 import { iconSettings, iconRefreshCw, iconSun, iconMoon } from './utils/icons';
 import type { View } from './types';
 import { getCurrentView, initRouter, navigateTo, handleTransitionEntry } from './utils/router';
-import { onStorageChange } from './utils/storage';
+import { loadState, onStorageChange } from './utils/storage';
 import { openApiConfigModal } from './components/positions/api-config-modal';
 import { renderAppShell } from './components/app-shell.template';
 import type { AppShellNavItem } from './components/app-shell.constants';
@@ -27,14 +27,13 @@ import { clearMarketCaches } from './utils/market';
 import { loadLocalVaultCredentials } from './utils/local-vault';
 import {
   clearApiRuntimeCache,
+  getPositionsCacheKey,
   rememberAutoPortfolioSnapshot,
   rememberBalanceSummary,
 } from './utils/api-runtime-cache';
 import { showApiErrorBanner } from './utils/notifications';
 
 let disposeActiveView: (() => void) | null = null;
-let forceRefreshNextDashboardRender = false;
-
 function themeIcon(): string {
   return getResolvedTheme() === 'dark' ? iconSun(15) : iconMoon(15);
 }
@@ -111,6 +110,7 @@ async function init(): Promise<void> {
     syncBtn.setAttribute('aria-busy', 'true');
 
     try {
+      const previousPositionsKey = getPositionsCacheKey(loadState().positions);
       clearApiRuntimeCache();
       clearBinanceSyncCaches();
       clearBinanceClientCaches();
@@ -121,9 +121,13 @@ async function init(): Promise<void> {
       rememberBalanceSummary({
         balances: snapshot.balances,
         totalUsdEstimate: snapshot.totalUsdEstimate,
+        accountReport: snapshot.accountReport,
       });
-      forceRefreshNextDashboardRender = true;
-      renderView(app, getCurrentView());
+      window.dispatchEvent(
+        new CustomEvent('exchange-sync-complete', {
+          detail: { snapshot, previousPositionsKey },
+        }),
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       showApiErrorBanner(
@@ -154,8 +158,14 @@ async function init(): Promise<void> {
     }, 0);
   });
 
-  // Re-render when another tab modifies localStorage
-  onStorageChange(() => renderView(app, getCurrentView()));
+  // Las actualizaciones de otra pestaña hidratan la vista montada; no se vuelve
+  // a generar la plantilla ni se muestran skeletons de una carga inicial.
+  onStorageChange(() => window.dispatchEvent(new Event('portfolio-state-updated')));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      window.dispatchEvent(new Event('portfolio-tab-visible'));
+    }
+  });
 
   // Keyboard shortcuts (bound once)
   const viewKeys: Record<string, View> = {
@@ -241,9 +251,8 @@ function renderView(app: HTMLElement, view: View): void {
   switch (view) {
     case 'dashboard':
       disposeActiveView = renderDashboard(viewContainer, {
-        forceRefreshOnMount: forceRefreshNextDashboardRender,
+        forceRefreshOnMount: false,
       });
-      forceRefreshNextDashboardRender = false;
       break;
     case 'positions':
       disposeActiveView = renderPositions(viewContainer, onStateChange);

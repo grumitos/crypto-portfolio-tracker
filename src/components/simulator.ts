@@ -384,9 +384,29 @@ export function renderSimulator(container: HTMLElement): () => void {
     }
   }, false);
 
+  const refreshMountedSimulator = (forceRefresh = false): void => {
+    if (disposed || !container.isConnected) return;
+    const state = loadState();
+    void syncAutoValues(forceRefresh, state).then((changed) => {
+      const goalChanged = syncAutoGoal(state);
+      if (changed || goalChanged) {
+        triggerSimulation({ persist: true, animate: true });
+      }
+    });
+  };
+  const handleExchangeSyncComplete = (): void => refreshMountedSimulator(false);
+  const handlePortfolioStateUpdated = (): void => refreshMountedSimulator(false);
+  const handlePortfolioTabVisible = (): void => refreshMountedSimulator(true);
+  window.addEventListener('exchange-sync-complete', handleExchangeSyncComplete);
+  window.addEventListener('portfolio-state-updated', handlePortfolioStateUpdated);
+  window.addEventListener('portfolio-tab-visible', handlePortfolioTabVisible);
+
   return () => {
     disposed = true;
     unsubscribeMarket();
+    window.removeEventListener('exchange-sync-complete', handleExchangeSyncComplete);
+    window.removeEventListener('portfolio-state-updated', handlePortfolioStateUpdated);
+    window.removeEventListener('portfolio-tab-visible', handlePortfolioTabVisible);
   };
 }
 

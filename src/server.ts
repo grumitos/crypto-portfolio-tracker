@@ -410,6 +410,126 @@ function hasRequestBody(method: string): boolean {
   return method !== 'GET' && method !== 'HEAD';
 }
 
+export function isReadOnlyExchangeMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD';
+}
+
+/**
+ * The exchange proxy is intentionally positive-list only. A GET verb is not
+ * enough to prove that a future exchange endpoint is harmless: Binance has
+ * legacy GET switches, and a wildcard route would otherwise forward any new
+ * path added by accident. Keep this list aligned with the read-only clients.
+ */
+const READ_ONLY_EXCHANGE_PATHS: Record<string, ReadonlySet<string>> = {
+  '/binance-api': new Set(['/v3/time', '/v3/account']),
+  '/binance-sapi': new Set([
+    '/v1/account/apiRestrictions',
+    '/v1/account/info',
+    '/v1/asset/assetDividend',
+    '/v1/asset/wallet/balance',
+    '/v1/capital/deposit/hisrec',
+    '/v1/capital/withdraw/history',
+    '/v1/dci/product/accounts',
+    '/v1/dci/product/positions',
+    '/v1/simple-earn/flexible/position',
+    '/v1/simple-earn/locked/position',
+    '/v1/simple-earn/flexible/history/rewardsRecord',
+    '/v1/simple-earn/locked/history/rewardsRecord',
+    '/v1/simple-earn/account',
+    '/v1/bfusd/account',
+    '/v1/bfusd/history/rewardsHistory',
+    '/v1/rwusd/account',
+    '/v1/rwusd/history/rewardsHistory',
+    '/v1/eth-staking/eth/history/wbethRewardsHistory',
+    '/v1/sol-staking/account',
+    '/v1/sol-staking/sol/history/bnsolRewardsHistory',
+    '/v1/sol-staking/sol/history/boostRewardsHistory',
+    '/v1/sol-staking/sol/history/unclaimedRewards',
+    '/v1/onchain-yields/locked/position',
+    '/v1/onchain-yields/locked/history/rewardsRecord',
+    '/v1/soft-staking/list',
+    '/v1/soft-staking/history/rewardsRecord',
+    '/v1/accumulator/product/position/list',
+    '/v1/accumulator/product/sum-holding',
+    '/v1/loan/ongoing/orders',
+    '/v1/loan/income',
+    '/v1/loan/vip/ongoing/orders',
+    '/v1/loan/vip/repay/history',
+    '/v1/loan/vip/collateral/account',
+    '/v1/margin/account',
+    '/v1/margin/isolated/account',
+    '/v1/margin/interestHistory',
+    '/v1/rebate/taxQuery',
+    '/v1/apiReferral/kickback/recentRecord',
+    '/v2/loan/flexible/ongoing/orders',
+    '/v2/eth-staking/account',
+  ]),
+  '/binance-fapi': new Set(['/fapi/v3/account', '/fapi/v3/balance', '/fapi/v1/income']),
+  '/binance-dapi': new Set(['/dapi/v1/account', '/dapi/v1/balance', '/dapi/v1/income']),
+  '/binance-eapi': new Set([
+    '/eapi/v1/marginAccount',
+    '/eapi/v1/position',
+    '/eapi/v1/userTrades',
+    '/eapi/v1/exerciseRecord',
+  ]),
+  '/binance-papi': new Set([
+    '/papi/v1/account',
+    '/papi/v1/balance',
+    '/papi/v1/um/account',
+    '/papi/v1/cm/account',
+    '/papi/v1/um/positionRisk',
+    '/papi/v1/cm/positionRisk',
+    '/papi/v1/um/income',
+    '/papi/v1/cm/income',
+  ]),
+  '/bybit-api': new Set([
+    '/v5/user/query-api',
+    '/v5/account/wallet-balance',
+    '/v5/asset/transfer/query-account-coins-balance',
+    '/v5/asset/asset-overview',
+    '/v5/earn/advance/position',
+    '/v5/market/time',
+  ]),
+};
+
+function isReadOnlyExchangePath(req: Request, prefix: string): boolean {
+  const rawPathname = new URL(req.url).pathname.slice(prefix.length);
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(rawPathname);
+  } catch {
+    // A malformed escape must never be forwarded through a read-only guard.
+    return false;
+  }
+  const allowedPaths = READ_ONLY_EXCHANGE_PATHS[prefix];
+  if (!allowedPaths?.has(pathname)) return false;
+
+  // Binance documents this legacy GET as a switch that changes the account's
+  // Soft Staking setting. It is intentionally not a read, even though its verb
+  // is GET and therefore needs an explicit deny in the proxy.
+  return !/\/soft-staking\/set$/iu.test(pathname);
+}
+
+async function readOnlyProxyRequest(
+  req: Request,
+  prefix: string,
+  targetBase: string,
+): Promise<Response> {
+  if (!isReadOnlyExchangeMethod(req.method)) {
+    return new Response('Exchange proxy is read-only.', {
+      status: 405,
+      headers: { Allow: 'GET, HEAD', ...jsonHeaders },
+    });
+  }
+  if (!isReadOnlyExchangePath(req, prefix)) {
+    return new Response('Exchange proxy path is not read-only.', {
+      status: 403,
+      headers: jsonHeaders,
+    });
+  }
+  return proxyRequest(req, prefix, targetBase);
+}
+
 async function proxyRequest(req: Request, prefix: string, targetBase: string): Promise<Response> {
   const upstream = await fetch(proxyTargetUrl(req, prefix, targetBase), {
     method: req.method,
@@ -458,10 +578,19 @@ export function createServerOptions(): Bun.ServeOptions {
       '/local-vault/credentials': handleLocalVaultCredentials,
       '/api/hyperliquid/sync': handleHyperliquidSync,
       '/binance-api/*': (req: Request) =>
-        proxyRequest(req, '/binance-api', 'https://api.binance.com/api'),
+        readOnlyProxyRequest(req, '/binance-api', 'https://api.binance.com/api'),
       '/binance-sapi/*': (req: Request) =>
-        proxyRequest(req, '/binance-sapi', 'https://api.binance.com/sapi'),
-      '/bybit-api/*': (req: Request) => proxyRequest(req, '/bybit-api', 'https://api.bybit.com'),
+        readOnlyProxyRequest(req, '/binance-sapi', 'https://api.binance.com/sapi'),
+      '/binance-fapi/*': (req: Request) =>
+        readOnlyProxyRequest(req, '/binance-fapi', 'https://fapi.binance.com'),
+      '/binance-dapi/*': (req: Request) =>
+        readOnlyProxyRequest(req, '/binance-dapi', 'https://dapi.binance.com'),
+      '/binance-eapi/*': (req: Request) =>
+        readOnlyProxyRequest(req, '/binance-eapi', 'https://eapi.binance.com'),
+      '/binance-papi/*': (req: Request) =>
+        readOnlyProxyRequest(req, '/binance-papi', 'https://papi.binance.com'),
+      '/bybit-api/*': (req: Request) =>
+        readOnlyProxyRequest(req, '/bybit-api', 'https://api.bybit.com'),
     },
     fetch() {
       return new Response('Not found', { status: 404 });

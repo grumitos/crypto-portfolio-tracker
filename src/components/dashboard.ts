@@ -1,5 +1,5 @@
 import { loadState, updateBalance, SIMULATOR_VIEW_KEY } from '../utils/storage';
-import type { WalletIssue } from '../utils/binance-client';
+import type { BinanceAccountReadReport, WalletIssue } from '../utils/binance-client';
 import { formatUSD, formatPct, formatDateLatin } from '../utils/calculator';
 import { registerApiFailure, registerApiLastUpdatedAt } from '../utils/api-status';
 import { showApiErrorBanner } from '../utils/notifications';
@@ -510,6 +510,34 @@ function updateDashboardYieldStats(
   }
 }
 
+function applyAccountDailyPnl(
+  yieldMetrics: CombinedPortfolioYieldMetrics,
+  report: Awaited<ReturnType<typeof fetchBalanceSummary>>['accountReport'],
+  accountTotalUsd: number | undefined,
+): CombinedPortfolioYieldMetrics {
+  if (!report) return yieldMetrics;
+  const reportedDailyPnl = report.dailyBalanceChangeUsd ?? report.explicitDailyPnlUsd;
+  if (reportedDailyPnl === null || reportedDailyPnl === undefined) return yieldMetrics;
+  // Binance does not expose active Dual Investment yield in the generic
+  // account income ledgers. Keep the existing live position/ledger run-rate
+  // and add only the product PnL explicitly reported by Binance.
+  const accountDailyPnl =
+    Math.round((reportedDailyPnl + yieldMetrics.dailyEarningsUsd) * 100) / 100;
+  const accountApr =
+    accountTotalUsd !== undefined && accountTotalUsd > 0
+      ? (accountDailyPnl / accountTotalUsd) * 365 * 100
+      : null;
+  return {
+    ...yieldMetrics,
+    dailyEarningsUsd: accountDailyPnl,
+    earningCapital:
+      accountApr === null
+        ? yieldMetrics.earningCapital
+        : (accountTotalUsd ?? yieldMetrics.earningCapital),
+    weightedApr: accountApr === null ? yieldMetrics.weightedApr : accountApr,
+  };
+}
+
 /**
  * Un activo puede recibir saldo de varios exchanges a la vez (saldo de uno y
  * posiciones de otro), asi que la fila fusionada acumula todos los origenes en
@@ -530,6 +558,7 @@ function renderBalanceDetail(
   balances: BinanceAccountBalance[] | null,
   positions: AppState['positions'] = [],
   walletIssues: WalletIssue[] = [],
+  accountReport: BinanceAccountReadReport | undefined = undefined,
 ): void {
   const { balanceStrip, balanceStripItems, balanceStripNote } = getDashboardElements(container);
   if (!balanceStrip || !balanceStripItems) return;
@@ -560,6 +589,17 @@ function renderBalanceDetail(
     if (!asset) return;
     mergeInto(asset, balance.free, balance.locked, balance.source);
   });
+
+  // Product wallets (including COIN-M) are intentionally kept out of the
+  // base `balances` array so the total cannot be added twice. They still need
+  // to appear in the existing asset strip, so merge their positive holdings
+  // here as display data only; totalUsdEstimate remains the single source of
+  // account valuation.
+  accountReport?.products
+    .filter((product) => product.includedInTotal)
+    .flatMap((product) => product.balanceAmounts)
+    .filter((row) => Number.isFinite(row.amount) && row.amount > 0)
+    .forEach((row) => mergeInto(row.asset, row.amount, 0, 'Binance'));
 
   positions.forEach((position) => {
     const asset = position.subscriptionAsset.trim().toUpperCase();
@@ -696,25 +736,37 @@ export function renderDashboard(
   let disposed = false;
   let hasFirstMarketHydrationCompleted = false;
 
-  const unsubConfig = onApiConfigChange(() => {
+  const refreshMountedDashboard = (forceRefresh: boolean, animate = true): void => {
+    if (disposed || !container.isConnected) return;
     const updatedState = loadState();
     const aggregate = getAggregatedPortfolioMetrics(updatedState);
     uiState.balance = aggregate.balance;
     uiState.invested = aggregate.invested;
     uiState.goal = aggregate.goal;
     uiState.frequency = readSimulatorFrequency(uiState.frequency);
-    updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, true);
-    updateGoalProgressVisual(container, uiState, { animateNumbers: true, animateText: true });
+    updateDashboardSummaryVisual(container, uiState, updatedState.portfolio.lastUpdated, animate);
+    updateGoalProgressVisual(container, uiState, { animateNumbers: animate, animateText: animate });
     void hydrateDashboardMarketStats(
       container,
       updatedState.positions,
       uiState,
-      true,
-      true,
+      forceRefresh,
+      animate,
     ).finally(() => {
       hasFirstMarketHydrationCompleted = true;
     });
+  };
+
+  const unsubConfig = onApiConfigChange(() => {
+    refreshMountedDashboard(true);
   });
+
+  const handleExchangeSyncComplete = (): void => refreshMountedDashboard(false);
+  const handlePortfolioStateUpdated = (): void => refreshMountedDashboard(false);
+  const handlePortfolioTabVisible = (): void => refreshMountedDashboard(true);
+  window.addEventListener('exchange-sync-complete', handleExchangeSyncComplete);
+  window.addEventListener('portfolio-state-updated', handlePortfolioStateUpdated);
+  window.addEventListener('portfolio-tab-visible', handlePortfolioTabVisible);
 
   bindGoalLegendEvents(container, uiState);
 
@@ -745,6 +797,9 @@ export function renderDashboard(
     disposed = true;
     unsubscribeMarket();
     unsubConfig();
+    window.removeEventListener('exchange-sync-complete', handleExchangeSyncComplete);
+    window.removeEventListener('portfolio-state-updated', handlePortfolioStateUpdated);
+    window.removeEventListener('portfolio-tab-visible', handlePortfolioTabVisible);
   };
 }
 
@@ -799,6 +854,7 @@ async function hydrateDashboardMarketStats(
         autoBalanceSummary = {
           balances: cachedAutoSnapshot.balances,
           totalUsdEstimate: cachedAutoSnapshot.totalUsdEstimate,
+          accountReport: cachedAutoSnapshot.accountReport,
         };
       } else {
         const syncedSnapshot = await syncPositionsFromBinance(forceRefresh);
@@ -807,6 +863,7 @@ async function hydrateDashboardMarketStats(
         autoBalanceSummary = {
           balances: syncedSnapshot.balances,
           totalUsdEstimate: syncedSnapshot.totalUsdEstimate,
+          accountReport: syncedSnapshot.accountReport,
         };
         rememberBalanceSummary(autoBalanceSummary);
       }
@@ -825,6 +882,7 @@ async function hydrateDashboardMarketStats(
         autoBalanceSummary.balances,
         effectivePositions,
         autoBalanceSummary.walletIssues ?? [],
+        autoBalanceSummary.accountReport,
       );
     } catch {
       renderBalanceDetail(container, null);
@@ -860,9 +918,13 @@ async function hydrateDashboardMarketStats(
     }
 
     const aggregate = getAggregatedPortfolioMetrics(loadState(), walletOnlyBalance);
-    const yieldMetrics = combinePortfolioYieldMetrics(
-      { totalUsd: 0, weightedApr: 0, dailyEarningsUsd: 0 },
-      aggregate.capital,
+    const yieldMetrics = applyAccountDailyPnl(
+      combinePortfolioYieldMetrics(
+        { totalUsd: 0, weightedApr: 0, dailyEarningsUsd: 0 },
+        aggregate.capital,
+      ),
+      autoBalanceSummary?.accountReport,
+      walletOnlyBalance,
     );
     updateDashboardYieldStats(apr, capital, daily, yieldMetrics, true);
     uiState.balance = aggregate.balance;
@@ -898,7 +960,7 @@ async function hydrateDashboardMarketStats(
     const now = Date.now();
 
     const shouldSyncBalance =
-      metrics.totalUsd > 0 &&
+      (metrics.totalUsd > 0 || walletBalanceUsd > 0) &&
       Math.abs(totalBalance - storedBalance) >= 0.01 &&
       (forceRefresh || now - lastAutoBalanceSyncAt > AUTO_BALANCE_SYNC_COOLDOWN_MS);
 
@@ -912,7 +974,11 @@ async function hydrateDashboardMarketStats(
       currentState,
       shouldSyncBalance ? totalBalance : currentState.portfolio.currentBalance,
     );
-    const yieldMetrics = combinePortfolioYieldMetrics(metrics, aggregate.capital);
+    const yieldMetrics = applyAccountDailyPnl(
+      combinePortfolioYieldMetrics(metrics, aggregate.capital),
+      autoBalanceSummary?.accountReport,
+      totalBalance,
+    );
     updateDashboardYieldStats(apr, capital, daily, yieldMetrics, true);
 
     if (metrics.hasStalePrices || metrics.hasUnavailablePrices) {

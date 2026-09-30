@@ -205,15 +205,20 @@ describe('binance client', () => {
           }),
         );
       }
-      if (url.includes('/asset/get-funding-asset')) {
+      if (url.includes('/asset/wallet/balance')) {
         return Promise.resolve(
           jsonResponse([
             {
-              asset: 'USDT',
-              free: '10.00000000',
-              locked: '1.00000000',
-              freeze: '2.00000000',
-              withdrawing: '3.00000000',
+              walletName: 'Funding',
+              assetBalances: [
+                {
+                  asset: 'USDT',
+                  free: '10.00000000',
+                  locked: '1.00000000',
+                  freeze: '2.00000000',
+                  withdrawing: '3.00000000',
+                },
+              ],
             },
           ]),
         );
@@ -263,7 +268,7 @@ describe('binance client', () => {
             jsonResponse({ balances: [{ asset: 'USDC', free: '5', locked: '0' }] }),
           );
         }
-        if (url.includes('/asset/get-funding-asset')) {
+        if (url.includes('/asset/wallet/balance')) {
           return Promise.resolve(
             errorResponse(fundingStatus, fundingCode === null ? {} : { code: fundingCode }),
           );
@@ -431,5 +436,130 @@ describe('binance client', () => {
     const client = await import('./binance-client');
     await expect(client.fetchAccountBalances(true)).rejects.toThrow('not read-only');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads USD-M and COIN-M equity plus daily income using GET-only requests', async () => {
+    await seedCredentials();
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/account/apiRestrictions')) {
+        return Promise.resolve(jsonResponse({ enableReading: true }));
+      }
+      if (url.includes('/binance-papi/papi/v1/account')) {
+        return Promise.resolve(errorResponse(403, { code: -1002 }));
+      }
+      if (url.includes('/binance-fapi/fapi/v3/account')) {
+        return Promise.resolve(
+          jsonResponse({
+            totalMarginBalance: '0',
+            totalUnrealizedProfit: '2',
+            assets: [{ asset: 'USDT', marginBalance: '150', unrealizedProfit: '2' }],
+            positions: [{ symbol: 'BTCUSDT', positionAmt: '0.1' }],
+          }),
+        );
+      }
+      if (url.includes('/binance-fapi/fapi/v1/income')) {
+        return Promise.resolve(
+          jsonResponse([
+            { incomeType: 'REALIZED_PNL', asset: 'USDT', income: '12.5' },
+            { incomeType: 'COMMISSION', asset: 'USDT', income: '-1.5' },
+          ]),
+        );
+      }
+      if (url.includes('/binance-dapi/dapi/v1/account')) {
+        return Promise.resolve(
+          jsonResponse({
+            assets: [{ asset: 'BTC', marginBalance: '0.01', unrealizedProfit: '0.001' }],
+            positions: [{ symbol: 'BTCUSD_PERP', positionAmt: '1' }],
+          }),
+        );
+      }
+      if (url.includes('/binance-dapi/dapi/v1/income')) {
+        return Promise.resolve(
+          jsonResponse([{ incomeType: 'FUNDING_FEE', asset: 'BTC', income: '0.0001' }]),
+        );
+      }
+      return Promise.resolve(errorResponse(403, { code: -1002 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    const report = await client.fetchBinanceAccountReadReport();
+    const usdM = report.products.find((product) => product.product === 'usd-m-futures');
+    const coinM = report.products.find((product) => product.product === 'coin-m-futures');
+
+    expect(usdM).toMatchObject({
+      status: 'ok',
+      balanceUsd: 150,
+      positionCount: 1,
+      dailyPnl: [{ asset: 'USDT', amount: 11 }],
+      unrealizedPnl: [{ asset: 'USDT', amount: 2 }],
+    });
+    expect(coinM).toMatchObject({
+      status: 'ok',
+      balanceAmounts: [{ asset: 'BTC', amount: 0.01 }],
+      positionCount: 1,
+      dailyPnl: [{ asset: 'BTC', amount: 0.0001 }],
+    });
+
+    fetchMock.mock.calls.forEach((call) => {
+      const [, init] = call as unknown as [string, RequestInit | undefined];
+      expect(init?.method ?? 'GET').toBe('GET');
+    });
+  });
+
+  it('uses Portfolio Margin as one aggregate and does not request standalone futures', async () => {
+    await seedCredentials();
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/account/apiRestrictions')) {
+        return Promise.resolve(jsonResponse({ enableReading: true }));
+      }
+      if (url.includes('/binance-papi/papi/v1/account')) {
+        return Promise.resolve(jsonResponse({ accountEquity: '1000', actualEquity: '980' }));
+      }
+      if (url.includes('/binance-papi/papi/v1/balance')) {
+        return Promise.resolve(
+          jsonResponse([{ asset: 'USDT', totalWalletBalance: '1000', umUnrealizedPNL: '3' }]),
+        );
+      }
+      if (url.includes('/binance-papi/papi/v1/um/account')) {
+        return Promise.resolve(
+          jsonResponse({ positions: [{ symbol: 'BTCUSDT', positionAmt: '1' }] }),
+        );
+      }
+      if (url.includes('/binance-papi/papi/v1/cm/account')) {
+        return Promise.resolve(jsonResponse({ positions: [] }));
+      }
+      if (url.includes('/binance-papi/papi/v1/um/income')) {
+        return Promise.resolve(
+          jsonResponse([{ incomeType: 'REALIZED_PNL', asset: 'USDT', income: '7' }]),
+        );
+      }
+      if (url.includes('/binance-papi/papi/v1/cm/income')) {
+        return Promise.resolve(
+          jsonResponse([{ incomeType: 'COMMISSION', asset: 'USDT', income: '-1' }]),
+        );
+      }
+      return Promise.resolve(errorResponse(403, { code: -1002 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = await import('./binance-client');
+    const report = await client.fetchBinanceAccountReadReport();
+    const pm = report.products.find((product) => product.product === 'portfolio-margin');
+
+    expect(pm).toMatchObject({
+      status: 'ok',
+      balanceUsd: 980,
+      positionCount: 1,
+      dailyPnl: [{ asset: 'USDT', amount: 6 }],
+    });
+    expect(report.products.some((product) => product.product === 'usd-m-futures')).toBe(false);
+    expect(report.products.some((product) => product.product === 'coin-m-futures')).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/binance-fapi/'))).toBe(
+      false,
+    );
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/binance-dapi/'))).toBe(
+      false,
+    );
   });
 });

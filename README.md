@@ -143,7 +143,9 @@ Abrir la URL local que imprime Bun (por defecto `http://localhost:5176`).
 - El servidor local expone `/local-vault/credentials` y guarda API Key + Secret cifrados con Windows DPAPI en `.local/credentials.dpapi.json` (ignorado por git).
 - En `localStorage` solo se persiste la API Key; el Secret vive en memoria de sesion y se hidrata desde DPAPI al cargar la app y al abrir `Configuracion`.
 - Las credenciales de exchanges no se cargan desde `.env.local`: las variables `PUBLIC_*` de Bun pueden quedar expuestas al bundle del navegador. Configuralas solo desde el modal local de la app.
-- Dashboard puede sumar saldos de Binance y Bybit a la vez. Las posiciones automatizadas son Binance Dual Investment, Bybit Dual Asset y Bybit Discount Buy. Futuros, perpetuos y opciones quedan fuera del alcance.
+- Dashboard puede sumar saldos de Binance y Bybit a la vez. Binance agrega al saldo total Wallet/Spot/Funding/Simple Earn, USDⓈ-M, COIN-M, Opciones, Margin, Portfolio Margin, staking, BFUSD/RWUSD, On-chain Yields, Soft Staking, Discount Buy, Crypto Loan/VIP Loan y recompensas acreditadas, evitando contar dos veces los productos que liquidan en Wallet o que ya se muestran como posiciones.
+- Binance se consulta exclusivamente con endpoints firmados `GET`: el cliente mantiene una whitelist cerrada y el proxy local rechaza `POST`, `PUT`, `PATCH` y `DELETE` hacia cualquier exchange. No se crean órdenes, suscripciones, transferencias, retiros ni préstamos, ni se ejecutan acciones de configuración; los préstamos solo se consultan para calcular colateral neto/deuda.
+- El `PnL diario` del Dashboard suma el rendimiento live de posiciones activas con el PnL/reward explícito que Binance reporta en el refresco actual, sin sumarlo dos veces al saldo. El run-rate y el APR de cuenta son live; no dependen de una base local acumulada.
 
 ## Regla de facturacion (Dual Binance)
 
