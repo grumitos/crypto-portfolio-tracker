@@ -123,6 +123,8 @@ viven en memoria durante la sesión.
 
 - Temas `light`, `dark` y `system`, aplicados antes de pintar la página. Los tokens de color están
   en `src/styles/variables.css` y las reglas del sistema visual, en `docs/design-system.md`.
+- Binance, Bybit e Hyperliquid llevan junto a su nombre un punto con su color de marca; el texto
+  conserva el color de la interfaz porque esos colores no alcanzan el contraste en el tema claro.
 - Foco visible, `aria-current`, `aria-expanded` y `aria-pressed` donde corresponde, soporte de
   `prefers-reduced-motion` y objetivos táctiles de 44 px como mínimo.
 - `manifest.json`, iconos de 192 y 512 px y un service worker básico (`public/sw.js`) para

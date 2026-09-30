@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from '#test';
 import { renderDashboard, resetDashboardLegendStateForTests } from './dashboard';
+import { renderBalanceDetailRows } from './dashboard.template';
 import {
   DASHBOARD_VIEW_KEY,
   getDefaultCapitalLedgerState,
@@ -100,6 +101,24 @@ function connectExchangeWallet(
     balances: [{ asset: 'USDT', free: totalUsdEstimate, locked: 0 }],
   });
 }
+
+describe('dashboard balance sources', () => {
+  it('marks each source exchange with its brand dot', () => {
+    const body = document.createElement('tbody');
+    renderBalanceDetailRows(body, [
+      { asset: 'USDT', free: 10, locked: 0, sources: ['Bybit', 'Binance'] },
+      { asset: 'BTC', free: 1, locked: 0 },
+    ]);
+
+    const [merged, unknown] = [...body.querySelectorAll('.dashboard-balance-source')];
+    expect(merged?.textContent).toBe('Binance + Bybit');
+    expect(merged?.querySelector('.provider-dot--binance')?.getAttribute('aria-hidden')).toBe(
+      'true',
+    );
+    expect(merged?.querySelector('.provider-dot--bybit')).not.toBeNull();
+    expect(unknown?.textContent).toBe('—');
+  });
+});
 
 describe('dashboard legends', () => {
   beforeEach(() => {

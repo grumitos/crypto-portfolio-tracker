@@ -67,6 +67,10 @@ describe('capital tab', () => {
     expect(container.querySelector('#capital-active-value')?.textContent).toContain('$110.00');
     expect(container.querySelector('#capital-pnl')?.textContent).toContain('$10.00');
     expect(container.querySelector('#capital-vaults')?.textContent).toContain('Main vault');
+    const connectionTitle = container.querySelector('#capital-settings-title');
+    expect(connectionTitle?.textContent).toBe('Conexión Hyperliquid');
+    expect(connectionTitle?.querySelector('.provider-dot--hyperliquid')).not.toBeNull();
+    expect(container.querySelector('.context-meta .provider-dot--hyperliquid')).not.toBeNull();
     expect(container.querySelector('#capital-movements')?.textContent).toContain('$100.00');
 
     dispose();

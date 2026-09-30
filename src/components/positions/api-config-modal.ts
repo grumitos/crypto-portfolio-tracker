@@ -21,7 +21,7 @@ import {
   loadLocalVaultCredentials,
   saveLocalVaultCredential,
 } from '../../utils/local-vault';
-import { escapeHtml } from '../../utils/ui-helpers';
+import { escapeHtml, providerName } from '../../utils/ui-helpers';
 import { iconLock, iconWallet, iconX } from '../../utils/icons';
 import { loadState, updatePortfolio } from '../../utils/storage';
 import { parseFlexibleNumber } from '../../utils/parse-number';
@@ -78,7 +78,7 @@ function renderExchange(ids: ExchangeIds, storedApiKey: string): string {
   return `
     <div class="cfg-exchange">
       <div class="cfg-exchange-head">
-        <span class="cfg-exchange-name">${ids.name}</span>
+        <span class="cfg-exchange-name">${providerName(ids.name)}</span>
         <span class="chip ${isConnected ? 'chip-gain' : 'chip-idle'}">
           <span class="chip-dot"></span>${isConnected ? 'Conectado' : 'Sin configurar'}
         </span>

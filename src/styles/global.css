@@ -672,6 +672,35 @@ input[type='number']::-webkit-inner-spin-button {
   flex: 0 0 auto;
 }
 
+/* Nombre de proveedor con su punto de marca. El anillo de tinta hace visible el punto
+   sobre fondos claros, donde los colores de marca apenas contrastan. */
+.provider-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--provider-color, currentColor);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent);
+  flex: 0 0 auto;
+}
+
+.provider-dot--binance {
+  --provider-color: var(--brand-binance);
+}
+
+.provider-dot--bybit {
+  --provider-color: var(--brand-bybit);
+}
+
+.provider-dot--hyperliquid {
+  --provider-color: var(--brand-hyperliquid);
+}
+
 .chip-buy {
   background: var(--cat-a-bg);
   color: var(--cat-a);

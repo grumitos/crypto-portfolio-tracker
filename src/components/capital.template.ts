@@ -1,6 +1,6 @@
 import { CAPITAL_COPY } from './capital.constants';
 import { formatUSD } from '../utils/calculator';
-import { escapeHtml } from '../utils/ui-helpers';
+import { escapeHtml, providerName } from '../utils/ui-helpers';
 import {
   calculateCapitalLedgerSummary,
   calculateVaultPositionMetrics,
@@ -185,7 +185,7 @@ export function renderCapitalTemplate(input: CapitalTemplateInput): string {
         <div class="context-left">
           <span class="context-title">${CAPITAL_COPY.contextTitle}</span>
           <span class="context-sep"></span>
-          <span class="context-meta">${CAPITAL_COPY.contextMetaPrefix} · ${contribution.vaultCount} ${vaultWord}</span>
+          <span class="context-meta">${providerName(CAPITAL_COPY.contextMetaPrefix)} · ${contribution.vaultCount} ${vaultWord}</span>
         </div>
         <div class="context-actions">
           <span class="chip">
@@ -266,7 +266,7 @@ export function renderCapitalTemplate(input: CapitalTemplateInput): string {
 
       <section class="block" aria-labelledby="capital-settings-title">
         <div class="table-head">
-          <span class="table-title" id="capital-settings-title">${CAPITAL_COPY.connectionTitle}</span>
+          <span class="table-title" id="capital-settings-title">${providerName('Hyperliquid', CAPITAL_COPY.connectionTitle)}</span>
           <span class="block-note">${CAPITAL_COPY.connectionNote}</span>
         </div>
         <div class="rule"></div>

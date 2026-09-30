@@ -69,6 +69,12 @@
   --control-height-sm: 30px;
   --field-height: 36px;
 
+  /* ── Marcas de proveedores ── */
+  /* Solo para el punto junto al nombre: como texto no llegan al contraste en el tema claro. */
+  --brand-binance: #f0b90b;
+  --brand-bybit: #f7a600;
+  --brand-hyperliquid: #97fce4;
+
   /* ── Movimiento ── */
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);

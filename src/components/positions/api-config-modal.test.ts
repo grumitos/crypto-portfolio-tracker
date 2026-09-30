@@ -66,6 +66,17 @@ describe('api config modal', () => {
     });
   });
 
+  it('marks each exchange with its brand dot', async () => {
+    const { openApiConfigModal } = await import('./api-config-modal');
+
+    openApiConfigModal();
+    const names = [...document.querySelectorAll('.cfg-exchange-name')];
+
+    expect(names.map((name) => name.textContent)).toEqual(['Binance', 'Bybit']);
+    expect(names[0]?.querySelector('.provider-dot--binance')).not.toBeNull();
+    expect(names[1]?.querySelector('.provider-dot--bybit')).not.toBeNull();
+  });
+
   it('tests credentials without persisting them before save', async () => {
     testApiConnectionMock.mockResolvedValue({
       success: true,

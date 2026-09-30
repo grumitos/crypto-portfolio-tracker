@@ -23,3 +23,22 @@ const htmlEscapeRe = /[&<>"']/g;
 export function escapeHtml(str: string): string {
   return str.replace(htmlEscapeRe, (ch) => htmlEscapeMap[ch] ?? ch);
 }
+
+/** Proveedores con color de marca propio; el color vive en `--brand-*` de variables.css. */
+const PROVIDER_BRANDS: Readonly<Record<string, string>> = {
+  Binance: 'binance',
+  Bybit: 'bybit',
+  Hyperliquid: 'hyperliquid',
+};
+
+/**
+ * Nombre de un proveedor precedido de un punto con su color de marca. El texto conserva
+ * el color de la interfaz: los colores de marca no llegan al contraste minimo en el tema
+ * claro. `label` permite un texto distinto del nombre (p. ej. "Conexion Hyperliquid").
+ */
+export function providerName(name: string, label: string = name): string {
+  const safeLabel = escapeHtml(label);
+  const brand = PROVIDER_BRANDS[name];
+  if (!brand) return safeLabel;
+  return `<span class="provider-name"><span class="provider-dot provider-dot--${brand}" aria-hidden="true"></span>${safeLabel}</span>`;
+}

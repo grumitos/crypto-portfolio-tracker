@@ -1,5 +1,5 @@
 import { formatDateLatin, formatPct, formatUSD, formatUSDCompact } from '../utils/calculator';
-import { escapeHtml, skeletonSpan } from '../utils/ui-helpers';
+import { escapeHtml, providerName, skeletonSpan } from '../utils/ui-helpers';
 import {
   bindAssetLogoFallbacks,
   createAssetMonogram,
@@ -224,7 +224,7 @@ function renderContextMeta(connectedExchanges: ExchangeSource[]): string {
   if (connectedExchanges.length === 0) return '';
   return `
           <span class="context-sep"></span>
-          <span class="context-meta">${escapeHtml(connectedExchanges.join(' · '))}</span>`;
+          <span class="context-meta">${connectedExchanges.map((name) => providerName(name)).join(' · ')}</span>`;
 }
 
 /**
@@ -259,8 +259,10 @@ function renderBalanceRow(balance: BinanceAccountBalance): string {
   const safeAlt = escapeHtml(sources.alt);
   const safeMonogram = escapeHtml(monogram);
   const safeAsset = escapeHtml(balance.asset);
-  const sourceLabel = formatBalanceSourceLabel(balance);
-  const safeSource = sourceLabel ? escapeHtml(sourceLabel) : '—';
+  const balanceSources = resolveBalanceSources(balance);
+  const sourceHtml = balanceSources.length
+    ? balanceSources.map((name) => providerName(name)).join(' + ')
+    : '—';
 
   return `
     <tr class="dashboard-balance-entry" data-balance-key="${safeBalanceKey}">
@@ -273,7 +275,7 @@ function renderBalanceRow(balance: BinanceAccountBalance): string {
           <span class="asset-pair">${safeAsset}</span>
         </span>
       </td>
-      <td class="muted dashboard-balance-source">${safeSource}</td>
+      <td class="muted dashboard-balance-source">${sourceHtml}</td>
       <td class="r"><span class="num soft dashboard-balance-breakdown-value">${formatBalanceAmount(balance.free)}</span></td>
       <td class="r"><span class="num soft dashboard-balance-breakdown-value dashboard-balance-locked${balance.locked > 0 ? ' is-locked' : ''}">${formatBalanceAmount(balance.locked)}</span></td>
       <td class="r"><span class="num dashboard-balance-total-value">${formatBalanceAmount(total)} ${safeAsset}</span></td>
