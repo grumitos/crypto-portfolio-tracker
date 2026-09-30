@@ -187,7 +187,7 @@ src/                app: TypeScript sin framework
 public/             manifest, service worker e iconos de la PWA
 scripts/            análisis ETH en Python y sus pruebas
 docs/               guía técnica, sistema visual y captura
-package.json        scripts de desarrollo y dependencias de desarrollo (pnpm)
+package.json        scripts, dependencias de desarrollo (pnpm) y configuración de Prettier
 run.bat             lanzador para Windows: sirve la app y abre el navegador
 ```
 
