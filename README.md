@@ -8,7 +8,7 @@ posiciones de Binance y Bybit, sigue los vaults de Hyperliquid, proyecta el crec
 interés compuesto y calcula ciclos de swing trade. Las claves de los exchanges se guardan
 cifradas con Windows DPAPI y los exchanges solo se consultan en modo lectura.
 
-![Dashboard de una instalación limpia, sin datos de cartera](docs/screenshots/dashboard.png)
+![Dashboard con datos de ejemplo de Binance y Bybit](docs/screenshots/dashboard.png)
 
 ## Requisitos
 
@@ -151,13 +151,12 @@ La guía técnica (arquitectura y criterios de calidad) está en `docs/engineeri
 
 ## Privacidad
 
-Las claves (`.local/`), el build (`dist/`) y la cobertura (`coverage/`) permanecen en local y
-están fuera de Git; el repositorio no incluye claves ni datos de cartera, y la captura muestra una
-instalación limpia. Las peticiones firmadas solo van a Binance y Bybit, a través del proxy local, y
-el Secret nunca sale del equipo: solo firma. La dirección de la wallet solo se envía a la API
-pública de Hyperliquid. Las variables
-`PUBLIC_*` de Bun pueden acabar en el código del navegador, por eso las claves nunca se leen de
-`.env`: se configuran desde la app.
+Las claves (`.local/`), el build (`dist/`) y la cobertura (`coverage/`) permanecen en local y están
+fuera de Git; el repositorio no incluye claves ni datos de cartera, y la captura usa datos de
+ejemplo. Las peticiones firmadas solo van a Binance y Bybit, a través del proxy local, y el Secret
+nunca sale del equipo: solo firma. La dirección de la wallet solo se envía a la API pública de
+Hyperliquid. Las variables `PUBLIC_*` de Bun pueden acabar en el código del navegador, por eso las
+claves nunca se leen de `.env`: se configuran desde la app.
 
 ## Pruebas
 

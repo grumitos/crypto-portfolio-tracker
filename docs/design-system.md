@@ -51,6 +51,24 @@ Los neutros son calidos y estan calculados para cumplir AA sobre su fondo:
 
 `--ink-3` esta al limite de AA (4.6:1 en claro). Si se aclara, deja de cumplir.
 
+## Color de marca: solo un punto
+
+Binance, Bybit e Hyperliquid se reconocen por su color, pero ese color no
+significa nada para la interfaz. Es la unica excepcion a "el color solo
+significa": va en un punto de 7px junto al nombre (`providerName()` en
+`src/utils/ui-helpers.ts`, clases `.provider-dot--*`) y nunca en el texto.
+
+| Token | Valor | Proveedor |
+| --- | --- | --- |
+| `--brand-binance` | `#f0b90b` | Binance |
+| `--brand-bybit` | `#f7a600` | Bybit |
+| `--brand-hyperliquid` | `#97fce4` | Hyperliquid |
+
+Los tres quedan por debajo de 2:1 sobre el fondo claro, asi que como texto no
+cumplirian AA: el nombre conserva el color del texto y el punto lleva un anillo
+de tinta (`--ink` al 22%) para verse en claro. Para sumar un exchange, registra
+su color en `variables.css` y en `PROVIDER_BRANDS`.
+
 ## Tipografia
 
 Tres familias, cada una con un trabajo:
