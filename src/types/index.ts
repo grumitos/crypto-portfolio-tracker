@@ -159,6 +159,8 @@ export interface DashboardGoalDetails {
   target: DashboardGoalTarget;
   targetAmount: number;
   remainingAmount: number;
+  /** Falso mientras el objetivo vale 0: no hay meta ni inversión que alcanzar. */
+  isDefined: boolean;
   isReached: boolean;
   targetLabelShort: 'BE' | 'Meta';
   targetLabelLong: 'breakeven' | 'meta';

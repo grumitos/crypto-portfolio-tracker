@@ -51,8 +51,8 @@ export function resolveDashboardGoalDetails(
   const mode = resolveDashboardGoalMode(legendState);
   const target = mode === 'be' ? 'be' : 'goal';
   const targetAmount = target === 'be' ? invested : goal;
-  const isReached =
-    Number.isFinite(balance) && Number.isFinite(targetAmount) && balance >= targetAmount;
+  const isDefined = Number.isFinite(targetAmount) && targetAmount > 0;
+  const isReached = isDefined && Number.isFinite(balance) && balance >= targetAmount;
   const remainingAmount =
     Number.isFinite(balance) && Number.isFinite(targetAmount)
       ? Math.max(0, targetAmount - balance)
@@ -63,6 +63,7 @@ export function resolveDashboardGoalDetails(
     target,
     targetAmount,
     remainingAmount,
+    isDefined,
     isReached,
     targetLabelShort: target === 'be' ? 'BE' : 'Meta',
     targetLabelLong: target === 'be' ? 'breakeven' : 'meta',

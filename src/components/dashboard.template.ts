@@ -424,7 +424,7 @@ export function renderDashboardTemplate(input: DashboardTemplateInput): string {
             <span id="dash-prog-remaining-target">${DASHBOARD_COPY.goalTargetText}</span>
           </span>
           <span class="progress-legend" aria-label="Controles de progreso">
-            <span class="muted progress-eta">${DASHBOARD_COPY.etaPrefix}</span>
+            <span class="muted progress-eta" id="dashboard-days-prefix">${DASHBOARD_COPY.etaPrefix}</span>
             <output class="num muted progress-eta" id="dashboard-days" aria-live="polite" aria-label="${DASHBOARD_COPY.etaLabel}">${skeletonSpan('72px')}</output>
             <span class="context-sep" id="dashboard-days-sep"></span>
             <button type="button" class="chip chip-warn goal-progress-legend" id="dashboard-legend-be" data-legend="be" aria-pressed="true" aria-controls="dash-goal-progress-bar">

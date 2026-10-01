@@ -50,6 +50,18 @@ describe('dashboard-goal utils', () => {
     expect(both.remainingAmount).toBe(300);
   });
 
+  it('does not mark an unset target as reached', () => {
+    const unset = resolveDashboardGoalDetails(0, 0, 0, { be: true, goal: true });
+    expect(unset.isDefined).toBe(false);
+    expect(unset.isReached).toBe(false);
+
+    const unsetBe = resolveDashboardGoalDetails(500, 0, 1200, { be: true, goal: false });
+    expect(unsetBe.isDefined).toBe(false);
+    expect(unsetBe.isReached).toBe(false);
+
+    expect(resolveDashboardGoalDetails(0, 0, 100, { be: true, goal: true }).isDefined).toBe(true);
+  });
+
   it('marks targets as reached when balance covers target amount', () => {
     const beReached = resolveDashboardGoalDetails(1000, 1000, 1300, { be: true, goal: false });
     expect(beReached.isReached).toBe(true);

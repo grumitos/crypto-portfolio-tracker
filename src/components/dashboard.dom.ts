@@ -20,6 +20,7 @@ export interface DashboardElements {
   goalRemainingTarget: HTMLElement | null;
   goalDays: HTMLElement | null;
   goalDaysSeparator: HTMLElement | null;
+  goalDaysPrefix: HTMLElement | null;
   legendBreakEven: HTMLButtonElement | null;
   legendGoal: HTMLButtonElement | null;
   apr: HTMLElement | null;
@@ -58,6 +59,7 @@ export function getDashboardElements(container: HTMLElement): DashboardElements 
     goalRemainingTarget: query(container, '#dash-prog-remaining-target'),
     goalDays: query(container, '#dashboard-days'),
     goalDaysSeparator: query(container, '#dashboard-days-sep'),
+    goalDaysPrefix: query(container, '#dashboard-days-prefix'),
     legendBreakEven: query(container, '#dashboard-legend-be'),
     legendGoal: query(container, '#dashboard-legend-goal'),
     apr: query(container, '#dashboard-apr'),

@@ -253,7 +253,7 @@ function setDaysLabel(
   highlight: boolean,
   animate = false,
 ): void {
-  const { goalDays, goalDaysSeparator } = getDashboardElements(container);
+  const { goalDays, goalDaysSeparator, goalDaysPrefix } = getDashboardElements(container);
   if (!goalDays || !goalDaysSeparator) return;
 
   stopValueAnimation(daysAnimationByElement, goalDays);
@@ -261,6 +261,7 @@ function setDaysLabel(
   animateTextSwap(goalDays, value, animate);
   goalDays.style.color = highlight ? 'var(--ink)' : 'var(--ink-3)';
   goalDaysSeparator.style.display = value ? 'inline-block' : 'none';
+  if (goalDaysPrefix) goalDaysPrefix.style.display = value ? '' : 'none';
 }
 
 function setDaysDurationLabel(
@@ -269,11 +270,12 @@ function setDaysDurationLabel(
   highlight: boolean,
   animate = false,
 ): void {
-  const { goalDays, goalDaysSeparator } = getDashboardElements(container);
+  const { goalDays, goalDaysSeparator, goalDaysPrefix } = getDashboardElements(container);
   if (!goalDays || !goalDaysSeparator) return;
 
   goalDays.style.color = highlight ? 'var(--ink)' : 'var(--ink-3)';
   goalDaysSeparator.style.display = 'inline-block';
+  if (goalDaysPrefix) goalDaysPrefix.style.display = '';
   setAnimatedNumber(
     daysAnimationByElement,
     goalDays,
@@ -379,10 +381,10 @@ function updateGoalProgressVisual(
   );
   animateTextScramble(elements.goalTargetLabel, details.targetLabelShort, animateText);
 
-  if (details.isReached) {
+  if (!details.isDefined || details.isReached) {
     animateTextSwap(
       elements.goalRemainingText,
-      `${details.targetLabelShort} ${DASHBOARD_COPY.reachedSuffix}`,
+      `${details.targetLabelShort} ${details.isDefined ? DASHBOARD_COPY.reachedSuffix : DASHBOARD_COPY.unsetSuffix}`,
       animateText,
     );
     if (elements.goalRemainingAmount) elements.goalRemainingAmount.style.display = 'none';
@@ -412,7 +414,9 @@ function updateGoalProgressVisual(
     }
   }
 
-  if (details.isReached) {
+  if (!details.isDefined) {
+    setDaysLabel(container, '', false, animateText);
+  } else if (details.isReached) {
     setDaysLabel(
       container,
       `${details.targetLabelShort} ${DASHBOARD_COPY.reachedSuffix}`,

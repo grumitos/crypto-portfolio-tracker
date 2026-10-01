@@ -33,6 +33,7 @@ export const DASHBOARD_COPY = {
   remainingPrefix: 'para',
   remainingText: 'Faltan',
   reachedSuffix: 'alcanzado',
+  unsetSuffix: 'sin definir',
   goalTargetText: 'la meta',
   breakEvenTargetText: 'breakeven',
   averageAprTitle: 'APR promedio',
