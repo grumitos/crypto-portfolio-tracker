@@ -320,6 +320,11 @@ body {
   color: var(--ink-3);
 }
 
+/* El espacio normal queda corto junto al punto de marca: el margen iguala ambos lados. */
+.context-meta-sep {
+  margin-inline: 3px;
+}
+
 .context-actions {
   display: flex;
   align-items: center;

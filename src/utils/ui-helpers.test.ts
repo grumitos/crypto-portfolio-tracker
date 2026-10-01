@@ -1,5 +1,5 @@
 import { describe, expect, it } from '#test';
-import { providerName, skeletonSpan } from './ui-helpers';
+import { joinContextMeta, providerName, skeletonSpan } from './ui-helpers';
 
 describe('ui helpers', () => {
   it('renders skeleton span with default and custom width', () => {
@@ -28,5 +28,11 @@ describe('ui helpers', () => {
 
   it('renders an unknown provider as plain escaped text', () => {
     expect(providerName('Otro & Co')).toBe('Otro &amp; Co');
+  });
+
+  it('joins context segments with a separator that keeps its text', () => {
+    const html = joinContextMeta(['a', 'b', 'c']);
+    expect(html.split('context-meta-sep')).toHaveLength(3);
+    expect(html.replace(/<[^>]+>/g, '')).toBe('a · b · c');
   });
 });

@@ -24,6 +24,14 @@ export function escapeHtml(str: string): string {
   return str.replace(htmlEscapeRe, (ch) => htmlEscapeMap[ch] ?? ch);
 }
 
+/**
+ * Une los datos de una linea de contexto con un punto medio de espaciado uniforme: el
+ * espacio normal queda corto junto al punto de marca, asi que el margen lo fija el CSS.
+ */
+export function joinContextMeta(segments: string[]): string {
+  return segments.join('<span class="context-meta-sep" aria-hidden="true"> · </span>');
+}
+
 /** Proveedores con color de marca propio; el color vive en `--brand-*` de variables.css. */
 const PROVIDER_BRANDS: Readonly<Record<string, string>> = {
   Binance: 'binance',

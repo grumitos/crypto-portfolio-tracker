@@ -1,4 +1,4 @@
-import { escapeHtml, providerName, skeletonSpan } from '../utils/ui-helpers';
+import { escapeHtml, joinContextMeta, providerName, skeletonSpan } from '../utils/ui-helpers';
 import type { ExchangeSource } from '../types';
 import {
   POSITIONS_COPY,
@@ -33,7 +33,7 @@ function resolveContextMeta(input: PositionsTemplateInput): string {
   const activity = `${input.activeCount} activa${input.activeCount === 1 ? '' : 's'}`;
   const exchanges = input.connectedExchanges.map((name) => providerName(name));
   const segments = [POSITIONS_COPY.contextMetaPrefix, activity, ...exchanges];
-  return segments.join(' · ');
+  return joinContextMeta(segments);
 }
 
 export function renderPositionsTemplate(input: PositionsTemplateInput): string {

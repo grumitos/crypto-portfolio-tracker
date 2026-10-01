@@ -1,5 +1,5 @@
 import { formatDateLatin, formatPct, formatUSD, formatUSDCompact } from '../utils/calculator';
-import { escapeHtml, providerName, skeletonSpan } from '../utils/ui-helpers';
+import { escapeHtml, joinContextMeta, providerName, skeletonSpan } from '../utils/ui-helpers';
 import {
   bindAssetLogoFallbacks,
   createAssetMonogram,
@@ -224,7 +224,7 @@ function renderContextMeta(connectedExchanges: ExchangeSource[]): string {
   if (connectedExchanges.length === 0) return '';
   return `
           <span class="context-sep"></span>
-          <span class="context-meta">${connectedExchanges.map((name) => providerName(name)).join(' · ')}</span>`;
+          <span class="context-meta">${joinContextMeta(connectedExchanges.map((name) => providerName(name)))}</span>`;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { CAPITAL_COPY } from './capital.constants';
 import { formatUSD } from '../utils/calculator';
-import { escapeHtml, providerName } from '../utils/ui-helpers';
+import { escapeHtml, joinContextMeta, providerName } from '../utils/ui-helpers';
 import {
   calculateCapitalLedgerSummary,
   calculateVaultPositionMetrics,
@@ -185,7 +185,7 @@ export function renderCapitalTemplate(input: CapitalTemplateInput): string {
         <div class="context-left">
           <span class="context-title">${CAPITAL_COPY.contextTitle}</span>
           <span class="context-sep"></span>
-          <span class="context-meta">${providerName(CAPITAL_COPY.contextMetaPrefix)} · ${contribution.vaultCount} ${vaultWord}</span>
+          <span class="context-meta">${joinContextMeta([providerName(CAPITAL_COPY.contextMetaPrefix), `${contribution.vaultCount} ${vaultWord}`])}</span>
         </div>
         <div class="context-actions">
           <span class="chip">
